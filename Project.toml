@@ -2,3 +2,9 @@ name = "Opacities"
 uuid = "2000b566-f890-4438-9b51-5251d1dfb4a2"
 authors = ["kmaitreys <km.maitrey@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[compat]
+Printf = "1.11.0"
