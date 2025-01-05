@@ -1,7 +1,21 @@
 module Opacities
+include("Mie.jl")
+include("Components.jl")
+include("Fractal.jl")
+include("Geofractal.jl")
 
-greet() = print("Hello World!")
+include("Utils.jl")
 
-greet()
+using .Components
+using .Fractal
+using .Geofractal
+using .Mie
+using .Utils
+
+g = Mie.add_two(3)
+println(g)
+printstyled(g, color=:red)
+
+export Components, Fractal, Geofractal, Mie, Utils
 
 end # module Opacities
