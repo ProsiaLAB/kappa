@@ -1,0 +1,58 @@
+[materials]
+# List available materials
+list = false
+# Define materials with optional mass fraction
+entries = [{ key_or_file = "c-gra", mfrac = 1.0 }]
+# Define mantle materials with optional mass fraction
+mantle_entries = [{ key_or_file = "", mfrac = 1.0 }]
+
+[porosity]
+# Set porosity for core and mantle
+core = 0.0
+mantle = 0.0
+
+[dhs]
+# Maximum volume fraction of vacuum in DHS computation
+fmax = 0.0
+
+[mmf]
+# Monomer size and fractal dimension or fill factor
+size_a0 = 0.0
+df_or_fill = 0.0
+
+[grain_size]
+# Grain size distribution (microns)
+amin = 0.1
+amax = 10.0
+sd = "P"
+na = 100
+
+[wavelength_grid]
+# Wavelength grid setup (microns)
+lmin = 0.1
+lmax = 1000.0
+nlam = 100
+
+[input_files]
+# Read size distribution and lambda grid from files
+size_distribution = ""
+lambda_grid = ""
+
+[output]
+# Write NA files for specific grain sizes
+na_files = false
+# Scattering matrix output with number of angles
+scatmat_nangles = 0
+# Remove degrees from forward-scattering peak
+chop_angle = 0
+# Output directory
+output_directory = ""
+# Output format options
+radmc_label = ""
+fits_output = false
+print_var = ""
+
+
+[advanced]
+# Switch to Mie at x=XLIM for speed
+xlim = 0.0
