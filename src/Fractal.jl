@@ -1,6 +1,6 @@
 module Fractal
 
-using Printf
+
 
 using ..Mie
 
@@ -330,13 +330,13 @@ function mean_scat_t(
     nmax = nstop
 
     if !iquiet
-        @printf("%f :: Wavelength (μm) \n", lmd)
-        @printf("%f :: Monomer radius (μm) \n", R0)
-        @printf("%f :: Radius of gyration (μm) \n", Rg)
-        @printf("%f :: Characteristic radius (μm) \n", Rc)
-        @printf("%f :: Size parameter of monomer (μm) \n", x0)
-        @printf("%f :: Size parameter of an aggregate (μm) \n", xg)
-        @printf("%8d :: Expansion order of the scattering field \n", nstop)
+        println("Wavelength (μm)", lmd)
+        println("Monomer radius (μm)", R0)
+        println("Radius of gyration (μm)", Rg)
+        println("Characteristic radius (μm)", Rc)
+        println("Size parameter of monomer (μm)", x0)
+        println("Size parameter of an aggregate (μm)", xg)
+        println("Expansion order of the scattering field", nstop)
     end
 
     if iqsca != 1 && iqsca != 2 && iqsca != 3
@@ -485,7 +485,7 @@ end
 
 
 
-mean_scat_t(0.5, 0.1, 1.0, 2.0, 1.0, 1.0 + 0.0im, 1, 1, 1, 10, false)
+# mean_scat_t(0.5, 0.1, 1.0, 2.0, 1.0, 1.0 + 0.0im, 1, 1, 1, 10, false)
 
 
 end # module
