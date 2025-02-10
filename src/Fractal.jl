@@ -46,12 +46,176 @@ function gauss_legendre(
     return x, w
 end
 
-function lpmns()
+"""
+ LPMNS computes associated Legendre functions Pmn(X) and derivatives P'mn(x).
 
+  Licensing:
+
+    This routine is copyrighted by Shanjie Zhang and Jianming Jin.  However, 
+    they give permission to incorporate this routine into a user program 
+    provided that the copyright is acknowledged.
+
+  Modified:
+
+    18 July 2012
+
+  Author:
+
+    Shanjie Zhang, Jianming Jin
+
+  Reference:
+
+    Shanjie Zhang, Jianming Jin,
+    Computation of Special Functions,
+    Wiley, 1996,
+    ISBN: 0-471-11963-6,
+    LC: QA351.C45.
+
+  Parameters:
+
+    Input, integer ( kind = 4 ) M, the order of Pmn(x).
+
+    Input, integer ( kind = 4 ) N, the degree of Pmn(x).
+
+    Input, real ( kind = 8 ) X, the argument.
+
+    Output, real ( kind = 8 ) PM(0:N), PD(0:N), the values and derivatives
+    of the function from degree 0 to N.
+
+--------------------------------------------------------------------------------
+
+   Note by R.T.
+   .f90 version was downloaded from 
+   https://people.sc.fsu.edu/~jburkardt/f_src/special_functions/special_functions.html
+   
+   Revision History 
+       2020. Oct 31:   - Minor change so that a real type is specified by "dp".
+                       - D+00 --> _dp
+
+"""
+function lpmns(
+    m::Int64,
+    n::Int64,
+    x::Float64,
+    pm::Array{Float64},
+    pd::Array{Float64}
+)
+    if abs(x) == 1.0
+        for k = 0:n
+            if m == 0
+                pm[k+1] = 1.0
+                pd[k+1] = 0.5 * k * (k + 1.0)
+                if x < 0.0
+                    pm[k+1] = (-1.0)^k * pm[k+1]
+                    pd[k+1] = (-1.0)^(k + 1) * pd[k+1]
+                end
+            elseif m == 1
+                pd[k+1] = 1e300
+            elseif m == 2
+                pd[k+1] = -0.25 * (k + 2.0) * (k + 1.0) * k * (k - 1.0)
+                if x < 0.0
+                    pd[k+1] = (-1.0)^(k + 1) * pd[k+1]
+                end
+            end
+        end
+        return pm, pd
+    end
+
+    x0 = abs(1.0 - x^2)
+    pm0 = 1.0
+    pmk = pm0
+    for k = 1:m
+        pmk = (-2.0 * k - 1.0) * sqrt(x0) * pm0
+        pm0 = pmk
+    end
+    pm1 = x * (2.0 * m + 1.0) * pm0
+    pm[m+1] = pmk
+    pm[m+2] = pm1
+
+    for k = m+2:n
+        pm2 = ((2.0 * k - 1.0) * x * pm1 - (k + m - 1.0) * pmk) / (k - m)
+        pm[k+1] = pm2
+        pmk = pm1
+        pm1 = pm2
+    end
+    pd[1] = ((1.0 - m) * pm[2] - x * pm[1]) / (x^2 - 1.0)
+    for k = 1:n
+        pd[k+1] = (k * x * pm[k+1] - (k + m) * pm[k]) / (x^2 - 1.0)
+    end
+
+    return pm, pd
 end
 
-function lpn()
 
+"""
+LPN computes Legendre polynomials Pn(x) and derivatives Pn'(x).
+!
+!  Licensing:
+!
+!    This routine is copyrighted by Shanjie Zhang and Jianming Jin.  However, 
+!    they give permission to incorporate this routine into a user program 
+!    provided that the copyright is acknowledged.
+!
+!  Modified:
+!
+!    07 July 2012
+!
+!  Author:
+!
+!    Shanjie Zhang, Jianming Jin
+!
+!  Reference:
+!
+!    Shanjie Zhang, Jianming Jin,
+!    Computation of Special Functions,
+!    Wiley, 1996,
+!    ISBN: 0-471-11963-6,
+!    LC: QA351.C45.
+!
+!  Parameters:
+!
+!    Input, integer ( kind = 4 ) N, the maximum degree.
+!
+!    Input, real ( kind = 8 ) X, the argument.
+!
+!    Output, real ( kind = 8 ) PN(0:N), PD(0:N), the values and derivatives
+!    of the polyomials of degrees 0 to N at X.
+!
+!--------------------------------------------------------------------------------
+!
+!   Note by R.T.
+!   .f90 version was downloaded from 
+!   https://people.sc.fsu.edu/~jburkardt/f_src/special_functions/special_functions.html
+!   
+!   Revision History 
+!       2020. Oct 31:   - Minor change so that a real type is specified by "dp".
+!                       - D+00 --> _dp
+"""
+function lpn(
+    n::Int64,
+    x::Float64,
+    pn::Array{Float64},
+    pd::Array{Float64}
+)
+    pn[1] = 1.0
+    pn[2] = x
+    pd[1] = 0.0
+    pd[2] = 1.0
+    p0 = 1.0
+    p1 = x
+
+    for k = 2:n
+        pf = (2.0 * k - 1.0) / k * x * p1 - (k - 1.0) / k * p0
+        pn[k+1] = pf
+        if abs(x) == 1.0
+            pd[k+1] = 0.5 * x^(k + 1) * k * (k + 1.0)
+        else
+            pd[k+1] = k * (p1 - x * pf) / (1.0 - x^2)
+        end
+        p0 = p1
+        p1 = pf
+    end
+    return pn, pd
 end
 
 
@@ -288,12 +452,14 @@ function mean_scat_t(
         ln = zeros(Float64, pmax + 1, jm)
         dln = zeros(Float64, pmax + 1, jm)
         for j = 1:jm
-            lpmns()
-            lpn()
+            pmn, pmnd = lpmns(order, degmax, x[j], pmn, pmnd)
+            lp, dlp = lpn(pmax, x[j], lp, dlp)
             al1n[:, j] .= pmn
             ln[:, j] .= lp
             dln[:, j] .= dlp
         end
+        Sp = zeros(ComplexF64, nstop, nstop, nstop)
+        T = zeros(ComplexF64, nstop, nstop, nstop)
     end
 
 
