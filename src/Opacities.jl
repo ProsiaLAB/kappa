@@ -38,11 +38,7 @@ struct Params
     for_radmc::Bool
 end
 
-# Function to automatically find a TOML file in CWD
-function find_config()
-    files = filter(f -> endswith(f, ".toml"), readdir())  # List .toml files in current directory
-    return length(files) > 0 ? files[1] : nothing  # Pick the first TOML file, if any
-end
+
 
 """
     parse_config(file::String)
@@ -69,8 +65,7 @@ end
 
 Automatically finds a TOML file in the current working directory and processes it.
 """
-function calculate()
-    file = find_config()
+function calculate(file::String)
 
     if isnothing(file)
         println("No config file found in the current directory.")
@@ -92,8 +87,6 @@ Initializes the parameters for the calculation and sets defaults.
 """
 function init_params(config::Dict{String, Any})
     println(length(config["materials"]["entries"]))
-
-    myvar = 0.0
 end
 
 end # module Opacities
