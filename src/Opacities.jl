@@ -71,19 +71,18 @@ Automatically finds a TOML file in the current working directory and processes i
 """
 function calculate()
     file = find_config()
-    
+
     if isnothing(file)
         println("No config file found in the current directory.")
         return
     end
-    
+
     config = parse_config(file)
-    
+
     # Main program
     mat_rho = zeros(Float64, 21)
 
     init_params(config)
-
 end
 
 """
@@ -91,8 +90,10 @@ end
 
 Initializes the parameters for the calculation and sets defaults.
 """
-function init_params(config::Dict{String,Any})
+function init_params(config::Dict{String, Any})
     println(length(config["materials"]["entries"]))
+
+    myvar = 0.0
 end
 
 end # module Opacities

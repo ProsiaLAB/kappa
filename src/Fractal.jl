@@ -1,15 +1,8 @@
 module Fractal
 
-
-
 using ..Mie
 
-
-function gauss_legendre(
-    x1::Float64,
-    x2::Float64,
-    n::Int64
-)
+function gauss_legendre(x1::Float64, x2::Float64, n::Int64)
     x = zeros(Float64, jm)
     w = zeros(Float64, jm)
 
@@ -21,7 +14,6 @@ function gauss_legendre(
 
     for i = 1:m
         z = cos(π * (i - 0.25) / (n + 0.5))
-
 
         z1 = 2.0 * z1
 
@@ -38,32 +30,32 @@ function gauss_legendre(
             z = z1 - p1 / pp
         end
         x[i] = xm - xl * z
-        x[n+1-i] = xm + xl * z
+        x[n + 1 - i] = xm + xl * z
         w[i] = 2.0 * xl / ((1.0 - z^2) * pp^2)
-        w[n+1-i] = w[i]
+        w[n + 1 - i] = w[i]
     end
 
     return x, w
 end
 
 """
- LPMNS computes associated Legendre functions Pmn(X) and derivatives P'mn(x).
+LPMNS computes associated Legendre functions Pmn(X) and derivatives P'mn(x).
 
-  Licensing:
+Licensing:
 
     This routine is copyrighted by Shanjie Zhang and Jianming Jin.  However, 
     they give permission to incorporate this routine into a user program 
     provided that the copyright is acknowledged.
 
-  Modified:
+Modified:
 
     18 July 2012
 
-  Author:
+Author:
 
     Shanjie Zhang, Jianming Jin
 
-  Reference:
+Reference:
 
     Shanjie Zhang, Jianming Jin,
     Computation of Special Functions,
@@ -71,7 +63,7 @@ end
     ISBN: 0-471-11963-6,
     LC: QA351.C45.
 
-  Parameters:
+Parameters:
 
     Input, integer ( kind = 4 ) M, the order of Pmn(x).
 
@@ -82,39 +74,39 @@ end
     Output, real ( kind = 8 ) PM(0:N), PD(0:N), the values and derivatives
     of the function from degree 0 to N.
 
---------------------------------------------------------------------------------
+* * *
 
-   Note by R.T.
-   .f90 version was downloaded from 
-   https://people.sc.fsu.edu/~jburkardt/f_src/special_functions/special_functions.html
-   
-   Revision History 
-       2020. Oct 31:   - Minor change so that a real type is specified by "dp".
-                       - D+00 --> _dp
+Note by R.T.
+.f90 version was downloaded from
+https://people.sc.fsu.edu/~jburkardt/f_src/special_functions/special_functions.html
 
+Revision History
+2020. Oct 31:   - Minor change so that a real type is specified by "dp".
+
+  - D+00 --> _dp
 """
 function lpmns(
     m::Int64,
     n::Int64,
     x::Float64,
     pm::Array{Float64},
-    pd::Array{Float64}
+    pd::Array{Float64},
 )
     if abs(x) == 1.0
         for k = 0:n
             if m == 0
-                pm[k+1] = 1.0
-                pd[k+1] = 0.5 * k * (k + 1.0)
+                pm[k + 1] = 1.0
+                pd[k + 1] = 0.5 * k * (k + 1.0)
                 if x < 0.0
-                    pm[k+1] = (-1.0)^k * pm[k+1]
-                    pd[k+1] = (-1.0)^(k + 1) * pd[k+1]
+                    pm[k + 1] = (-1.0)^k * pm[k + 1]
+                    pd[k + 1] = (-1.0)^(k + 1) * pd[k + 1]
                 end
             elseif m == 1
-                pd[k+1] = 1e300
+                pd[k + 1] = 1e300
             elseif m == 2
-                pd[k+1] = -0.25 * (k + 2.0) * (k + 1.0) * k * (k - 1.0)
+                pd[k + 1] = -0.25 * (k + 2.0) * (k + 1.0) * k * (k - 1.0)
                 if x < 0.0
-                    pd[k+1] = (-1.0)^(k + 1) * pd[k+1]
+                    pd[k + 1] = (-1.0)^(k + 1) * pd[k + 1]
                 end
             end
         end
@@ -129,31 +121,30 @@ function lpmns(
         pm0 = pmk
     end
     pm1 = x * (2.0 * m + 1.0) * pm0
-    pm[m+1] = pmk
-    pm[m+2] = pm1
+    pm[m + 1] = pmk
+    pm[m + 2] = pm1
 
-    for k = m+2:n
+    for k = (m + 2):n
         pm2 = ((2.0 * k - 1.0) * x * pm1 - (k + m - 1.0) * pmk) / (k - m)
-        pm[k+1] = pm2
+        pm[k + 1] = pm2
         pmk = pm1
         pm1 = pm2
     end
     pd[1] = ((1.0 - m) * pm[2] - x * pm[1]) / (x^2 - 1.0)
     for k = 1:n
-        pd[k+1] = (k * x * pm[k+1] - (k + m) * pm[k]) / (x^2 - 1.0)
+        pd[k + 1] = (k * x * pm[k + 1] - (k + m) * pm[k]) / (x^2 - 1.0)
     end
 
     return pm, pd
 end
-
 
 """
 LPN computes Legendre polynomials Pn(x) and derivatives Pn'(x).
 !
 !  Licensing:
 !
-!    This routine is copyrighted by Shanjie Zhang and Jianming Jin.  However, 
-!    they give permission to incorporate this routine into a user program 
+!    This routine is copyrighted by Shanjie Zhang and Jianming Jin.  However,
+!    they give permission to incorporate this routine into a user program
 !    provided that the copyright is acknowledged.
 !
 !  Modified:
@@ -184,19 +175,14 @@ LPN computes Legendre polynomials Pn(x) and derivatives Pn'(x).
 !--------------------------------------------------------------------------------
 !
 !   Note by R.T.
-!   .f90 version was downloaded from 
+!   .f90 version was downloaded from
 !   https://people.sc.fsu.edu/~jburkardt/f_src/special_functions/special_functions.html
-!   
-!   Revision History 
+!
+!   Revision History
 !       2020. Oct 31:   - Minor change so that a real type is specified by "dp".
 !                       - D+00 --> _dp
 """
-function lpn(
-    n::Int64,
-    x::Float64,
-    pn::Array{Float64},
-    pd::Array{Float64}
-)
+function lpn(n::Int64, x::Float64, pn::Array{Float64}, pd::Array{Float64})
     pn[1] = 1.0
     pn[2] = x
     pd[1] = 0.0
@@ -206,11 +192,11 @@ function lpn(
 
     for k = 2:n
         pf = (2.0 * k - 1.0) / k * x * p1 - (k - 1.0) / k * p0
-        pn[k+1] = pf
+        pn[k + 1] = pf
         if abs(x) == 1.0
-            pd[k+1] = 0.5 * x^(k + 1) * k * (k + 1.0)
+            pd[k + 1] = 0.5 * x^(k + 1) * k * (k + 1.0)
         else
-            pd[k+1] = k * (p1 - x * pf) / (1.0 - x^2)
+            pd[k + 1] = k * (p1 - x * pf) / (1.0 - x^2)
         end
         p0 = p1
         p1 = pf
@@ -218,14 +204,12 @@ function lpn(
     return pn, pd
 end
 
-
-
 function mg_mixing(refrel::ComplexF64, f1::Float64)
     eps_1 = refrel * refrel
     eps_2 = complex(1.0)
-    mg = eps_2 * (
-        2.0 * f1 * (eps_1 - eps_2) + eps_1 + 2.0 * eps_2
-    ) / (eps_1 + 2.0 * eps_2 - f1 * (eps_1 - eps_2))
+    mg =
+        eps_2 * (2.0 * f1 * (eps_1 - eps_2) + eps_1 + 2.0 * eps_2) /
+        (eps_1 + 2.0 * eps_2 - f1 * (eps_1 - eps_2))
     mgav = sqrt(mg)
     return mgav
 end
@@ -235,18 +219,18 @@ end
 
 Calculate Lorenz-Mie scattering coefficients (an,bn) for a monomer particle.
 
-Since monomer's size parameter is supposed not to be very large, 
-We use simple Bohren & Huffman Mie algorithm is used. 
+Since monomer's size parameter is supposed not to be very large,
+We use simple Bohren & Huffman Mie algorithm is used.
 The original BHMIE code is taken from Bruce Draine's HP:
-      https://www.astro.princeton.edu/~draine/scattering.html
+https://www.astro.princeton.edu/~draine/scattering.html
 although we have slightly modified it.
 """
 function lorenz_mie(
     x::Float64,
     refrel::ComplexF64,
-    a::Array{ComplexF64,1},
-    b::Array{ComplexF64,1},
-    nstop::Int64
+    a::Array{ComplexF64, 1},
+    b::Array{ComplexF64, 1},
+    nstop::Int64,
 )
     nmxx::Int64 = 150000
 
@@ -261,10 +245,10 @@ function lorenz_mie(
     # Calculate logarithmic derivative D_n(mx)
     # by downward recurrence. Initial value is set as D(mx) = 0+0i at n=nmx
     d = zeros(ComplexF64, nmx)
-    for n = 1:nmx-1
+    for n = 1:(nmx - 1)
         en = nmx - n + 1
         enr = real(nmx - n + 1)
-        d[nmx-n] = (enr / y) - (1.0 / (d[en] + enr / y))
+        d[nmx - n] = (enr / y) - (1.0 / (d[en] + enr / y))
     end
 
     psi0 = cos(x)
@@ -295,12 +279,10 @@ function lorenz_mie(
     return a, b
 end
 
-
 """
     mean_scat_t(lmd, R0, PN, df, k0, refrel, iqsca, iqcor, iqgeo, nang, iquiet)
 
 Calculate the mean scattering properties of a fractal aggregate.
-
 """
 function mean_scat_t(
     lmd::Float64,
@@ -313,10 +295,9 @@ function mean_scat_t(
     iqcor::Int64,
     iqgeo::Int64,
     nang::Int64,
-    iquiet::Bool
+    iquiet::Bool,
 )
     jm = 400 # Number of grid points of Gauss-Ledengre for integration of Gaunt coefficients.
-
 
     k = 2π / lmd
     Rg = R0 * (PN / k0)^(1.0 / df)
@@ -396,8 +377,6 @@ function mean_scat_t(
     g = Mie.add_two(45)
     println(g)
 
-
-
     # Solve multiple scattering
     # iqsca = 1: No
     # iqsca = 2: Yes
@@ -423,7 +402,6 @@ function mean_scat_t(
         #  P_n is the Legendre polynominal function 
         #  (see Equations (29, 30) in Tazaki & Tanaka 2018).
         #  The integration is performed with the Gauss-Legendre quadrature.
-
 
         # Preparing for gauss-legendre quadrature
 
@@ -462,30 +440,18 @@ function mean_scat_t(
         T = zeros(ComplexF64, nstop, nstop, nstop)
     end
 
-
-
-
-
-
     c_ext = 0
     c_sca = 0
     c_abs = 0
     g_asym = 0
     dphi = 0
-    angs = range(0, stop=2π, length=nang)
+    angs = range(0, stop = 2π, length = nang)
     smat = zeros(Float64, nang, 4)
     phase_function = zeros(Float64, nang)
-
-
-
 
     return c_ext, c_sca, c_abs, g_asym, dphi, angs, smat, phase_function
 end
 
-
-
-
 # mean_scat_t(0.5, 0.1, 1.0, 2.0, 1.0, 1.0 + 0.0im, 1, 1, 1, 10, false)
-
 
 end # module
