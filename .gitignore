@@ -28,3 +28,7 @@ Manifest.toml
 
 # VS Code
 .vscode/
+
+# Added by cargo
+
+/target
