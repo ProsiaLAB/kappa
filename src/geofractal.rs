@@ -1,4 +1,5 @@
-use std::{error::Error, f64::consts::PI};
+use std::error::Error;
+use std::f64::consts::PI;
 
 use statrs::function::gamma::{gamma, gamma_ur};
 
