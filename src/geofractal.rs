@@ -1,6 +1,7 @@
-use std::error::Error;
 use std::f64::consts::PI;
 
+use anyhow::bail;
+use anyhow::Result;
 use statrs::function::gamma::{gamma, gamma_ur};
 
 /// Computing geometrical cross-section of randomly oriented
@@ -29,27 +30,27 @@ pub fn get_geometric_cross_section(
     pn: f64,
     k0: f64,
     df: f64,
-) -> Result<f64, Box<dyn Error>> {
+) -> Result<f64> {
     let g: f64;
 
     if pn <= 0.9999 {
-        return Err("The number of monomers should be greater than 1".into());
+        bail!("The number of monomers should be greater than 1");
     }
 
     if df < 0.9999 || df > 3.0001 {
-        return Err("The fractal dimension should be between 1 and 3".into());
+        bail!("The fractal dimension should be between 1 and 3");
     }
 
     if iqcon != 1 && iqcon != 2 {
-        return Err("iqcon should be 1 or 2".into());
+        bail!("iqcon should be 1 or 2");
     }
 
     if iqcor != 1 && iqcor != 2 && iqcor != 3 {
-        return Err("iqcor should be 1, 2 or 3".into());
+        bail!("iqcor should be 1, 2 or 3");
     }
 
     if iqapp != 1 && iqapp != 2 {
-        return Err("iqapp should be 1 or 2".into());
+        bail!("iqapp should be 1 or 2");
     }
 
     let mut a = 1.0;
@@ -161,7 +162,9 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
             }
         }
         for i in 0..nx - 1 {
-            sigma += 0.5 * (frad(aicgm, x[i]) * sang[i] + frad(aicgm, x[i + 1]) * sang[i + 1]);
+            sigma += 0.5
+                * (radial_integrand(aicgm, x[i]) * sang[i]
+                    + radial_integrand(aicgm, x[i + 1]) * sang[i + 1]);
         }
         sigma *= factor * dlnx * factor;
     }
@@ -169,8 +172,8 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
     sigma
 }
 
-/// Radial intgrand function in `ln(x)` space
-fn frad(a: f64, x: f64) -> f64 {
+/// Radial integrand function in `ln(x)` space
+fn radial_integrand(a: f64, x: f64) -> f64 {
     x.powf(a) * (-x).exp()
 }
 
@@ -204,15 +207,15 @@ fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
         u[j] = umin + du * j as f64;
     }
     for j in 0..nmax_u - 1 {
-        sang += 0.5 * (fang(rho, u[j]) + fang(rho, u[j + 1])) * du;
+        sang += 0.5 * (angular_integrand(rho, u[j]) + angular_integrand(rho, u[j + 1])) * du;
     }
     sang = 16.0 * rho * rho * sang / PI;
 
     sang
 }
 
-/// This function calculates the integrand of the angular integral.
-fn fang(rho: f64, u: f64) -> f64 {
+/// Angular integrand function in `u` space
+fn angular_integrand(rho: f64, u: f64) -> f64 {
     if (1.0 - rho * u).abs() <= 1e-10 {
         return 0.0;
     } else {
