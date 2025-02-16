@@ -1,13 +1,21 @@
-use std::error::Error;
+//! Mie scattering calculation
+//!
+//! This module contains functions to calculate Mie scattering
+//! coefficients for a given set of parameters.
+//!
+//! # References
+//! - De Rooij, W. A., & Van der Stap, C. C. (1984). The determination of the Mie
+
 use std::f64::consts::PI;
 
-use ndarray::s;
-use ndarray::Array1;
+use anyhow::{bail, Result};
 use ndarray::Array2;
+use num_complex::Complex;
 use statrs::function::gamma::ln_gamma;
 
-pub fn de_rooij_1984(nangle: usize, lam: f64, f_11: Vec<f64>) {
-    let nparts = 1;
+use crate::utils::{spline, splint};
+
+pub fn de_rooij_1984(rad: f64, nangle: usize, lam: f64, f_11: Vec<f64>) {
     let develop = 0;
     let delta = 1e-8;
     let cutoff = 1e-8;
@@ -15,20 +23,12 @@ pub fn de_rooij_1984(nangle: usize, lam: f64, f_11: Vec<f64>) {
     let thmin = 180.0 * (1.0 - 0.5) / nangle as f64;
     let thmax = 180.0 * (nangle as f64 - 0.5) / nangle as f64;
     let step = (thmax - thmin) / (nangle as f64 - 1.0);
+    let rdis = rad;
 
     mie();
 }
 
-fn mie() {
-    todo!("Mie scattering");
-}
-
-fn get_integration_bounds(
-    idis: usize,
-    p1: f64,
-    p2: f64,
-    p3: f64,
-) -> Result<(f64, f64), Box<dyn Error>> {
+fn get_integration_bounds(idis: usize, p1: f64, p2: f64, p3: f64) -> Result<(f64, f64)> {
     let mut r: Vec<f64> = vec![0.0; 1];
 
     let sef: f64;
@@ -78,13 +78,15 @@ fn get_integration_bounds(
         9 => {
             return Ok((p1, p2));
         }
-        _ => return Err("Illegal size distribution index".into()),
+        _ => bail!("Illegal size distribution index"),
     }
 
     r[0] = ref_0 + sef;
     let r0 = ref_0;
 
     get_size_distribution(idis, p1, p2);
+
+    Ok((r0, r[0]))
 }
 
 fn get_size_distribution(
@@ -92,10 +94,11 @@ fn get_size_distribution(
     p1: f64,
     p2: f64,
     p3: f64,
-    r: Array1<f64>,
+    r: Vec<f64>,
     iparts: usize,
-    rdis: Array1<f64>,
-    mut nwithr: Array1<f64>,
+    ndis: usize,
+    rdis: Vec<f64>,
+    mut nwithr: Vec<f64>,
 ) {
     let alpha_0: f64;
     let alpha_1: f64;
@@ -115,12 +118,12 @@ fn get_size_distribution(
     let ndis_max = 300;
     let ndpart = 4;
     let nwrdis: Array2<f64> = Array2::zeros((ndpart, ndis_max));
-    let nwrdisp: Array1<f64> = Array1::zeros(ndis_max);
+    let nwrdisp: Vec<f64> = vec![0.0; ndis_max];
 
     let rdis: Array2<f64> = Array2::zeros((ndpart, ndis_max));
-    let rdisp: Array1<f64> = Array1::zeros(ndis_max);
+    let rdisp: Vec<f64> = vec![0.0; ndis_max];
 
-    let y2: Array1<f64> = Array1::zeros(ndis_max);
+    let y2: Vec<f64> = vec![0.0; ndis_max];
 
     match idis {
         0 => {
@@ -132,7 +135,9 @@ fn get_size_distribution(
             b0 = p2;
             alpha_1 = alpha_0 + 1.0;
             log_c0 = alpha_1 * b0.ln() - ln_gamma(alpha_1);
-            nwithr = (log_c0 + alpha_0 * r.ln() - b0 * r).exp();
+            for i in 0..ndis {
+                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i]).exp();
+            }
         }
         2 => {
             // Two parameter gamma with `p1 = reff` and `p2 = veff` given
@@ -140,7 +145,9 @@ fn get_size_distribution(
             b0 = 1.0 / (p1 * p2);
             alpha_1 = alpha_0 + 1.0;
             log_c0 = alpha_1 * b0.ln() - ln_gamma(alpha_1);
-            nwithr = (log_c0 + alpha_0 * &r.ln() - b0 * &r).exp();
+            for i in 0..ndis {
+                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i]).exp();
+            }
         }
         3 => {
             alpha_0 = 1.0 / p3 - 3.0;
@@ -149,16 +156,20 @@ fn get_size_distribution(
             let gamlna = ln_gamma(alpha_0 + 1.0);
             log_c1 = (alpha_0 + 1.0) * b1.ln() - gamlna;
             log_c2 = (alpha_0 + 1.0) * b2.ln() - gamlna;
-            nwithr = 0.5
-                * ((log_c1 + alpha_0 * &r.ln() - b1 * &r).exp()
-                    + (log_c2 + alpha_0 * &r.ln() - b2 * &r).exp());
+            for i in 0..ndis {
+                nwithr[i] = 0.5
+                    * ((log_c1 + alpha_0 * r[i].ln() - b1 * r[i]).exp()
+                        + (log_c2 + alpha_0 * r[i].ln() - b2 * r[i]).exp());
+            }
         }
         4 => {
             flogrg = p1.ln();
             flogsi = p2.ln().abs();
             c0 = 1.0 / ((2.0 * PI).sqrt() * flogsi);
             fac = -0.5 / (flogsi * flogsi);
-            nwithr = c0 * (fac * (r.ln() - flogrg).powi(2)).exp() / r;
+            for i in 0..ndis {
+                nwithr[i] = c0 * (fac * (r[i].ln() - flogrg).powi(2)).exp() / r[i];
+            }
         }
         5 => {
             rg = p1 / (1.0 + p2).powf(2.5);
@@ -166,7 +177,9 @@ fn get_size_distribution(
             flogsi = (1.0 + p2).ln().sqrt();
             c0 = 1.0 / ((2.0 * PI).sqrt() * flogsi);
             fac = -0.5 / (flogsi * flogsi);
-            nwithr = c0 * (fac * (r.ln() - flogrg).powi(2)).exp() / r;
+            for i in 0..ndis {
+                nwithr[i] = c0 * (fac * (r[i].ln() - flogrg).powi(2)).exp() / r[i];
+            }
         }
         6 => {
             alpha_0 = p1;
@@ -178,13 +191,13 @@ fn get_size_distribution(
                 alpha_1 = alpha_0 - 1.0;
                 c0 = alpha_1 * rmax.powf(alpha_1) / ((rmax / rmin).powf(alpha_1) - 1.0);
             }
-            nwithr = r.mapv(|ri| {
-                if (ri < rmax) && (ri > rmin) {
-                    c0 * ri.powf(alpha_0)
+            for i in 0..ndis {
+                if r[i] < rmax && r[i] > rmin {
+                    nwithr[i] = c0 * r[i].powf(alpha_0);
                 } else {
-                    0.0
+                    nwithr[i] = 0.0;
                 }
-            })
+            }
         }
         7 => {
             alpha_0 = p1;
@@ -193,7 +206,9 @@ fn get_size_distribution(
             b0 = alpha_0 / (gamma * rc.powf(gamma));
             aperg = (alpha_0 + 1.0) / gamma;
             log_c0 = gamma.ln() + aperg * b0.ln() - ln_gamma(aperg);
-            nwithr = (log_c0 + alpha_0 * r.ln() - b0 * r.powf(gamma)).exp();
+            for i in 0..ndis {
+                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i].powf(gamma)).exp();
+            }
         }
         8 => {
             alpha_0 = p1;
@@ -201,12 +216,21 @@ fn get_size_distribution(
             let gamma = p3;
             aperg = (alpha_0 + 1.0) / gamma;
             log_c0 = gamma.ln() + aperg * b0.ln() - ln_gamma(aperg);
-            nwithr = (log_c0 + alpha_0 * r.ln() - b0 * r.powf(gamma)).exp();
+            for i in 0..ndis {
+                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i].powf(gamma)).exp();
+            }
         }
         9 => {
-            let rdisp: Vec<f64> = vec![0.0; ndis];
-            let nwrdisp: Vec<f64> = vec![0.0; ndis];
-            for k in 0..ndis {}
+            let mut rdisp: Vec<f64> = vec![0.0; ndis];
+            let mut nwrdisp: Vec<f64> = vec![0.0; ndis];
+            for k in 0..ndis {
+                rdisp[k] = rdis[[0, k]];
+                nwrdisp[k] = nwrdis[[0, k]];
+            }
+            spline(xv, yv, n, yp1, ypn);
+            for j in 0..numr {
+                splint(xv, yv, y2, x, jl);
+            }
         }
         _ => {
             return;
@@ -214,110 +238,65 @@ fn get_size_distribution(
     }
 }
 
-/// Given the arrays `xv` and `yv` of lengh `n` containing a tabulated
-/// function, i.e., `yv[i] = f(xv[i])`, with `xv[0] < xv[1] < ... < xv[n-1]`,
-/// and given the first derivative values `yp1` and `ypn` for the first
-/// derivative of the interpolating function at points `xv[0]` and `xv[n-1]`,
-/// this function returns the second derivative values `y2` of length `n`
-/// which contains the second derivatives of the interpolating function at
-/// the tabulated points `xv[i]`.
-///
-/// If `yp1` and `ypn` are equal or larger than `0.99e99`, the function will
-/// set the first derivatives at the boundaries to be zero.
-///
-/// Reference:
-/// Numerical Recipes: The Art of Scientific Computing, 3rd ed.
-/// Press et al., 2007
-fn spline(xv: Vec<f64>, yv: Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
-    let mut y2: Vec<f64> = vec![0.0; n];
-    let mut u: Vec<f64> = vec![0.0; n - 1];
+fn mie(wavel: f64, real: f64, imag: f64) {
+    let lambda = wavel;
+    let nr = real;
+    let ni = imag;
+    let m = Complex::new(nr, -ni);
 
-    // The lower boundary condition is set either to be “natural”
-    // or else to have a specified first derivative.
-    if yp1 > 0.99e99 {
-        y2[0] = 0.0;
-        u[0] = 0.0;
-    } else {
-        y2[0] = -0.5;
-        u[0] = (3.0 / (xv[1] - xv[0])) * ((yv[1] - yv[0]) / (xv[1] - xv[0]) - yp1);
-    }
-
-    // This is the decomposition loop of the tridiagonal algorithm.
-    // `y2` and `u` are used for temporary storage of the decomposed factors.
-    for i in 1..n - 1 {
-        let sig = (xv[i] - xv[i - 1]) / (xv[i + 1] - xv[i - 1]);
-        let p = sig * y2[i - 1] + 2.0;
-        y2[i] = (sig - 1.0) / p;
-        u[i] =
-            (yv[i + 1] - yv[i]) / (xv[i + 1] - xv[i]) - (yv[i] - yv[i - 1]) / (xv[i] - xv[i - 1]);
-        u[i] = (6.0 * u[i] / (xv[i + 1] - xv[i - 1]) - sig * u[i - 1]) / p;
-    }
-
-    let qn: f64;
-    let un: f64;
-
-    // The upper boundary condition is set either to be “natural”
-    // or else to have a specified first derivative.
-    if ypn > 0.99e99 {
-        qn = 0.5;
-        un = 0.0;
-    } else {
-        qn = 0.5;
-        un = (3.0 / (xv[n - 1] - xv[n - 2]))
-            * (ypn - (yv[n - 1] - yv[n - 2]) / (xv[n - 1] - xv[n - 2]));
-    }
-
-    y2[n - 1] = (un - qn * u[n - 2]) / (qn * y2[n - 2] + 1.0);
-
-    // This is the backsubstitution loop of the tridiagonal algorithm.
-    for k in (0..n - 1).rev() {
-        y2[k] = y2[k] * y2[k + 1] + u[k];
-    }
-
-    y2
+    get_scattering_matrix();
 }
 
-/// Given the arrays `xa` and `ya` which tabulate a function (with
-/// the `xa[i]` in order), and given the array `y2a`, which is the
-/// output from `spline`, and given a value of `x`, this function
-/// returns a cubic-spline interpolated value `y`.
-fn splint(
-    xa: Vec<f64>,
-    ya: Vec<f64>,
-    y2a: Vec<f64>,
-    n: usize,
-    x: f64,
-    nn: usize,
-    ndmui: usize,
-) -> Result<f64, Box<dyn Error>> {
-    if nn != ndmui {
-        return Err("Dimension mismatch in splint".into());
+fn get_scattering_matrix(
+    m: Complex<f64>,
+    lambda: f64,
+    p1: f64,
+    p2: f64,
+    p3: f64,
+    delta: f64,
+    thmin: f64,
+    thmax: f64,
+    step: f64,
+    mut nangle: usize,
+) -> Result<(Vec<f64>, Vec<f64>, Array2<f64>, Vec<f64>, usize)> {
+    let mut f: Array2<f64> = Array2::zeros((3, 3));
+
+    let c_sca = 0.0;
+    let c_ext = 0.0;
+    let numpar = 0.0;
+    let g: f64 = 0.0;
+    let reff: f64 = 0.0;
+    let nfou: f64 = 0.0;
+    let fac_90: f64 = 0.0;
+    let ci: Complex<f64> = Complex::new(0.0, 1.0);
+
+    let symmetric = test_symmetry(thmin, thmax, step);
+
+    const RAD_FAC: f64 = PI / 180.0;
+
+    let rtox = 2.0 * PI / lambda;
+    let fakt = lambda * lambda / (2.0 * PI);
+
+    let nfac = 0;
+
+    let w = 1.0;
+    let r = p1;
+    let nwithr = 1.0;
+
+    let mut u: Vec<f64> = vec![0.0; nangle];
+    let mut wth: Vec<f64> = vec![0.0; nangle];
+    let mut miec: Vec<f64> = vec![0.0; nangle];
+
+    Ok((u, wth, f, miec, nangle))
+}
+
+fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
+    let eps = 1e-6;
+    let heps = 0.5 * eps;
+
+    if ((180.0 - thmin - thmax).abs() < eps) && ((thmax - thmin + heps).rem_euclid(step) < eps) {
+        true
+    } else {
+        false
     }
-
-    let mut klo = 0;
-    let mut khi = n - 1;
-
-    let mut k: usize;
-
-    while khi - klo > 1 {
-        k = (khi + klo) / 2;
-        if xa[k] > x {
-            khi = k;
-        } else {
-            klo = k;
-        }
-    }
-
-    let h = xa[khi] - xa[klo];
-    if h.abs() < 1e-10 {
-        return Err("Bad xa input to splint".into());
-    }
-
-    let a = (xa[khi] - x) / h;
-    let b = (x - xa[klo]) / h;
-    let y = a * ya[klo]
-        + b * ya[khi]
-        + ((a.powi(3) - a) * y2a[klo] + (b.powi(3) - b) * y2a[khi]) * (h * h) / 6.0;
-
-    Ok(y)
 }
