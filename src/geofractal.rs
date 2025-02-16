@@ -5,7 +5,8 @@ use statrs::function::gamma::{gamma, gamma_ur};
 
 /// Computing geometrical cross-section of randomly oriented
 /// fractal dust aggregates based on a statistical distribution
-/// model of monomer particles developed by Tazaki 2021+.
+/// model of monomer particles developed by [Tazaki (2021)](
+/// https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract).
 ///
 /// # Arguments
 ///
@@ -19,6 +20,7 @@ use statrs::function::gamma::{gamma, gamma_ur};
 ///         iqapp = 2 |   numerical  ( D<=2 ) |  analytical         |
 ///                   |   analytical ( D> 2 ) |                     |
 ///         --------------------------------------------------------
+///
 ///
 pub fn get_geometric_cross_section(
     iqapp: i32,
