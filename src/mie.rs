@@ -214,56 +214,67 @@ fn get_size_distribution(
     }
 }
 
-fn spline(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    yp1: f64,
-    ypn: f64,
-    nn: usize,
-    ndmui: usize,
-) -> Result<(Vec<f64>, Vec<f64>), Box<dyn Error>> {
-    let nmax = 1500;
+/// Given the arrays `xv` and `yv` of lengh `n` containing a tabulated
+/// function, i.e., `yv[i] = f(xv[i])`, with `xv[0] < xv[1] < ... < xv[n-1]`,
+/// and given the first derivative values `yp1` and `ypn` for the first
+/// derivative of the interpolating function at points `xv[0]` and `xv[n-1]`,
+/// this function returns the second derivative values `y2` of length `n`
+/// which contains the second derivatives of the interpolating function at
+/// the tabulated points `xv[i]`.
+///
+/// If `yp1` and `ypn` are equal or larger than `0.99e99`, the function will
+/// set the first derivatives at the boundaries to be zero.
+///
+/// Reference:
+/// Numerical Recipes: The Art of Scientific Computing, 3rd ed.
+/// Press et al., 2007
+fn spline(xv: Vec<f64>, yv: Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
+    let mut y2: Vec<f64> = vec![0.0; n];
+    let mut u: Vec<f64> = vec![0.0; n - 1];
 
-    let mut y2: Vec<f64> = vec![0.0; nn];
-    let mut u: Vec<f64> = vec![0.0; nn];
-
-    if nn != ndmui {
-        return Err("Dimension mismatch in spline".into());
-    }
-    if nmax < nn {
-        return Err("Insufficient number of points in spline".into());
-    }
-    if yp1 > 0.99e30 {
+    // The lower boundary condition is set either to be “natural”
+    // or else to have a specified first derivative.
+    if yp1 > 0.99e99 {
         y2[0] = 0.0;
         u[0] = 0.0;
     } else {
         y2[0] = -0.5;
-        u[0] = (3.0 / (x[1] - x[0])) * ((y[1] - y[0]) / (x[1] - x[0]) - yp1);
+        u[0] = (3.0 / (xv[1] - xv[0])) * ((yv[1] - yv[0]) / (xv[1] - xv[0]) - yp1);
     }
-    let mut sig: f64;
-    let mut p: f64;
-    for i in 1..nn - 1 {
-        sig = (x[i] - x[i - 1]) / (x[i + 1] - x[i - 1]);
-        p = sig * y2[i - 1] + 2.0;
+
+    // This is the decomposition loop of the tridiagonal algorithm.
+    // `y2` and `u` are used for temporary storage of the decomposed factors.
+    for i in 1..n - 1 {
+        let sig = (xv[i] - xv[i - 1]) / (xv[i + 1] - xv[i - 1]);
+        let p = sig * y2[i - 1] + 2.0;
         y2[i] = (sig - 1.0) / p;
-        u[i] = (y[i + 1] - y[i]) / (x[i + 1] - x[i]) - (y[i] - y[i - 1]) / (x[i] - x[i - 1]);
-        u[i] = (6.0 * u[i] / (x[i + 1] - x[i - 1]) - sig * u[i - 1]) / p;
+        u[i] =
+            (yv[i + 1] - yv[i]) / (xv[i + 1] - xv[i]) - (yv[i] - yv[i - 1]) / (xv[i] - xv[i - 1]);
+        u[i] = (6.0 * u[i] / (xv[i + 1] - xv[i - 1]) - sig * u[i - 1]) / p;
     }
+
     let qn: f64;
     let un: f64;
-    if ypn > 0.99e30 {
-        qn = 0.0;
+
+    // The upper boundary condition is set either to be “natural”
+    // or else to have a specified first derivative.
+    if ypn > 0.99e99 {
+        qn = 0.5;
         un = 0.0;
     } else {
         qn = 0.5;
-        un = (3.0 / (x[nn] - x[nn - 1])) * (ypn - (y[nn] - y[nn - 1]) / (x[nn] - x[nn - 1]));
+        un = (3.0 / (xv[n - 1] - xv[n - 2]))
+            * (ypn - (yv[n - 1] - yv[n - 2]) / (xv[n - 1] - xv[n - 2]));
     }
 
-    y2[nn - 1] = (un - qn * u[nn - 2]) / (qn * y2[nn - 2] + 1.0);
-    for k in (0..nn - 1).rev() {
+    y2[n - 1] = (un - qn * u[n - 2]) / (qn * y2[n - 2] + 1.0);
+
+    // This is the backsubstitution loop of the tridiagonal algorithm.
+    for k in (0..n - 1).rev() {
         y2[k] = y2[k] * y2[k + 1] + u[k];
     }
-    Ok((y2, u))
+
+    y2
 }
 
 /// Given the arrays `xa` and `ya` which tabulate a function (with
