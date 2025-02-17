@@ -15,7 +15,7 @@ use anyhow::Result;
 /// # Reference
 /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
 /// Press et al., 2007
-pub fn spline(xv: Vec<f64>, yv: Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
+pub fn spline(xv: &Vec<f64>, yv: &Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
     let mut y2: Vec<f64> = vec![0.0; n];
     let mut u: Vec<f64> = vec![0.0; n - 1];
 
@@ -72,21 +72,30 @@ pub fn spline(xv: Vec<f64>, yv: Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f
 /// # Reference
 /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
 /// Press et al., 2007
-pub fn splint(xv: Vec<f64>, yv: Vec<f64>, y2: Vec<f64>, x: f64, jl: usize) -> Result<f64> {
-    let klo = jl;
-    let khi = jl + 1;
+pub fn splint(xa: &Vec<f64>, ya: &Vec<f64>, y2a: &Vec<f64>, n: usize, x: f64) -> Result<f64> {
+    let mut klo = 0;
+    let mut khi = n - 1;
 
-    let h = xv[khi] - xv[klo];
-    if h == 0.0 {
-        bail!("Bad xa input to routine splint");
+    while khi - klo > 1 {
+        let k = (khi + klo) / 2;
+        if xa[k] > x {
+            khi = k;
+        } else {
+            klo = k;
+        }
     }
 
-    let a = (xv[khi] - x) / h;
-    let b = (x - xv[klo]) / h;
+    let h = xa[khi] - xa[klo];
+    if h == 0.0 {
+        bail!("Bad xv input to routine splint");
+    }
 
-    let y = a * yv[klo]
-        + b * yv[khi]
-        + ((a.powi(3) - a) * y2[klo] + (b.powi(3) - b) * y2[khi]) * (h.powi(2) / 6.0);
+    let a = (xa[khi] - x) / h;
+    let b = (x - xa[klo]) / h;
+
+    let y = a * ya[klo]
+        + b * ya[khi]
+        + ((a.powi(3) - a) * y2a[klo] + (b.powi(3) - b) * y2a[khi]) * (h.powi(2) / 6.0);
 
     Ok(y)
 }
