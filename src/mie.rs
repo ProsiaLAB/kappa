@@ -41,8 +41,6 @@ pub struct MieResult {
 
 pub enum MieError {
     ScatteringAnglesOverflow,
-    DHSInvalidArgument,
-    DHSInvalidDimension,
 }
 
 pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
