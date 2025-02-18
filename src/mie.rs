@@ -6,456 +6,91 @@
 //! # References
 //! - De Rooij, W. A., & Van der Stap, C. C. (1984).
 
-use std::f64::consts::PI;
+use std::{f64::consts::PI, vec};
 
 use anyhow::Result;
 use ndarray::Array2;
-use num_complex::Complex;
-use statrs::function::gamma::ln_gamma;
-
-use crate::utils::{spline, splint};
+use num_complex::{Complex, ComplexFloat};
 
 pub struct MieConfig {
-    pub rad: f64,
-    pub nangle: usize,
-    pub lam: f64,
-    pub nparts: usize,
-    pub develop: bool,
-    pub nsubr: Vec<usize>,
-    pub ngaur: Vec<usize>,
-    pub idis: Vec<usize>,
-    pub ndis: usize,
-    pub numr: usize,
-    pub delta: f64,
-    pub cutoff: f64,
-    pub rdis: Array2<f64>,
-    pub nwrdis: Array2<f64>,
-    pub thmin: f64,
-    pub thmax: f64,
-    pub step: f64,
-    pub wavelengths: Vec<f64>,
-    pub cmm: Vec<Complex<f64>>,
+    nangle: usize,
+    delta: f64,
+    thmin: f64,
+    thmax: f64,
+    step: f64,
+    lam: f64,
+    cmm: Complex<f64>,
+    rad: f64,
 }
 
 pub struct MieResult {
-    pub c_sca: f64,
-    pub c_ext: f64,
-    pub q_sca: f64,
-    pub q_ext: f64,
-    pub albedo: f64,
-    pub g: f64,
-    pub reff: f64,
-    pub xeff: f64,
-    pub numpar: f64,
-    pub volume: f64,
-    pub f_0: Array2<f64>,
+    u: Vec<f64>,
+    wth: Vec<f64>,
+    c_sca: f64,
+    c_ext: f64,
+    q_sca: f64,
+    q_ext: f64,
+    albedo: f64,
+    g: f64,
+    reff: f64,
+    xeff: f64,
+    numpar: f64,
+    volume: f64,
+    f_0: Array2<f64>,
 }
 
 pub enum MieError {
-    InvalidSizeDistributionIndex,
-    TermsOverflow,
-    IntegrationAnglesOverflow,
     ScatteringAnglesOverflow,
-    InvalidSplineArgument,
     DHSInvalidArgument,
     DHSInvalidDimension,
 }
 
-pub fn de_rooij_1984(miec: &mut MieConfig) -> Result<Vec<MieResult>, MieError> {
-    miec.delta = 1e-8;
-    miec.cutoff = 1e-8;
+pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
+    // miec.delta = 1e-8;
+    // miec.cutoff = 1e-8;
 
-    miec.thmin = 180.0 * (1.0 - 0.5) / miec.nangle as f64;
-    miec.thmax = 180.0 * (miec.nangle as f64 - 0.5) / miec.nangle as f64;
-    miec.step = (miec.thmax - miec.thmin) / (miec.nangle as f64 - 1.0);
+    // miec.thmin = 180.0 * (1.0 - 0.5) / miec.nangle as f64;
+    // miec.thmax = 180.0 * (miec.nangle as f64 - 0.5) / miec.nangle as f64;
+    // miec.step = (miec.thmax - miec.thmin) / (miec.nangle as f64 - 1.0);
 
-    miec.cmm = vec![Complex::new(0.0, 0.0); miec.nparts];
-    miec.cmm[0] = Complex::new(1.0, 0.0);
+    // miec.cmm = vec![Complex::new(0.0, 0.0); miec.nparts];
+    // miec.cmm[0] = Complex::new(1.0, 0.0);
 
-    let mut rdis: Array2<f64> = Array2::zeros((miec.nparts, miec.ndis));
-    rdis[[0, 0]] = miec.rad;
+    // let mut rdis: Array2<f64> = Array2::zeros((miec.nparts, miec.ndis));
+    // rdis[[0, 0]] = miec.rad;
 
-    let mut nwrdis: Array2<f64> = Array2::zeros((miec.nparts, miec.ndis));
-    nwrdis[[0, 0]] = 1.0;
-
-    let p1: Vec<f64> = vec![miec.rad; miec.numr];
-    let p2: Vec<f64> = vec![0.0; miec.numr];
-    let p3: Vec<f64> = vec![0.0; miec.numr];
+    // let mut nwrdis: Array2<f64> = Array2::zeros((miec.nparts, miec.ndis));
+    // nwrdis[[0, 0]] = 1.0;
 
     let mut f_11: Vec<f64> = vec![0.0; miec.nangle];
     let mut f_12: Vec<f64> = vec![0.0; miec.nangle];
     let mut f_33: Vec<f64> = vec![0.0; miec.nangle];
     let mut f_34: Vec<f64> = vec![0.0; miec.nangle];
 
-    let miers = mie(&miec, &p1, &p2, &p3)?;
-    for ipart in 0..miec.nparts {
-        for i in 0..miec.nangle {
-            f_11[i] = miers[ipart].f_0[[0, miec.nangle - 1]];
-            f_12[i] = miers[ipart].f_0[[1, miec.nangle - 1]];
-            f_33[i] = miers[ipart].f_0[[2, miec.nangle - 1]];
-            f_34[i] = miers[ipart].f_0[[3, miec.nangle - 1]];
-        }
+    let mier = mie(&miec)?;
+
+    for i in 0..miec.nangle {
+        f_11[i] = mier.f_0[[0, miec.nangle - 1]];
+        f_12[i] = mier.f_0[[1, miec.nangle - 1]];
+        f_33[i] = mier.f_0[[2, miec.nangle - 1]];
+        f_34[i] = mier.f_0[[3, miec.nangle - 1]];
     }
-    Ok(miers)
+
+    Ok(mier)
 }
 
-fn mie(
-    miec: &MieConfig,
-    p1: &Vec<f64>,
-    p2: &Vec<f64>,
-    p3: &Vec<f64>,
-) -> Result<Vec<MieResult>, MieError> {
-    let mut miers: Vec<MieResult> = vec![];
+fn mie(miec: &MieConfig) -> Result<MieResult, MieError> {
+    let m = miec.cmm.conj();
 
-    for ipart in 0..miec.nparts {
-        let (rmin, rmax) = get_integration_bounds(ipart, &miec, p1, p2, p3)?;
+    let mier = get_scattering_matrix(&miec, m)?;
 
-        let m = miec.cmm[ipart].conj();
-
-        let mier = get_scattering_matrix(&miec, ipart, m, rmin, rmax)?;
-
-        miers.push(mier);
-    }
-
-    Ok(miers)
+    Ok(mier)
 }
 
-/// Find the integration bounds rmin and rmax for the integration over
-/// a size distribution. These bounds are chosen such that the size
-/// distribution falls below the user specified cutoff. It is essential
-/// that the size distribution is normalized such that the integral
-/// over all `r` is equal to one.
-fn get_integration_bounds(
-    ipart: usize,
-    miec: &MieConfig,
-    p1: &Vec<f64>,
-    p2: &Vec<f64>,
-    p3: &Vec<f64>,
-) -> Result<(f64, f64), MieError> {
-    let eps = 1e-10;
-
-    let mut r: Vec<f64> = vec![0.0; miec.numr];
-
-    let sef: f64;
-    let ref_0: f64;
-    let rref: f64;
-
-    let rmin: f64;
-    let rmax: f64;
-
-    let idis = miec.idis[ipart];
-    let p1 = p1[ipart];
-    let p2 = p2[ipart];
-    let p3 = p3[ipart];
-
-    match idis {
-        0 => return Ok((p1, p1)),
-        1 => {
-            sef = 1.0 / (p2 + 3.0).sqrt();
-            ref_0 = 1.0 / (sef * sef * p2);
-            rref = ref_0;
-        }
-        2 => {
-            ref_0 = p1;
-            sef = p2.sqrt();
-            rref = ref_0;
-        }
-        3 => {
-            sef = p3.sqrt();
-            ref_0 = p1.max(p2) + sef;
-            rref = p1.min(p2);
-        }
-        4 => {
-            sef = (p2.ln().powi(2).exp() - 1.0).sqrt();
-            ref_0 = p1 * (1.0 + sef * sef).powf(0.4);
-            rref = ref_0;
-        }
-        5 => {
-            ref_0 = p1;
-            sef = ref_0.sqrt();
-            rref = ref_0;
-        }
-        6 => {
-            return Ok((p2, p3));
-        }
-        7 => {
-            ref_0 = p2;
-            sef = 2.0 * ref_0;
-            rref = 0.5 * ref_0;
-        }
-        8 => {
-            ref_0 = (p1 / (p2 * p3)).powf(p3);
-            sef = 2.0 * ref_0;
-            rref = 0.5 * ref_0;
-        }
-        9 => {
-            return Ok((p1, p2));
-        }
-        _ => return Err(MieError::InvalidSizeDistributionIndex),
-    }
-
-    r[0] = ref_0 + sef;
-    let mut r0 = ref_0;
-
-    let mut nwithr: Vec<f64> = vec![0.0; miec.numr];
-
-    while nwithr[0] > miec.cutoff {
-        r0 = r[0];
-        r[0] = 2.0 * r[0];
-        get_size_distribution(
-            idis,
-            p1,
-            p2,
-            p3,
-            &r,
-            1,
-            miec.ndis,
-            &miec.rdis,
-            &miec.nwrdis,
-            &mut nwithr,
-        )?;
-    }
-
-    let mut r1 = r[0];
-
-    while r1 - r0 > eps {
-        r[0] = 0.5 * (r0 + r1);
-        get_size_distribution(
-            idis,
-            p1,
-            p2,
-            p3,
-            &r,
-            1,
-            miec.ndis,
-            &miec.rdis,
-            &miec.nwrdis,
-            &mut nwithr,
-        )?;
-        if nwithr[0] > miec.cutoff {
-            r0 = r[0];
-        } else {
-            r1 = r[0];
-        }
-    }
-    rmax = 0.5 * (r0 + r1);
-
-    r1 = rref;
-    r[0] = 0.0;
-
-    while r1 > eps {
-        r[0] = 0.5 * r1;
-        get_size_distribution(
-            idis,
-            p1,
-            p2,
-            p3,
-            &r,
-            1,
-            miec.ndis,
-            &miec.rdis,
-            &miec.nwrdis,
-            &mut nwithr,
-        )?;
-        if nwithr[0] > miec.cutoff {
-            r1 = r[0];
-        } else {
-            r0 = r[0];
-        }
-    }
-
-    while r1 - r0 > eps {
-        r[0] = 0.5 * (r0 + r1);
-        get_size_distribution(
-            idis,
-            p1,
-            p2,
-            p3,
-            &r,
-            1,
-            miec.ndis,
-            &miec.rdis,
-            &miec.nwrdis,
-            &mut nwithr,
-        )?;
-        if nwithr[0] > miec.cutoff {
-            r1 = r[0];
-        } else {
-            r0 = r[0];
-        }
-    }
-    if r1 <= eps {
-        rmin = 0.0;
-    } else {
-        rmin = 0.5 * (r0 + r1);
-    }
-
-    Ok((rmin, rmax))
-}
-
-fn get_size_distribution(
-    idis: usize,
-    p1: f64,
-    p2: f64,
-    p3: f64,
-    r: &Vec<f64>,
-    numr: usize,
-    ndis: usize,
-    rdis: &Array2<f64>,
-    nwrdis: &Array2<f64>,
-    nwithr: &mut Vec<f64>,
-) -> Result<(), MieError> {
-    let alpha_0: f64;
-    let alpha_1: f64;
-
-    let b0: f64;
-    let b1: f64;
-    let b2: f64;
-
-    let c0: f64;
-
-    let log_c0: f64;
-    let log_c1: f64;
-    let log_c2: f64;
-
-    let flogrg: f64;
-    let flogsi: f64;
-
-    let fac: f64;
-    let rg: f64;
-    let aperg: f64;
-
-    match idis {
-        0 => Ok(()),
-        1 => {
-            // Two parameter gamms with alpha and b given
-            alpha_0 = p1;
-            b0 = p2;
-            alpha_1 = alpha_0 + 1.0;
-            log_c0 = alpha_1 * b0.ln() - ln_gamma(alpha_1);
-            for i in 0..numr {
-                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i]).exp();
-            }
-            Ok(())
-        }
-        2 => {
-            // Two parameter gamma with `p1 = reff` and `p2 = veff` given
-            alpha_0 = 1.0 / p2 - 3.0;
-            b0 = 1.0 / (p1 * p2);
-            alpha_1 = alpha_0 + 1.0;
-            log_c0 = alpha_1 * b0.ln() - ln_gamma(alpha_1);
-            for i in 0..numr {
-                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i]).exp();
-            }
-            Ok(())
-        }
-        3 => {
-            alpha_0 = 1.0 / p3 - 3.0;
-            b1 = 1.0 / (p1 * p3);
-            b2 = 1.0 / (p2 * p3);
-            let gamlna = ln_gamma(alpha_0 + 1.0);
-            log_c1 = (alpha_0 + 1.0) * b1.ln() - gamlna;
-            log_c2 = (alpha_0 + 1.0) * b2.ln() - gamlna;
-            for i in 0..numr {
-                nwithr[i] = 0.5
-                    * ((log_c1 + alpha_0 * r[i].ln() - b1 * r[i]).exp()
-                        + (log_c2 + alpha_0 * r[i].ln() - b2 * r[i]).exp());
-            }
-            Ok(())
-        }
-        4 => {
-            flogrg = p1.ln();
-            flogsi = p2.ln().abs();
-            c0 = 1.0 / ((2.0 * PI).sqrt() * flogsi);
-            fac = -0.5 / (flogsi * flogsi);
-            for i in 0..numr {
-                nwithr[i] = c0 * (fac * (r[i].ln() - flogrg).powi(2)).exp() / r[i];
-            }
-            Ok(())
-        }
-        5 => {
-            rg = p1 / (1.0 + p2).powf(2.5);
-            flogrg = rg.ln();
-            flogsi = (1.0 + p2).ln().sqrt();
-            c0 = 1.0 / ((2.0 * PI).sqrt() * flogsi);
-            fac = -0.5 / (flogsi * flogsi);
-            for i in 0..numr {
-                nwithr[i] = c0 * (fac * (r[i].ln() - flogrg).powi(2)).exp() / r[i];
-            }
-            Ok(())
-        }
-        6 => {
-            alpha_0 = p1;
-            let rmin = p2;
-            let rmax = p3;
-            if (alpha_0 + 1.0).abs() < 1e-10 {
-                c0 = 1.0 / (rmax / rmin).ln();
-            } else {
-                alpha_1 = alpha_0 - 1.0;
-                c0 = alpha_1 * rmax.powf(alpha_1) / ((rmax / rmin).powf(alpha_1) - 1.0);
-            }
-            for i in 0..numr {
-                if r[i] < rmax && r[i] > rmin {
-                    nwithr[i] = c0 * r[i].powf(alpha_0);
-                } else {
-                    nwithr[i] = 0.0;
-                }
-            }
-            Ok(())
-        }
-        7 => {
-            alpha_0 = p1;
-            let rc = p2;
-            let gamma = p3;
-            b0 = alpha_0 / (gamma * rc.powf(gamma));
-            aperg = (alpha_0 + 1.0) / gamma;
-            log_c0 = gamma.ln() + aperg * b0.ln() - ln_gamma(aperg);
-            for i in 0..numr {
-                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i].powf(gamma)).exp();
-            }
-            Ok(())
-        }
-        8 => {
-            alpha_0 = p1;
-            b0 = p2;
-            let gamma = p3;
-            aperg = (alpha_0 + 1.0) / gamma;
-            log_c0 = gamma.ln() + aperg * b0.ln() - ln_gamma(aperg);
-            for i in 0..numr {
-                nwithr[i] = (log_c0 + alpha_0 * r[i].ln() - b0 * r[i].powf(gamma)).exp();
-            }
-            Ok(())
-        }
-        9 => {
-            let mut rdisp: Vec<f64> = vec![0.0; ndis];
-            let mut nwrdisp: Vec<f64> = vec![0.0; ndis];
-            for k in 0..ndis {
-                rdisp[k] = rdis[[0, k]];
-                nwrdisp[k] = nwrdis[[0, k]];
-            }
-            let y2 = spline(&rdisp, &nwrdisp, ndis, 1e100, 1e100);
-            for j in 0..numr {
-                match splint(&rdisp, &nwrdisp, &y2, ndis, r[j]) {
-                    Ok(n) => nwithr[j] = n,
-                    Err(_) => return Err(MieError::InvalidSplineArgument),
-                }
-            }
-            Ok(())
-        }
-        _ => {
-            return Err(MieError::InvalidSizeDistributionIndex);
-        }
-    }
-}
-
-fn get_scattering_matrix(
-    miec: &MieConfig,
-    ipart: usize,
-    m: Complex<f64>,
-    rmin: f64,
-    rmax: f64,
-) -> Result<MieResult, MieError> {
+fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult, MieError> {
     let mut mier = MieResult {
+        u: vec![],
+        wth: vec![],
         c_sca: 0.0,
         c_ext: 0.0,
         q_sca: 0.0,
@@ -469,8 +104,7 @@ fn get_scattering_matrix(
         f_0: Array2::zeros((3, 3)),
     };
 
-    let nfou = 0.0;
-    let fac_90 = 0.0;
+    let mut fac_90 = 0.0;
     let ci = Complex::new(0.0, 1.0);
 
     let symmetric = test_symmetry(miec.thmin, miec.thmax, miec.step);
@@ -484,28 +118,171 @@ fn get_scattering_matrix(
 
     let nfac = 0;
 
-    let mut w: Vec<f64> = vec![0.0; miec.numr];
-    let mut r: Vec<f64> = vec![0.0; miec.numr];
-    let mut nwithr: Vec<f64> = vec![0.0; miec.numr];
+    let w = 1.0;
+    let r = miec.rad;
+    let nwithr = 1.0;
 
-    let nsub: usize;
-    let ngauss: usize;
-    let dr: f64;
+    let sw = nwithr * w;
+    let x = rtox * r;
+    let nmax = (x + 4.05 * x.powf(1.0 / 3.0) + 2.0) as usize;
+    let nfi = (nmax + 60) as usize;
+    let zabs = x * m.abs();
+    let nd = (zabs + 4.05 * zabs.powf(1.0 / 3.0) + 70.0) as usize;
 
-    if miec.idis[ipart] == 0 {
-        w[0] = 1.0;
-        r[0] = rmin;
-        nwithr[0] = 1.0;
+    let size = nd.max(nfi).max(nmax);
 
-        nsub = 1;
-        ngauss = 1;
-        dr = 0.0;
-    } else {
-        dr = (rmax - rmin) / (miec.nsubr[ipart] - 1) as f64;
-        // Call Gauss-Legendre quadrature routine
-        // After that get the size distribution
-        todo!()
+    let mut facf: Vec<f64> = vec![0.0; size];
+    let mut facb: Vec<f64> = vec![0.0; size];
+
+    let (fi, chi, d) = fichid(m, x, nfi, nmax, nd);
+    let (an, bn) = anbn(m, x, fi, chi, d, nmax);
+
+    if nmax > nfac {
+        for n in nfac + 1..nmax {
+            facf[n] = (2.0 * n as f64 + 1.0) / (n as f64 * (n as f64 + 1.0));
+            facb[n] = facf[n];
+            if n % 2 == 1 {
+                facb[n] = -facb[n];
+            }
+        }
     }
+
+    let mut c_ext_sum = 0.0;
+    let mut c_sca_sum = 0.0;
+    let mut nstop = nmax;
+    let mut aux: f64 = 0.0;
+
+    for n in 0..nmax {
+        aux = (2.0 * n as f64 + 1.0) * (an[n].norm() + bn[n].norm()).abs();
+        c_sca_sum += aux;
+        c_ext_sum += (2.0 * n as f64 + 1.0) * (an[n] + bn[n]).re;
+        if aux < miec.delta {
+            nstop = n;
+            break;
+        }
+    }
+
+    let nfou = nstop;
+
+    if nfou > nmax {
+        eprintln!("WARNING: `mie` sum not converged for scattering cross-section");
+        eprintln!("         with radius = {} and size parameter = {}", r, x);
+        eprintln!("         size distribution `nr` = {}", 0);
+        eprintln!("         Re(m) = {} and Im(m) = {}", m.re, m.im);
+        eprintln!(
+            "         apriori estimate of number of `mie` terms = {}",
+            nmax
+        );
+        eprintln!("         Term {} for `c_sca` was {}", nmax, aux);
+        eprintln!(
+            "         should have been less than `delta` = {}",
+            miec.delta
+        );
+        eprintln!("         the apriori estimate will be used instead.");
+    }
+
+    let nangle = ((miec.thmax - miec.thmin) / miec.step) as usize + 1;
+    if nangle > 6000 {
+        return Err(MieError::ScatteringAnglesOverflow);
+    }
+    mier.u = vec![0.0; nangle];
+    mier.wth = vec![0.0; nangle];
+    let wfac = 2.0 / nangle as f64;
+    for iang in 0..nangle {
+        let th = miec.thmin + iang as f64 * miec.step;
+        mier.u[nangle - 1 - iang] = (RAD_FAC * th).cos();
+        mier.wth[iang] = wfac;
+    }
+
+    mier.numpar += sw;
+    mier.g += sw * r.powi(3);
+
+    let mut nhalf: usize = 0;
+    if symmetric {
+        if nangle % 2 == 1 {
+            nhalf = (nangle + 1) / 2;
+            fac_90 = 0.5;
+        } else {
+            nhalf = nangle / 2;
+        }
+
+        for j in 0..nhalf {
+            let (pi, tau) = pitau(mier.u[j], nmax);
+            let mut s_plus_f = Complex::new(0.0, 0.0);
+            let mut s_min_f = Complex::new(0.0, 0.0);
+            let mut s_plus_b = Complex::new(0.0, 0.0);
+            let mut s_min_b = Complex::new(0.0, 0.0);
+
+            for n in 0..nfou {
+                s_plus_f += facf[n] * (an[n] + bn[n]) * (pi[n] + tau[n]);
+                s_min_f += facf[n] * (an[n] - bn[n]) * (pi[n] - tau[n]);
+                s_plus_b += facb[n] * (an[n] + bn[n]) * (pi[n] - tau[n]);
+                s_min_b += facb[n] * (an[n] - bn[n]) * (pi[n] + tau[n]);
+            }
+            let conj_s_plus_f = s_plus_f.conj();
+            let conj_s_min_f = s_min_f.conj();
+            let conj_s_plus_b = s_plus_b.conj();
+            let conj_s_min_b = s_min_b.conj();
+
+            let k = nangle - 1 - j;
+
+            // Forward scattering elements
+            mier.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
+            mier.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
+            mier.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
+            mier.f_0[[3, j]] += (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
+
+            // Backward scattering elements
+            mier.f_0[[0, k]] += sw * (s_plus_b * conj_s_plus_b + s_min_b * conj_s_min_b).re;
+            mier.f_0[[1, k]] -= sw * (s_min_b * conj_s_plus_b + s_plus_b * conj_s_min_b).re;
+            mier.f_0[[2, k]] += sw * (s_plus_b * conj_s_plus_b - s_min_b * conj_s_min_b).re;
+            mier.f_0[[3, k]] += (ci * sw * (s_min_b * conj_s_plus_b - s_plus_b * conj_s_min_b)).re;
+        }
+    } else {
+        for j in 0..nangle {
+            let (pi, tau) = pitau(mier.u[j], nmax);
+            let mut s_plus_f = Complex::new(0.0, 0.0);
+            let mut s_min_f = Complex::new(0.0, 0.0);
+
+            for n in 0..nfou {
+                s_plus_f += facf[n] * (an[n] + bn[n]) * (pi[n] + tau[n]);
+                s_min_f += facf[n] * (an[n] - bn[n]) * (pi[n] - tau[n]);
+            }
+            let conj_s_plus_f = s_plus_f.conj();
+            let conj_s_min_f = s_min_f.conj();
+
+            // Forward scattering elements
+            mier.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
+            mier.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
+            mier.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
+            mier.f_0[[3, j]] += (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
+        }
+    }
+
+    mier.c_sca += sw * c_sca_sum;
+    mier.c_ext += sw * c_ext_sum;
+
+    for j in 0..nangle {
+        for k in 0..4 {
+            mier.f_0[[k, j]] /= 2.0 * mier.c_sca;
+        }
+    }
+
+    if symmetric {
+        for k in 0..4 {
+            mier.f_0[[k, nhalf - 1]] *= fac_90;
+        }
+    }
+
+    mier.g *= PI;
+    mier.c_sca *= fakt;
+    mier.c_ext *= fakt;
+    mier.q_sca = mier.c_sca / mier.g;
+    mier.q_ext = mier.c_ext / mier.g;
+    mier.albedo = mier.c_sca / mier.c_ext;
+    mier.volume = (4.0 / 3.0) * PI * mier.reff;
+    mier.reff = PI * mier.reff / mier.g;
+    mier.xeff = rtox * mier.reff;
 
     Ok(mier)
 }
@@ -519,4 +296,100 @@ fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
     } else {
         false
     }
+}
+
+fn fichid(
+    m: Complex<f64>,
+    x: f64,
+    nchi: usize,
+    nmax: usize,
+    nd: usize,
+) -> (Vec<f64>, Vec<f64>, Vec<Complex<f64>>) {
+    let z = m * x;
+    let perz = 1.0 / z;
+    let perx = 1.0 / x;
+
+    let sinx = x.sin();
+    let cosx = x.cos();
+
+    let mut psi: Vec<f64> = vec![0.0; nchi + 1];
+    let mut chi: Vec<f64> = vec![0.0; nmax + 2];
+    let mut d: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nd];
+
+    for n in (0..nchi).rev() {
+        psi[n] = 1.0 / (2.0 * n as f64 + 1.0) / x - psi[n + 1];
+    }
+
+    for n in (0..nd).rev() {
+        let zn_1 = (n as f64 + 1.0) * perz;
+        d[n] = zn_1 - 1.0 / (d[n + 1] + zn_1);
+    }
+
+    psi[0] = sinx;
+    let psi_1 = psi[0] * perx - cosx;
+    if psi_1.abs() > 1e-4 {
+        psi[1] = psi_1;
+        for n in 2..nmax {
+            psi[n] *= psi[n - 1];
+        }
+    } else {
+        for n in 1..nmax {
+            psi[n] *= psi[n - 1];
+        }
+    }
+
+    chi[0] = cosx;
+    chi[1] = chi[0] * perx + sinx;
+    for n in 1..nmax - 1 {
+        chi[n + 1] = (2.0 * n as f64 + 1.0) * chi[n] * perx - chi[n - 1];
+    }
+
+    return (psi, chi, d);
+}
+
+fn anbn(
+    m: Complex<f64>,
+    x: f64,
+    psi: Vec<f64>,
+    chi: Vec<f64>,
+    d: Vec<Complex<f64>>,
+    nmax: usize,
+) -> (Vec<Complex<f64>>, Vec<Complex<f64>>) {
+    let perm = 1.0 / m;
+    let perx = 1.0 / x;
+
+    let mut an: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmax];
+    let mut bn: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmax];
+
+    for n in 0..nmax {
+        let zn = Complex::new(psi[n], chi[n]);
+        let znm_1 = Complex::new(psi[n - 1], chi[n - 1]);
+        let xn = n as f64 * perx;
+        let save_a = d[n] * perm + xn;
+        an[n] = (save_a * psi[n] - psi[n - 1]) / (save_a * zn - znm_1);
+        let save_b = d[n] * m + xn;
+        bn[n] = (save_b * psi[n] - psi[n - 1]) / (save_b * zn - znm_1);
+    }
+
+    return (an, bn);
+}
+
+fn pitau(u: f64, nmax: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut pi: Vec<f64> = vec![0.0; nmax];
+    let mut tau: Vec<f64> = vec![0.0; nmax];
+
+    pi[0] = 1.0;
+    pi[1] = 3.0 * u;
+    let mut delta = 3.0 * u * u - 1.0;
+
+    tau[0] = u;
+    tau[1] = 2.0 * delta - 1.0;
+
+    for n in 1..nmax {
+        pi[n + 1] = (n as f64 + 1.0) / (n as f64) * delta + u * pi[n];
+        delta = u * pi[n + 1] - pi[n];
+        tau[n + 1] = (n as f64 + 1.0) * delta - pi[n];
+    }
+
+    return (pi, tau);
 }
