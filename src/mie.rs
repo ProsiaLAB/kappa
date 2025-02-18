@@ -6,7 +6,7 @@
 //! # References
 //! - De Rooij, W. A., & Van der Stap, C. C. (1984).
 
-use std::{f64::consts::PI, vec};
+use std::f64::consts::PI;
 
 use anyhow::Result;
 use ndarray::Array2;
