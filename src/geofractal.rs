@@ -11,8 +11,8 @@ use statrs::function::gamma::{gamma, gamma_ur};
 ///
 /// # Arguments
 ///
-/// * `iqapp` - Select a method for solving radial and angular integration.
-/// when computing the mean overlapping efficiency.
+/// * `iqapp` - Select a method for solving radial and angular integration
+///             when computing the mean overlapping efficiency.
 ///
 ///         --------------------------------------------------------
 ///                   |    radial  (x)        |  angular (u)        |
@@ -37,7 +37,7 @@ pub fn get_geometric_cross_section(
         bail!("The number of monomers should be greater than 1");
     }
 
-    if df < 0.9999 || df > 3.0001 {
+    if !(0.9999..=3.0001).contains(&df) {
         bail!("The fractal dimension should be between 1 and 3");
     }
 
