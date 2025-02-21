@@ -65,7 +65,7 @@ pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
     let mut f_33: Vec<f64> = vec![0.0; miec.nangle];
     let mut f_34: Vec<f64> = vec![0.0; miec.nangle];
 
-    let mier = mie(&miec)?;
+    let mier = mie(miec)?;
 
     for i in 0..miec.nangle {
         f_11[i] = mier.f_0[[0, miec.nangle - 1]];
@@ -80,7 +80,7 @@ pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
 fn mie(miec: &MieConfig) -> Result<MieResult, MieError> {
     let m = miec.cmm.conj();
 
-    let mier = get_scattering_matrix(&miec, m)?;
+    let mier = get_scattering_matrix(miec, m)?;
 
     Ok(mier)
 }
@@ -123,7 +123,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult,
     let sw = nwithr * w;
     let x = rtox * r;
     let nmax = (x + 4.05 * x.powf(1.0 / 3.0) + 2.0) as usize;
-    let nfi = (nmax + 60) as usize;
+    let nfi = nmax + 60;
     let zabs = x * m.abs();
     let nd = (zabs + 4.05 * zabs.powf(1.0 / 3.0) + 70.0) as usize;
 
@@ -289,11 +289,7 @@ fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
     let eps = 1e-6;
     let heps = 0.5 * eps;
 
-    if ((180.0 - thmin - thmax).abs() < eps) && ((thmax - thmin + heps).rem_euclid(step) < eps) {
-        true
-    } else {
-        false
-    }
+    ((180.0 - thmin - thmax).abs() < eps) && ((thmax - thmin + heps).rem_euclid(step) < eps)
 }
 
 fn fichid(
@@ -342,7 +338,7 @@ fn fichid(
         chi[n + 1] = (2.0 * n as f64 + 1.0) * chi[n] * perx - chi[n - 1];
     }
 
-    return (psi, chi, d);
+    (psi, chi, d)
 }
 
 fn anbn(
@@ -369,7 +365,7 @@ fn anbn(
         bn[n] = (save_b * psi[n] - psi[n - 1]) / (save_b * zn - znm_1);
     }
 
-    return (an, bn);
+    (an, bn)
 }
 
 fn pitau(u: f64, nmax: usize) -> (Vec<f64>, Vec<f64>) {
@@ -389,5 +385,5 @@ fn pitau(u: f64, nmax: usize) -> (Vec<f64>, Vec<f64>) {
         tau[n + 1] = (n as f64 + 1.0) * delta - pi[n];
     }
 
-    return (pi, tau);
+    (pi, tau)
 }
