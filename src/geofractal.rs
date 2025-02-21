@@ -177,26 +177,19 @@ fn radial_integrand(a: f64, x: f64) -> f64 {
     x.powf(a) * (-x).exp()
 }
 
+#[allow(clippy::needless_range_loop)]
 fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
     let nmax_u = 1000;
 
     let mut sang: f64;
 
-    let rho: f64;
-    let mut u: Vec<f64> = vec![0.0; nmax_u];
-
-    match iqcor {
-        1 => {
-            rho = (x / xmin).sqrt();
-        }
-        2 => {
-            rho = x / xmin;
-        }
-        3 => {
-            rho = (x / xmin).powf(1.0 / df);
-        }
+    let rho: f64 = match iqcor {
+        1 => (x / xmin).sqrt(),
+        2 => x / xmin,
+        3 => (x / xmin).powf(1.0 / df),
         _ => unreachable!(),
-    }
+    };
+    let mut u: Vec<f64> = vec![0.0; nmax_u];
 
     sang = 0.0;
     let umin = 0.0;
@@ -217,7 +210,7 @@ fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
 /// Angular integrand function in `u` space
 fn angular_integrand(rho: f64, u: f64) -> f64 {
     if (1.0 - rho * u).abs() <= 1e-10 {
-        return 0.0;
+        0.0
     } else {
         ((1.0 - rho * rho * u * u).sqrt().asin() - rho * u * (1.0 - rho * rho * u * u).sqrt()) * u
             / (1.0 - u * u).sqrt()
