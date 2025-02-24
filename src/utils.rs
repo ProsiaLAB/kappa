@@ -14,8 +14,8 @@ pub mod spline {
     ///
     /// # Reference
     /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
-    /// Press et al., 2007
-    pub fn spline(xv: &Vec<f64>, yv: &Vec<f64>, n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
+    ///   Press et al., 2007
+    pub fn spline(xv: &[f64], yv: &[f64], n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
         let mut y2: Vec<f64> = vec![0.0; n];
         let mut u: Vec<f64> = vec![0.0; n - 1];
 
@@ -71,8 +71,8 @@ pub mod spline {
     ///
     /// # Reference
     /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
-    /// Press et al., 2007
-    pub fn splint(xa: &Vec<f64>, ya: &Vec<f64>, y2a: &Vec<f64>, n: usize, x: f64) -> Result<f64> {
+    ///   Press et al., 2007
+    pub fn splint(xa: &[f64], ya: &[f64], y2a: &[f64], n: usize, x: f64) -> Result<f64> {
         let mut klo = 0;
         let mut khi = n - 1;
 
