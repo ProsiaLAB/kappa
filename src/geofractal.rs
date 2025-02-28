@@ -151,12 +151,14 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
     if df > 2.0 && iqapp == 3 {
         sigma = factor * gamma(aicgm) * gamma_ur(aicgm, xmin);
     } else {
-        let dlnx = (xmax - xmin).ln() / (nx - 1) as f64;
+        let nxf = nx as f64;
+        let dlnx = (xmax - xmin).ln() / (nxf - 1.0);
         let mut x: Vec<f64> = vec![0.0; nx];
         let mut sang: Vec<f64> = vec![1.0; nx];
         sigma = 0.0;
         for i in 0..nx {
-            x[i] = (xmin.ln() + i as f64 * dlnx).exp();
+            let ir = i as f64;
+            x[i] = (xmin.ln() + ir * dlnx).exp();
             if iqapp == 1 {
                 sang[i] = angular_integration(iqcor, x[i], xmin, df);
             }
@@ -197,7 +199,8 @@ fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
 
     let du = (umax - umin) / (nmax_u - 1) as f64;
     for j in 0..nmax_u {
-        u[j] = umin + du * j as f64;
+        let jf = j as f64;
+        u[j] = umin + du * jf;
     }
     for j in 0..nmax_u - 1 {
         sang += 0.5 * (angular_integrand(rho, u[j]) + angular_integrand(rho, u[j + 1])) * du;

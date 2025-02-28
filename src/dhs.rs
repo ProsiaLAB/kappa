@@ -141,10 +141,10 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     let rrfx = 1.0 / (dhsc.r_indsh * x_shell);
 
     for nn in (0..nmx_1).rev() {
-        acap[nn] = ((nn + 1) as f64) * rrfx - (1.0 / (((nn + 1) as f64) * rrfx + acap[nn + 1]));
+        let nnf = nn as f64;
+        acap[nn] = (nnf + 1.0) * rrfx - (1.0 / ((nnf + 1.0) * rrfx + acap[nn + 1]));
         for m in 0..3 {
-            w[(m, nn)] = ((nn + 1) as f64) * z[m + 1]
-                - (1.0 / (((nn + 1) as f64) * z[m + 1] + w[(m, nn + 1)]));
+            w[(m, nn)] = (nnf + 1.0) * z[m + 1] - (1.0 / ((nnf + 1.0) * z[m + 1] + w[(m, nn + 1)]));
         }
     }
 
@@ -274,11 +274,12 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     t[3] = 1.5;
 
     while t[3] >= 1e-14 {
-        t[0] = (2 * n - 1) as f64;
-        t[1] = (n - 1) as f64;
+        let nf = n as f64;
+        t[0] = 2.0 * nf - 1.0;
+        t[1] = nf - 1.0;
 
         for j in 0..dhsc.numang {
-            pi[[j, 2]] = (t[0] * pi[[j, 1]] * dhsc.mu[j] - n as f64 * pi[[j, 0]]) / t[1];
+            pi[[j, 2]] = (t[0] * pi[[j, 1]] * dhsc.mu[j] - nf * pi[[j, 0]]) / t[1];
             tau[[j, 2]] = dhsc.mu[j] * (pi[[j, 2]] - pi[[j, 0]]) - t[0] * si2tht[j] * pi[[j, 1]]
                 + tau[[j, 0]];
         }
@@ -291,12 +292,12 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
         ta[2] = wfn[1].re;
         ta[3] = wfn[1].im;
 
-        d_h0 = -(n as f64) / z[0] + 1.0 / (n as f64 / z[0] - d_h0);
-        d_h1 = -(n as f64) / z[1] + 1.0 / (n as f64 / z[1] - d_h1);
-        d_h3 = -(n as f64) / z[3] + 1.0 / (n as f64 / z[3] - d_h3);
-        p23_h23 /= (d_h3 + n as f64 / z[3]) * (w[[2, n]] + n as f64 / z[3]);
-        p23_h20 /= (d_h0 + n as f64 / z[0]) * (w[[2, n]] + n as f64 / z[3]);
-        temp *= (acap[n] + n as f64 / z[0]) / (w[[2, n]] + n as f64 / z[3]);
+        d_h0 = -(nf) / z[0] + 1.0 / (nf / z[0] - d_h0);
+        d_h1 = -(nf) / z[1] + 1.0 / (nf / z[1] - d_h1);
+        d_h3 = -(nf) / z[3] + 1.0 / (nf / z[3] - d_h3);
+        p23_h23 /= (d_h3 + nf / z[3]) * (w[[2, n]] + nf / z[3]);
+        p23_h20 /= (d_h0 + nf / z[0]) * (w[[2, n]] + nf / z[3]);
+        temp *= (acap[n] + nf / z[0]) / (w[[2, n]] + nf / z[3]);
         tempsq = temp * temp;
 
         u[0] = k3 * acap[n] - k2 * w[[0, n]];
@@ -323,19 +324,19 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
         let bm_0_re = bcoem_0.re;
         let bm_0_im = bcoem_0.im;
 
-        t[3] = (2.0 * (n as f64) - 1.0) / ((n as f64) * (n as f64 - 1.0));
-        t[1] = (n as f64 - 1.0) / (n as f64 + 1.0) / (n as f64);
+        t[3] = (2.0 * (nf) - 1.0) / ((nf) * (nf - 1.0));
+        t[1] = (nf - 1.0) / (nf + 1.0) / (nf);
         dgqsc += t[1] * (am_0_re * are + am_0_im * aim + bm_0_re * bre + bm_0_im * bim)
             + t[3] * (am_0_re * bm_0_re + am_0_im * bm_0_im);
 
-        t[2] = 2.0 * (n as f64) + 1.0;
+        t[2] = 2.0 * (nf) + 1.0;
         dqext += t[2] * (are + bre);
         t[3] = are * are + aim * aim + bre * bre + bim * bim;
         dqsca += t[2] * t[3];
         rmm = -rmm;
         sback += t[2] * rmm * (acoe - bcoe);
 
-        t[1] = (n as f64) / (n as f64 + 1.0);
+        t[1] = (nf) / (nf + 1.0);
         t[0] = t[2] / t[1];
 
         ac = t[0] * acoe;

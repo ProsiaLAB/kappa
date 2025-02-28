@@ -137,7 +137,8 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult,
 
     if nmax > nfac {
         for n in nfac + 1..nmax {
-            facf[n] = (2.0 * n as f64 + 1.0) / (n as f64 * (n as f64 + 1.0));
+            let nf = n as f64;
+            facf[n] = (2.0 * nf + 1.0) / (nf * (nf + 1.0));
             facb[n] = facf[n];
             if n % 2 == 1 {
                 facb[n] = -facb[n];
@@ -151,9 +152,10 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult,
     let mut aux: f64 = 0.0;
 
     for n in 0..nmax {
-        aux = (2.0 * n as f64 + 1.0) * (an[n].norm() + bn[n].norm()).abs();
+        let nf = n as f64;
+        aux = (2.0 * nf + 1.0) * (an[n].norm() + bn[n].norm()).abs();
         c_sca_sum += aux;
-        c_ext_sum += (2.0 * n as f64 + 1.0) * (an[n] + bn[n]).re;
+        c_ext_sum += (2.0 * nf + 1.0) * (an[n] + bn[n]).re;
         if aux < miec.delta {
             nstop = n;
             break;
@@ -187,7 +189,8 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult,
     mier.wth = vec![0.0; nangle];
     let wfac = 2.0 / nangle as f64;
     for iang in 0..nangle {
-        let th = miec.thmin + iang as f64 * miec.step;
+        let iangf = iang as f64;
+        let th = miec.thmin + iangf * miec.step;
         mier.u[nangle - 1 - iang] = (RAD_FAC * th).cos();
         mier.wth[iang] = wfac;
     }
@@ -311,11 +314,13 @@ fn fichid(
     let mut d: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nd];
 
     for n in (0..nchi).rev() {
-        psi[n] = 1.0 / (2.0 * n as f64 + 1.0) / x - psi[n + 1];
+        let nf = n as f64;
+        psi[n] = 1.0 / (2.0 * nf + 1.0) / x - psi[n + 1];
     }
 
     for n in (0..nd).rev() {
-        let zn_1 = (n as f64 + 1.0) * perz;
+        let nf = n as f64;
+        let zn_1 = (nf + 1.0) * perz;
         d[n] = zn_1 - 1.0 / (d[n + 1] + zn_1);
     }
 
@@ -335,7 +340,8 @@ fn fichid(
     chi[0] = cosx;
     chi[1] = chi[0] * perx + sinx;
     for n in 1..nmax - 1 {
-        chi[n + 1] = (2.0 * n as f64 + 1.0) * chi[n] * perx - chi[n - 1];
+        let nf = n as f64;
+        chi[n + 1] = (2.0 * nf + 1.0) * chi[n] * perx - chi[n - 1];
     }
 
     (psi, chi, d)
@@ -356,9 +362,10 @@ fn anbn(
     let mut bn: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmax];
 
     for n in 0..nmax {
+        let nf = n as f64;
         let zn = Complex::new(psi[n], chi[n]);
         let znm_1 = Complex::new(psi[n - 1], chi[n - 1]);
-        let xn = n as f64 * perx;
+        let xn = nf * perx;
         let save_a = d[n] * perm + xn;
         an[n] = (save_a * psi[n] - psi[n - 1]) / (save_a * zn - znm_1);
         let save_b = d[n] * m + xn;
@@ -380,9 +387,10 @@ fn pitau(u: f64, nmax: usize) -> (Vec<f64>, Vec<f64>) {
     tau[1] = 2.0 * delta - 1.0;
 
     for n in 1..nmax {
-        pi[n + 1] = (n as f64 + 1.0) / (n as f64) * delta + u * pi[n];
+        let nf = n as f64;
+        pi[n + 1] = (nf + 1.0) / (nf) * delta + u * pi[n];
         delta = u * pi[n + 1] - pi[n];
-        tau[n + 1] = (n as f64 + 1.0) * delta - pi[n];
+        tau[n + 1] = (nf + 1.0) * delta - pi[n];
     }
 
     (pi, tau)
