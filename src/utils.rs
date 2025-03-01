@@ -244,12 +244,295 @@ pub mod legendre {
 }
 
 pub mod bessel {
-    pub fn int_sph_bessel() {
-        todo!()
+    use anyhow::bail;
+    use anyhow::Result;
+    use num_complex::Complex;
+
+    use crate::fractal::FractalGeometry;
+    use crate::fractal::{FractalConfig, FractalCutoff};
+
+    use super::special::two_point_correlation;
+
+    pub enum BoundaryCondition {
+        Jablonski,
+        TazakiTanaka,
     }
 
-    pub fn sph_bessel() {
-        todo!()
+    impl BoundaryCondition {
+        fn coefficients(self) -> ([f64; 4], [f64; 4]) {
+            match self {
+                BoundaryCondition::Jablonski => {
+                    let a = [-3.6693021e-8, -3.1745158e-5, 2.1567720e-2, 9.9123380e-1];
+                    let b = [-9.9921351e-8, 8.7822303e-6, 1.0238752e-2, 3.7588265];
+                    (a, b)
+                }
+                BoundaryCondition::TazakiTanaka => {
+                    let a = [
+                        1.69496268177237e-08,
+                        -2.43299782942114e-05,
+                        0.0158750501131321,
+                        1.00672154148706,
+                    ];
+                    let b = [
+                        2.49355951047228e-08,
+                        -2.9387731648675e-05,
+                        0.0135005554796179,
+                        3.72312019844119,
+                    ];
+                    (a, b)
+                }
+            }
+        }
+    }
+
+    ///  This subroutine performs integration of S_p(kRg) (Equation 31):
+    ///     
+    ///                    pi^2     /Infinity
+    ///       S_p(k*Rg) =  ----  *  |  du  u * J_{p+1/2}(u) * H_{p+1/2}^(1)(u) * g(u/k),
+    ///                     k^3     /0
+    ///     
+    ///  where g(u) is the two-point correlation function (Equations 18 and 19):
+    ///     
+    ///                    1       / u  \ ^{d_f-3}       / u  \
+    ///       g(u) =   ---------  |----- |       *  fc  | ---- |,
+    ///                4*pi*Rg^3   \ Rg /                \ Rg /
+    ///     
+    ///  where fc is the cut-off function. By substituting g(u) into S_p, we have
+    ///     
+    ///                      pi   /u_max
+    ///       S_p(k*Rg) = ------ *|  du  u^{df-2} * J_{p+1/2}(u) * H_{p+1/2}^(1)(u) * fc(u/xg),
+    ///                    4Xg^df /u_min
+    ///     
+    ///  where the integration range is approximated by the range [u_min,u_max].
+    ///  By using the spherical Bessel j_p(u) and Hankel functions of 1st kind h_p^(1)(u),
+    ///  the Bessel function and the Hankel function are rewritten by
+    ///
+    ///               J_{p+1/2}    (u) = sqrt(2u/pi) * j_p(u)
+    ///               H_{p+1/2}^(1)(u) = sqrt(2u/pi) * h_p^(1)(u)
+    ///
+    ///  we have
+    ///     
+    ///                      1        /u_max
+    ///       S_p(k*Rg) =  ------  *  |  du  u^{df-1} * j_{p}(u) * h_{p}^(1)(u) * fc(u/xg),
+    ///                    2*Xg^df    /u_min
+    ///     
+    ///  For the unitary condition of the two-point correlation function is
+    ///     
+    ///                     /Infinity
+    ///       1         =   |  dw  4*pi*w^2 g(w),
+    ///                     /0
+    ///     
+    ///  If we take the integration variable as w = u/k, then we obtain
+    ///     
+    ///                     1     /u_max
+    ///       1         = ------  |  du u^{df-1} fc(u/xg),    .... Eq. (*)
+    ///                    Xg^df  /u_min
+    ///     
+    ///     
+    ///  The integration range [umin,umax] is determined as follows.
+    ///  The integrand of Equation (*) is
+    ///
+    ///         (u/xg)^{df-1}fc(u/xg) du = (u/xg) ^{d_f}fc(u/xg) dlnu
+    ///
+    ///  u_max is chosen so that fc(u/xg) ~ exp[-eta1].
+    ///       For iqcor=1 (Gauss)
+    ///               u_max ~ 2 * xg * sqrt(eta1 / d_f)
+    ///       For iqcor=1 (Exponential)
+    ///               u_max ~ xg * eta1 * sqrt(2.0 /(d_f*(d_f+1))
+    ///       For iqcor=1 (FLDIM)
+    ///               u_max ~ xg * sqrt( 2.0 * eta1 ) ** (1.0/d_f)
+    ///  I adopt eta1 = 25.0.
+    ///
+    ///  u_min is chosen so that (u_min/xg)^{d_f} ~ exp[-eta2], thus,
+    ///
+    ///               umin ~ xg * exp(-eta2/d_f)
+    ///
+    ///  where eta2 = 40.0.
+    ///
+    /// # Remarks
+    /// [`BoundaryCondition::TazakiTanaka`] is used for the boundary condition and is
+    /// recommended; although [`BoundaryCondition::Jablonski`] is also available.
+    pub fn int_sph_bessel(fracc: &FractalConfig, x_g: f64, p: usize) -> Result<Complex<f64>> {
+        let pf = p as f64;
+
+        let floor_val = 1e-30;
+        let eta1 = 25.0;
+        let eta2 = 40.0;
+
+        let nn = 10000; // Number of grid points in the numerical integration of S_p(kRg)
+        let nnf = nn as f64;
+
+        let umax = match fracc.cutoff {
+            FractalCutoff::Gaussian => 2.0 * x_g * (eta1 / fracc.df).sqrt(),
+            FractalCutoff::Exponential => x_g * eta1 * (2.0 / (fracc.df * (fracc.df + 1.0))).sqrt(),
+            FractalCutoff::FractalDimension => x_g * (2.0 * eta1).powf(1.0 / fracc.df),
+        };
+
+        let umin = x_g * (-eta2 / fracc.df).exp();
+        let du = (umax - umin).powf(1.0 / (nnf - 1.0));
+
+        let mut u = vec![0.0; nn];
+        let mut intg: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nn];
+        let mut intg_unit = vec![0.0; nn];
+
+        for (n, val) in u.iter_mut().enumerate().take(nn) {
+            *val = umin * du.powi(n as i32);
+        }
+
+        let (a, b) = BoundaryCondition::TazakiTanaka.coefficients();
+
+        let lnxa = a[0] * pf.powf(3.0) + a[1] * pf.powf(2.0) + a[2] * pf + a[3];
+        let lnxb = b[0] * pf.powf(3.0) + b[1] * pf.powf(2.0) + b[2] * pf + b[3];
+
+        for n in 0..nn {
+            let isol = if u[n] < lnxa {
+                1
+            } else if u[n] > lnxb {
+                3
+            } else {
+                2
+            };
+            let (sj, sy) = sph_bessel(p, u[n], isol)?;
+            let jp = sj[p];
+            let yp = sy[p];
+            let hp = Complex::new(jp, yp);
+
+            if jp * 0.0 != 0.0 || jp.is_nan() {
+                bail!("Error in sph_bessel (jp)");
+            } else if yp * 0.0 != 0.0 || yp.is_nan() {
+                bail!("Error in sph_bessel (yp)");
+            }
+
+            intg[n] = u[n].powf(fracc.df - 1.0) * jp * hp * two_point_correlation(fracc, u[n], x_g);
+            intg_unit[n] = u[n].powf(fracc.df - 1.0) * two_point_correlation(fracc, u[n], x_g);
+        }
+
+        // Use iterators to apply the trapezoidal rule
+        let wa: Complex<f64> = intg
+            .windows(2)
+            .zip(u.windows(2))
+            .map(|(intg_pair, u_pair)| {
+                0.5 * (intg_pair[0] + intg_pair[1]) * (u_pair[1] - u_pair[0])
+            })
+            .sum::<Complex<f64>>();
+
+        let mut unitary: f64 = intg_unit
+            .windows(2)
+            .zip(u.windows(2))
+            .map(|(intg_unit_pair, u_pair)| {
+                0.5 * (intg_unit_pair[0] + intg_unit_pair[1]) * (u_pair[1] - u_pair[0])
+            })
+            .sum();
+
+        unitary /= x_g.powf(fracc.df);
+        let mut sp = 0.5 * wa / x_g.powf(fracc.df);
+        let error = (1.0 - unitary).abs();
+
+        if sp.re.abs() < floor_val {
+            sp = Complex::new(floor_val, sp.im);
+        }
+        if sp.im.abs() < floor_val {
+            sp = Complex::new(sp.re, -floor_val);
+        }
+
+        if fracc.geometry != FractalGeometry::Tazaki && error > 1.0e-3 {
+            bail!("Error in int_sph_bessel: error = {}", error);
+        }
+
+        Ok(sp)
+    }
+
+    pub fn sph_bessel(m: usize, x: f64, isol: usize) -> Result<(Vec<f64>, Vec<f64>)> {
+        let imax = 100; // truncation order of the series expansion
+        let nwarmup = 100; // number of warm-up iterations
+
+        let floor_val = 1.0e-70;
+        let ceiling_val = 1.0e+70;
+
+        let mut sj = vec![0.0; m + 1];
+        sj[0] = x.sin() / x;
+
+        let mut sy = vec![0.0; m + 1];
+        sy[0] = -x.cos() / x;
+
+        if m == 0 {
+            return Ok((sj, sy));
+        }
+
+        match isol {
+            1 => {
+                // Series expansion
+                let mut f_n = 1.0;
+                for (n, val) in sj.iter_mut().enumerate().skip(1).take(m) {
+                    let nf = n as f64;
+                    f_n *= x / (2.0 * nf + 1.0);
+                    let mut xi = 1.0;
+                    let mut wa = 0.0;
+                    for i in 1..imax {
+                        let ir = i as f64;
+                        xi = -x * x * xi / (2.0 * ir * (2.0 * ir + 2.0 * nf + 1.0));
+                        wa += xi;
+                        if (xi / wa).abs() <= floor_val {
+                            break;
+                        }
+                    }
+                    *val = f_n * (1.0 + wa);
+                    if val.abs() <= floor_val {
+                        break;
+                    }
+                }
+            }
+            2 => {
+                // Downward recursion
+                let mut k1 = 0.0;
+                let mut k0 = 1.0;
+                let mut k = vec![0.0; m + nwarmup + 1];
+                for n in (m + nwarmup..0).rev() {
+                    let nf = n as f64;
+                    k[n] = -k1 + (2.0 * nf + 3.0) * k0 / x;
+                    k1 = k0;
+                    k0 = k[n];
+                }
+                let s = sj[0] / k[0];
+                for (n, val) in sj.iter_mut().enumerate().skip(1).take(m) {
+                    *val = s * k[n];
+                    if val.abs() <= floor_val {
+                        break;
+                    }
+                }
+            }
+            3 => {
+                // Upward recursion
+                sj[1] = x.sin() / (x * x) - x.cos() / x;
+                let mut k0 = sj[0];
+                let mut k1 = sj[1];
+                for n in 1..m {
+                    let nf = n as f64;
+                    sj[n + 1] = (2.0 * nf + 1.0) * k1 / x - k0;
+                    k0 = k1;
+                    k1 = sj[n + 1];
+                }
+            }
+            _ => {
+                bail!("Invalid isol value");
+            }
+        }
+
+        // Spherical Bessel function of the second kind
+        sy[1] = -x.cos() / (x * x) - x.sin() / x;
+        let mut y0 = sy[0];
+        let mut y1 = sy[1];
+        for (n, val) in sy.iter_mut().enumerate().skip(2).take(m) {
+            let nf = n as f64;
+            *val = (2.0 * nf - 1.0) * y1 / x - y0;
+            y0 = y1;
+            y1 = *val;
+            if val.abs() >= ceiling_val {
+                break;
+            }
+        }
+
+        Ok((sj, sy))
     }
 }
 
