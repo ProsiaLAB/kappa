@@ -14,6 +14,51 @@ use num_complex::Complex;
 /// Complex vector type.
 type ComplexVec = Vec<Complex<f64>>;
 
+pub struct FractalConfig {
+    pub solver: FractalSolver,
+    pub cutoff: FractalCutoff,
+    pub geometry: FractalGeometry,
+    pub nang: usize,
+    pub pn: f64,
+    pub r0: f64,
+    pub df: f64,
+    pub k0: f64,
+    pub lmd: f64,
+    pub refrel: Complex<f64>,
+}
+
+pub struct FractalResult {
+    c_ext: f64,
+    c_sca: f64,
+    c_abs: f64,
+    g: f64,
+    dphi: f64,
+    ang: Vec<f64>,
+    smat: Array2<f64>,
+    pf: Vec<f64>,
+}
+
+pub enum FractalError {}
+
+pub enum FractalSolver {
+    RayleighGansDebye,
+    MeanField,
+    ModifiedMeanField,
+}
+
+pub enum FractalCutoff {
+    Gaussian,
+    Exponential,
+    FractalDimension,
+}
+
+#[derive(PartialEq)]
+pub enum FractalGeometry {
+    Circular,
+    Okuzumi,
+    Tazaki,
+}
+
 /// Computes light scattering properties of randomly oriented
 /// fractal dust aggregates by means of the modified mean field theory developed
 /// in [Tazaki & Tanaka (2018)](https://iopscience.iop.org/article/10.3847/1538-4357/aac32d/meta). This code is also capable of computing the light
