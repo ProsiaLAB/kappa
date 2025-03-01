@@ -550,8 +550,25 @@ pub mod linalg {
 }
 
 pub mod special {
-    pub fn two_point_correlation() {
-        todo!()
+    use statrs::function::gamma::gamma;
+
+    use crate::fractal::{FractalConfig, FractalCutoff};
+
+    pub fn two_point_correlation(fracc: &FractalConfig, u: f64, x: f64) -> f64 {
+        match fracc.cutoff {
+            FractalCutoff::Gaussian => {
+                let c = 0.25 * fracc.df;
+                (2.0 * c.powf(0.5 * fracc.df) / gamma(0.5 * fracc.df)) * (-c * u * u / x / x).exp()
+            }
+            FractalCutoff::Exponential => {
+                let c = (0.5 * fracc.df * (fracc.df + 1.0)).sqrt();
+                (c.powf(fracc.df) / gamma(fracc.df)) * (-c * u / x).exp()
+            }
+            FractalCutoff::FractalDimension => {
+                let c = 0.5;
+                (c * fracc.df) * (-c * u / x).exp()
+            }
+        }
     }
 
     pub fn output_structure() {
