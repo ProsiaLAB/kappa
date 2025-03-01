@@ -7,9 +7,17 @@
 //! # References
 //! Based on `OPFRACTAL v3.0` from `optool` by Ryo Tazaki.
 
+use std::f64::consts::PI;
+
 use anyhow::bail;
 use anyhow::Result;
+use ndarray::s;
+use ndarray::Array;
+use ndarray::Array2;
 use num_complex::Complex;
+
+use crate::utils::bessel;
+use crate::utils::legendre;
 
 /// Complex vector type.
 type ComplexVec = Vec<Complex<f64>>;
@@ -114,11 +122,76 @@ pub enum FractalGeometry {
 /// - `iqcor = 3`: [Botet et al. (1995), JPhA, 28, 297](https://iopscience.iop.org/article/10.1088/0305-4470/28/2/008)
 /// - `iqgeo = 2`: [Okuzumi et al. (2009), ApJ, 707, 1247](https://iopscience.iop.org/article/10.1088/0004-637X/698/2/1122/meta)
 /// - `iqgeo = 3`: [Tazaki (2021), MNRAS, 504, 2811](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract)
-pub fn mean_scattering() {
-    // maxwell_garnett_mixing();
-    // structure_factor_integration();
-    // lorenz_mie();
-    todo!()
+pub fn mean_scattering(fracc: &FractalConfig) -> Result<()> {
+    let jm = 400; // Number of grid points for Gauss-Legendre quadrature
+
+    let k = 2.0 * PI / fracc.lmd; // Wavenumber
+    let r_g = fracc.r0 * (fracc.pn / fracc.k0).powf(1.0 / fracc.df); // Radius of gyration of the aggregate
+    let r_c = (5.0f64 / 3.0f64).powf(r_g); // Characteristic radius of the aggregate
+    let x_g = k * r_g; // Size parameter of the aggregate
+    let x0 = k * fracc.r0; // Size parameter of the monomer
+
+    // Truncation order of the monomer's scattering field
+    let x_stop = x0 + 4.0 * x0.powf(1.0 / 3.0) + 2.0;
+    let nstop = x_stop as usize;
+    let numax = nstop;
+    let nmax = nstop;
+
+    if fracc.nang <= 1 {
+        bail!("ERROR: nang <= 1");
+    }
+
+    if fracc.pn < 1.0 {
+        bail!("ERROR: pn < 1");
+    }
+
+    if fracc.df > 3.0 {
+        bail!("ERROR: df > 3");
+    }
+
+    if numax + nmax >= 500 {
+        eprintln!("WARNING: numax + nmax >= 500");
+        eprintln!("         The truncation order of monomer's scattered light");
+        eprintln!("         field exceeds the maximum value (=500).          ");
+        eprintln!("         This may cause a code crush at computations of   ");
+        eprintln!("         the spherical Bessel function of the first kind. ");
+    }
+
+    // Compute the phase shift (cf: Eq. 9 in Tazaki & Tanaka 2018)
+    let ff = fracc.pn * (fracc.r0 / r_c).powf(3.0);
+    let mgmref = maxwell_garnett_mixing(fracc.refrel, ff);
+    let dphic = 2.0 * k * r_c * (mgmref - 1.0).norm();
+    let dphi0 = 2.0 * x0 * (fracc.refrel - 1.0).norm();
+    let dphi = dphic.max(dphi0);
+
+    if dphi >= 1.0 {
+        eprintln!("WARNING: dphi >= 1");
+        eprintln!("         The phase shift by an aggregate exceeds unity.");
+        eprintln!("         Output of scattering matrix elements are not  ");
+        eprintln!("         physically guaranteed.                        ");
+    }
+
+    let (an, bn) = lorenz_mie(x0, fracc.refrel, nstop)?;
+
+    let mut ad: Array2<Complex<f64>> = Array2::zeros((nstop, 2));
+    let mut dd: Array2<Complex<f64>> = Array2::zeros((nstop, 2));
+
+    ad.slice_mut(s![.., 0]).assign(&Array::from_vec(an));
+    ad.slice_mut(s![.., 1]).assign(&Array::from_vec(bn));
+
+    // Solve multiple scattering?
+    match fracc.solver {
+        FractalSolver::RayleighGansDebye => {
+            dd.slice_mut(s![.., 0]).assign(&ad.slice(s![.., 0]));
+            dd.slice_mut(s![.., 1]).assign(&ad.slice(s![.., 1]));
+        }
+        FractalSolver::MeanField | FractalSolver::ModifiedMeanField => {
+            mean_field(fracc, x_g, jm, nstop, nmax, numax)?;
+        }
+    }
+
+    let fracr: FractalResult;
+    Ok(())
 }
 
 /// This function finds effective refractive index of an aggregates
@@ -306,6 +379,99 @@ fn lorenz_mie(x: f64, refrel: Complex<f64>, nstop: usize) -> Result<(ComplexVec,
     Ok((a, b))
 }
 
-fn renormalize() {
-    todo!()
+/// Calculate scattering amplitude S1, S2 from given scattering coefficients d.
+///
+/// # References
+/// The original BHMIE code is taken from Bruce Draine's homepage:
+/// <https://www.astro.princeton.edu/~draine/scattering.html>, with
+/// slight modifications.
+fn renormalize() {}
+
+/// Solves the mean field theory.
+///
+/// Calculate a(nu,n,p) and b(nu,n,p):
+///
+///                   2p + 1  /+1
+///       a(nu,n,p) = -------- | dx P_nu^1(x) * P_n^1(x) * P_p(x),
+///                      2     /-1
+///     
+///                    2p + 1  /+1                         dP_p(x)
+///       b(nu,n,p) = -------- | dx P_nu^1(x) * P_n^1(x) * -------,
+///                      2     /-1                            dx
+///
+/// where `P_n^m` is the associated Legendre function (`n`: degree, `m`: order),
+///  `P_n` is the Legendre polynominal function
+///  (see Equations (29, 30) in Tazaki & Tanaka 2018).
+///  The integration is performed with the Gauss-Legendre quadrature.
+fn mean_field(
+    fracc: &FractalConfig,
+    x_g: f64,
+    jm: usize,
+    nstop: usize,
+    nmax: usize,
+    numax: usize,
+) -> Result<()> {
+    // Solve the mean field theory
+    let x1 = -1.0;
+    let x2 = 1.0;
+
+    let (x, w) = legendre::gauss_legendre(x1, x2, jm);
+
+    let order = 1;
+    let degmax = nstop;
+    let pmax = 2 * nstop;
+
+    let mut al1n: Array2<f64> = Array2::zeros((jm, degmax));
+    let mut ln: Array2<f64> = Array2::zeros((jm, pmax));
+    let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
+
+    for (j, xj) in x.iter().enumerate().take(jm) {
+        let (pmn, _) = legendre::lpmns(order, degmax, *xj)?;
+        let (lp, dlp) = legendre::lpn(pmax, *xj);
+        al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
+        ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
+        dln.slice_mut(s![j, ..]).assign(&Array::from_vec(dlp));
+    }
+
+    let mut s_p = vec![Complex::new(0.0, 0.0); numax + nmax];
+
+    for (p, val) in s_p.iter_mut().enumerate().take(numax + nmax) {
+        *val = bessel::int_sph_bessel(fracc, x_g, p)?;
+    }
+
+    Ok(())
+}
+
+/// Calculate translation matrix coefficients
+///
+/// Translation coefficients: A and B (Equation # from Tazaki & Tanaka 2018)
+/// T(1,nu,n) : \bar{A}_{1,n}^{1,nu} defined in Equation (14)
+/// T(2,nu,n) : \bar{A}_{1,n}^{1,nu} defined in Equation (15)
+/// anunp     : a(nu,n,p)            defined in Equation (29)
+/// bnunp     : b(nu,n,p)            defined in Equation (30)
+///
+/// Note about the rule of rum with respect to the index p
+/// (RT and Botet, in private communication, 2017).
+///
+/// Just before Equation (4) in Botet et al. (1997), it is written that
+/// p should have the same parity as n+nu. However, this is only true
+/// true for a(nu,n,p), and not for b(nu,n,p)
+/// Thus, in this code, index p runs ALL integers between |nu-n| and nu+n.
+///
+/// Tips for efficient computation.
+/// The parity of the integrand of a and b leads following properties:
+/// - a(nu,n,p) .ne. 0 and b(nu,n,p) = 0 when p has the same parity as n+nu
+/// - b(nu,n,p) .ne. 0 and a(nu,n,p) = 0 when p has the opposite parity to n+nu
+///
+///--------------------------------------------------------------------------------
+fn get_translation_matrix_coefficients(numax: usize, nmax: usize, jm: usize) {
+    for nu in 0..numax {
+        for n in 0..nmax {
+            let pmin = nu.abs_diff(n);
+            let pmax = n + nu;
+            for p in pmin..=pmax {
+                // for
+            }
+        }
+    }
 }
