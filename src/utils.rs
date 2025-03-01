@@ -102,19 +102,144 @@ pub mod spline {
 }
 
 pub mod legendre {
-    pub fn lpmns() {
-        todo!()
-    }
-    pub fn lpn() {
-        todo!()
+    use std::f64::consts::PI;
+
+    use anyhow::bail;
+    use anyhow::Result;
+
+    pub fn lpmns(m: usize, n: usize, x: f64) -> Result<(Vec<f64>, Vec<f64>)> {
+        let mut pm = vec![0.0; n];
+        let mut pd = vec![0.0; n];
+
+        let mf = m as f64;
+
+        if x.abs() == 1.0 {
+            for k in 0..n {
+                let kf = k as f64;
+                match m {
+                    0 => {
+                        pm[k] = 1.0;
+                        pd[k] = 0.5 * kf * (kf + 1.0);
+                        if x < 0.0 {
+                            pm[k] *= -1.0f64.powf(kf);
+                            pd[k] *= -1.0f64.powf(kf + 1.0);
+                        }
+                    }
+                    1 => {
+                        pm[k] = x;
+                        pd[k] = 0.5 * kf * (kf + 1.0) * x;
+                        if x < 0.0 {
+                            pm[k] *= -1.0f64.powf(kf);
+                            pd[k] *= -1.0f64.powf(kf + 1.0);
+                        }
+                    }
+                    2 => {
+                        pm[k] = 0.5 * (3.0 * x.powi(2) - 1.0);
+                        pd[k] = 0.5 * kf * (kf + 1.0) * (3.0 * x.powi(2) - 1.0);
+                        if x < 0.0 {
+                            pm[k] *= -1.0f64.powf(kf);
+                            pd[k] *= -1.0f64.powf(kf + 1.0);
+                        }
+                    }
+                    _ => {
+                        bail!("m must be 0, 1, or 2");
+                    }
+                }
+            }
+        }
+
+        let x0 = (1.0 - x * x).abs();
+        let mut pm0 = 1.0;
+        let mut pmk = pm0;
+        for k in 0..m {
+            let kf = k as f64;
+            pmk = (2.0 * kf + 1.0) * x0.sqrt() * pm0;
+            pm0 = pmk;
+        }
+        let mut pm1 = (2.0 * m as f64 + 1.0) * x * pm0;
+        pm[m] = pmk;
+        pm[m + 1] = pm1;
+
+        for (k, val) in pm.iter_mut().enumerate().skip(m + 2).take(n - m - 2) {
+            let kf = k as f64;
+            *val = ((2.0 * kf - 1.0) * x * pm1 - (kf + mf - 1.0) * pmk) / (kf - mf);
+            pmk = pm1;
+            pm1 = *val;
+        }
+
+        pd[0] = ((1.0 - mf) * pm[1] - x * pm[0]) / (x * x - 1.0);
+
+        for (k, val) in pd.iter_mut().enumerate().skip(1).take(n - 1) {
+            let kf = k as f64;
+            *val = (kf * x * pm[k] - (kf + mf) * pm[k - 1]) / (x * x - 1.0);
+        }
+
+        Ok((pm, pd))
     }
 
-    pub fn gauss_legendre() {
-        todo!()
+    pub fn lpn(n: usize, x: f64) -> (Vec<f64>, Vec<f64>) {
+        let mut pn = vec![0.0; n];
+        let mut pd = vec![0.0; n];
+
+        pn[0] = 1.0;
+        pn[1] = x;
+        pd[0] = 0.0;
+        pd[1] = 1.0;
+
+        let mut p0 = 1.0;
+        let mut p1 = x;
+
+        for k in 2..n {
+            let kf = k as f64;
+            let pf = (2.0 * kf - 1.0) * kf * x * p1 - (kf - 1.0) / kf * p0;
+            pn[k] = pf;
+            if x.abs() == 1.0 {
+                pd[k] = 0.5 * x.powf(kf + 1.0) * kf * (kf + 1.0);
+            } else {
+                pd[k] = kf * (p1 - x * pf) / (1.0 - x * x);
+            }
+            p0 = p1;
+            p1 = pf;
+        }
+        (pn, pd)
     }
 
-    pub fn gauss_legendre_alt() {
-        todo!()
+    pub fn gauss_legendre(x1: f64, x2: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+        let eps = 1.0e-14;
+
+        let mut pp = 0.0;
+        let m = (n + 1) / 2;
+        let xm = 0.5 * (x2 + x1);
+        let xl = 0.5 * (x2 - x1);
+
+        let mut x: Vec<f64> = vec![0.0; n];
+        let mut w: Vec<f64> = vec![0.0; n];
+
+        let nf = n as f64;
+
+        for i in 0..m {
+            let ir = i as f64;
+            let mut z = PI * (ir + 0.75) / (nf + 0.5);
+            let mut z1 = 2.0 * z;
+            while (z - z1).abs() > eps {
+                let mut p1 = 1.0;
+                let mut p2 = 0.0;
+                for j in 0..n {
+                    let jf = j as f64;
+                    let p3 = p2;
+                    p2 = p1;
+                    p1 = ((2.0 * jf + 1.0) * z * p2 - jf * p3) / (jf + 1.0);
+                }
+                pp = nf * (z * p1 - p2) / (z * z - 1.0);
+                z1 = z;
+                z = z1 - p1 / pp;
+            }
+            x[i] = xm - xl * z;
+            x[n - 1 - i] = xm + xl * z;
+            w[i] = 2.0 * xl / ((1.0 - z * z) * pp * pp);
+            w[n - 1 - i] = w[i];
+        }
+        (x, w)
     }
 }
 
