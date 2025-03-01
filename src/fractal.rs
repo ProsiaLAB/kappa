@@ -199,9 +199,10 @@ fn structure_factor_integration(d: f64, q: f64, r_g: f64) -> f64 {
         s_q = 0.0;
         let h = xmax / (2.0 * integration_grid_size as f64);
         for i in 0..integration_grid_size - 2 {
-            let x0 = 2.0 * i as f64 * h;
-            let x1 = (2.0 * i as f64 + 1.0) * h;
-            let x2 = (2.0 * i as f64 + 2.0) * h;
+            let ir = i as f64;
+            let x0 = 2.0 * ir * h;
+            let x1 = (2.0 * ir + 1.0) * h;
+            let x2 = (2.0 * ir + 2.0) * h;
             s_q += h
                 * (structure_factor_fn(x0, normalization_factor, d, q, r_g)
                     + 4.0 * structure_factor_fn(x1, normalization_factor, d, q, r_g)
@@ -288,14 +289,14 @@ fn lorenz_mie(x: f64, refrel: Complex<f64>, nstop: usize) -> Result<(ComplexVec,
     let mut b: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nstop];
 
     for n in 0..nstop {
-        let nr = n as f64;
-        let psi = (2.0 * nr - 1.0) * psi_1 / x - psi_0;
-        let chi = (2.0 * nr - 1.0) * chi_1 / x - chi_0;
+        let nf = n as f64;
+        let psi = (2.0 * nf - 1.0) * psi_1 / x - psi_0;
+        let chi = (2.0 * nf - 1.0) * chi_1 / x - chi_0;
         let xi = Complex::new(psi, -chi);
-        a[n] = (d[n] / refrel + nr / x) * psi - psi_1;
-        a[n] /= (d[n] / refrel + (nr / x)) * xi - xi_1;
-        b[n] = (refrel * d[n] + nr / x) * psi - psi_1;
-        b[n] /= (refrel * d[n] + nr / x) * xi - xi_1;
+        a[n] = (d[n] / refrel + nf / x) * psi - psi_1;
+        a[n] /= (d[n] / refrel + (nf / x)) * xi - xi_1;
+        b[n] = (refrel * d[n] + nf / x) * psi - psi_1;
+        b[n] /= (refrel * d[n] + nf / x) * xi - xi_1;
         psi_0 = psi_1;
         psi_1 = psi;
         chi_0 = chi_1;
