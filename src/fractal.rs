@@ -9,11 +9,11 @@
 
 use std::f64::consts::PI;
 
-use anyhow::bail;
 use anyhow::Result;
 use ndarray::s;
 use ndarray::Array;
 use ndarray::Array2;
+use ndarray::Array3;
 use num_complex::Complex;
 
 use crate::utils::bessel;
@@ -33,20 +33,53 @@ pub struct FractalConfig {
     pub k0: f64,
     pub lmd: f64,
     pub refrel: Complex<f64>,
+    pub gauss_leg_grid_size: usize,
+    pub truncation_order: usize,
+}
+
+impl Default for FractalConfig {
+    fn default() -> Self {
+        FractalConfig {
+            solver: FractalSolver::ModifiedMeanField,
+            cutoff: FractalCutoff::Gaussian,
+            geometry: FractalGeometry::Circular,
+            nang: 100,
+            pn: 1.0,
+            r0: 0.1,
+            df: 2.0,
+            k0: 1.0,
+            lmd: 0.55,
+            refrel: Complex::new(1.5, 0.0),
+            gauss_leg_grid_size: 400,
+            truncation_order: 500,
+        }
+    }
+}
+
+impl FractalConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 pub struct FractalResult {
-    c_ext: f64,
-    c_sca: f64,
-    c_abs: f64,
-    g: f64,
-    dphi: f64,
-    ang: Vec<f64>,
-    smat: Array2<f64>,
-    pf: Vec<f64>,
+    pub c_ext: f64,
+    pub c_sca: f64,
+    pub c_abs: f64,
+    pub g: f64,
+    pub dphi: f64,
+    pub ang: Vec<f64>,
+    pub smat: Array2<f64>,
+    pub pf: Vec<f64>,
 }
 
-pub enum FractalError {}
+pub enum FractalError {
+    ScatteringAngleResolutionTooLow,
+    InsufficientNumberOfMonomers,
+    FractalDimensionTooLarge,
+    MieOverflow,
+    IntegrationFailure(String),
+}
 
 pub enum FractalSolver {
     RayleighGansDebye,
@@ -65,6 +98,17 @@ pub enum FractalGeometry {
     Circular,
     Okuzumi,
     Tazaki,
+}
+
+pub struct TMatrixConfig {
+    pub numax: usize,
+    pub nmax: usize,
+    pub jm: usize,
+    pub al1n: Array2<f64>,
+    pub ln: Array2<f64>,
+    pub dln: Array2<f64>,
+    pub w: Vec<f64>,
+    pub sp: Vec<Complex<f64>>,
 }
 
 /// Computes light scattering properties of randomly oriented
@@ -122,7 +166,7 @@ pub enum FractalGeometry {
 /// - `iqcor = 3`: [Botet et al. (1995), JPhA, 28, 297](https://iopscience.iop.org/article/10.1088/0305-4470/28/2/008)
 /// - `iqgeo = 2`: [Okuzumi et al. (2009), ApJ, 707, 1247](https://iopscience.iop.org/article/10.1088/0004-637X/698/2/1122/meta)
 /// - `iqgeo = 3`: [Tazaki (2021), MNRAS, 504, 2811](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract)
-pub fn mean_scattering(fracc: &FractalConfig) -> Result<()> {
+pub fn mean_scattering(fracc: &FractalConfig) -> Result<(), FractalError> {
     let jm = 400; // Number of grid points for Gauss-Legendre quadrature
 
     let k = 2.0 * PI / fracc.lmd; // Wavenumber
@@ -138,15 +182,15 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<()> {
     let nmax = nstop;
 
     if fracc.nang <= 1 {
-        bail!("ERROR: nang <= 1");
+        return Err(FractalError::ScatteringAngleResolutionTooLow);
     }
 
     if fracc.pn < 1.0 {
-        bail!("ERROR: pn < 1");
+        return Err(FractalError::InsufficientNumberOfMonomers);
     }
 
     if fracc.df > 3.0 {
-        bail!("ERROR: df > 3");
+        return Err(FractalError::FractalDimensionTooLarge);
     }
 
     if numax + nmax >= 500 {
@@ -190,7 +234,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<()> {
         }
     }
 
-    let fracr: FractalResult;
+    // let fracr: FractalResult;
     Ok(())
 }
 
@@ -333,7 +377,11 @@ fn structure_factor_fn(x: f64, c: f64, d: f64, q: f64, r_g: f64) -> f64 {
 /// The original BHMIE code is taken from Bruce Draine's homepage:
 /// <https://www.astro.princeton.edu/~draine/scattering.html>, with
 /// slight modifications.
-fn lorenz_mie(x: f64, refrel: Complex<f64>, nstop: usize) -> Result<(ComplexVec, ComplexVec)> {
+fn lorenz_mie(
+    x: f64,
+    refrel: Complex<f64>,
+    nstop: usize,
+) -> Result<(ComplexVec, ComplexVec), FractalError> {
     let nmxx = 150_000;
 
     let y = refrel * x;
@@ -341,7 +389,7 @@ fn lorenz_mie(x: f64, refrel: Complex<f64>, nstop: usize) -> Result<(ComplexVec,
     let xstop = x + 4.0 * x.powf(1.0 / 3.0) + 2.0;
     let nmx = xstop.max(ymod) as usize + 15;
     if nmx > nmxx {
-        bail!("ERROR: nmx > nmxx for |m|x = {}", ymod);
+        return Err(FractalError::MieOverflow);
     }
 
     let mut d: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmx];
@@ -410,7 +458,7 @@ fn mean_field(
     nstop: usize,
     nmax: usize,
     numax: usize,
-) -> Result<()> {
+) -> Result<(), FractalError> {
     // Solve the mean field theory
     let x1 = -1.0;
     let x2 = 1.0;
@@ -426,7 +474,8 @@ fn mean_field(
     let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
 
     for (j, xj) in x.iter().enumerate().take(jm) {
-        let (pmn, _) = legendre::lpmns(order, degmax, *xj)?;
+        let (pmn, _) = legendre::lpmns(order, degmax, *xj)
+            .map_err(|_| FractalError::IntegrationFailure("In Legendre".to_string()))?;
         let (lp, dlp) = legendre::lpn(pmax, *xj);
         al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
         ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
@@ -436,8 +485,14 @@ fn mean_field(
     let mut s_p = vec![Complex::new(0.0, 0.0); numax + nmax];
 
     for (p, val) in s_p.iter_mut().enumerate().take(numax + nmax) {
-        *val = bessel::int_sph_bessel(fracc, x_g, p)?;
+        *val = bessel::int_sph_bessel(fracc, x_g, p).map_err(|_| {
+            FractalError::IntegrationFailure(
+                "Something went wrong in Bessel integration".to_string(),
+            )
+        })?;
     }
+
+    get_translation_matrix_coefficients(numax, nmax, jm, &al1n, &ln, &dln, &w, &s_p);
 
     Ok(())
 }
@@ -464,14 +519,58 @@ fn mean_field(
 /// - b(nu,n,p) .ne. 0 and a(nu,n,p) = 0 when p has the opposite parity to n+nu
 ///
 ///--------------------------------------------------------------------------------
-fn get_translation_matrix_coefficients(numax: usize, nmax: usize, jm: usize) {
+fn get_translation_matrix_coefficients(
+    numax: usize,
+    nmax: usize,
+    jm: usize,
+    al1n: &Array2<f64>,
+    ln: &Array2<f64>,
+    dln: &Array2<f64>,
+    w: &[f64],
+    sp: &[Complex<f64>],
+) -> Array3<Complex<f64>> {
+    let mut t: Array3<Complex<f64>> = Array3::zeros((2, numax, nmax));
     for nu in 0..numax {
+        let nuf = nu as f64;
         for n in 0..nmax {
+            let nf = n as f64;
             let pmin = nu.abs_diff(n);
             let pmax = n + nu;
-            for p in pmin..=pmax {
-                // for
+            let mut sum_a = Complex::new(0.0, 0.0);
+            let mut sum_b = Complex::new(0.0, 0.0);
+            for (p, val) in sp.iter().enumerate().take(pmax + 1).skip(pmin) {
+                let val = *val;
+                let pf = p as f64;
+                let mut anunp = 0.0;
+                let mut bnunp = 0.0;
+                if pmax % 2 == p % 2 {
+                    anunp = w
+                        .iter()
+                        .take(jm)
+                        .zip(al1n.row(nu))
+                        .zip(al1n.row(n))
+                        .zip(ln.row(p))
+                        .map(|(((w, al1n_nu), al1n_n), ln_p)| w * al1n_nu * al1n_n * ln_p)
+                        .sum();
+                } else {
+                    bnunp = w
+                        .iter()
+                        .take(jm)
+                        .zip(al1n.row(nu))
+                        .zip(al1n.row(n))
+                        .zip(dln.row(p))
+                        .map(|(((w, al1n_nu), al1n_n), dln_p)| w * al1n_nu * al1n_n * dln_p)
+                        .sum();
+                }
+                anunp *= 0.5 * (2.0 * pf + 1.0);
+                bnunp *= 0.5 * (2.0 * pf + 1.0);
+
+                sum_a += (nf * (nf + 1.0) + nuf * (nuf + 1.0) - pf * (pf + 1.0)) * anunp * val;
+                sum_b += bnunp * val;
             }
+            t[[0, nu, n]] = sum_a * (2.0 * nuf + 1.0) / (nf * (nf + 1.0) * nuf * (nuf + 1.0));
+            t[[1, nu, n]] = sum_b * 2.0 * (2.0 * nuf + 1.0) / (nf * (nf + 1.0) * nuf * (nuf + 1.0));
         }
     }
+    t
 }
