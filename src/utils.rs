@@ -669,6 +669,8 @@ pub mod linalg {
 }
 
 pub mod special {
+    use std::f64::consts::PI;
+
     use statrs::function::gamma::gamma;
 
     use crate::fractal::{FractalConfig, FractalCutoff};
@@ -694,8 +696,105 @@ pub mod special {
         todo!()
     }
 
-    pub fn confluent_hypergeometric() {
-        todo!()
+    pub fn confluent_hypergeometric(mut a: f64, b: f64, mut x: f64) -> f64 {
+        let mut a0 = a;
+        let x0 = x;
+        let mut y0 = 0.0;
+        let mut y1 = 0.0;
+        let mut hg = 0.0;
+        if b == 0.0 || b == -(b.floor().abs()) {
+            hg = 1e300;
+        } else if a == 0.0 || x == 0.0 {
+            hg = 1.0;
+        } else if a == -1.0 {
+            hg = 1.0 - x / b;
+        } else if a == b {
+            hg = x.exp();
+        } else if (a - b) == 1.0 {
+            hg = (1.0 + x / b) * x.exp();
+        } else if a == 1.0 && b == 2.0 {
+            hg = (x.exp() - 1.0) * x.exp();
+        } else if a == a.floor() && a < 0.0 {
+            let m = -a.floor() as i32;
+            let mut r = 1.0;
+            hg = 1.0;
+            for k in 0..m {
+                let kf = k as f64;
+                r *= (a + kf) / kf / (b + kf) * x;
+                hg += r;
+            }
+        }
+        if hg != 0.0 {
+            return hg;
+        }
+
+        if x < 0.0 {
+            a = b - a;
+            a0 = a;
+            x = x.abs();
+        }
+
+        let nl = if a < 2.0 { 0 } else { 1 };
+        let la = if a >= 2.0 { a as usize } else { 0 };
+        let laf = la as f64;
+        if a >= 2.0 {
+            a = a - laf - 1.0;
+        }
+
+        for n in 0..=nl {
+            if a0 >= 2.0 {
+                a += 1.0;
+            }
+            if x <= 30.0 + b.abs() || a < 0.0 {
+                hg = 1.0;
+                let mut rg = 1.0;
+                for j in 0..500 {
+                    let jf = j as f64;
+                    rg *= (a + jf) / (jf * (b + jf)) * x;
+                    hg += rg;
+                    if (hg / rg).abs() < 1e-15 {
+                        break;
+                    }
+                }
+            } else {
+                let ta = gamma(a);
+                let tb = gamma(b);
+                let xg = b - a;
+                let tba = gamma(xg);
+                let mut sum1 = 1.0;
+                let mut sum2 = 1.0;
+                let mut r1 = 1.0;
+                let mut r2 = 1.0;
+                for i in 0..8 {
+                    let ir = i as f64;
+                    r1 = -r1 * (a + ir) * (a - b + ir + 1.0) / (x * (ir + 1.0));
+                    r2 = -r2 * (b - a) * (a - ir - 1.0) / (x * (ir + 1.0));
+                    sum1 += r1;
+                    sum2 += r2;
+                }
+                let hg1 = tb / tba * x.powf(-a) * (PI * a).cos() * sum1;
+                let hg2 = tb / ta * x.exp() * x.powf(a - b) * sum2;
+                hg = hg1 + hg2;
+            }
+            if n == 0 {
+                y0 = hg;
+            } else if n == 1 {
+                y1 = hg;
+            }
+        }
+        if a0 >= 2.0 {
+            for _ in 0..(la - 2) {
+                hg = ((2.0 * a - b + x) * y1 + (b - a) * y0) / a;
+                y0 = y1;
+                y1 = hg;
+                a += 1.0;
+            }
+        }
+        if x0 < 0.0 {
+            hg *= x0.exp()
+        }
+
+        hg
     }
 
     pub fn geometric_cross_secrtion() {
