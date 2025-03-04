@@ -10,7 +10,8 @@ use std::f64::consts::PI;
 
 use anyhow::Result;
 use ndarray::Array2;
-use num_complex::{Complex, ComplexFloat};
+use num_complex::ComplexFloat;
+use num_complex::{Complex, Complex64};
 
 pub struct MieConfig {
     nangle: usize,
@@ -19,7 +20,7 @@ pub struct MieConfig {
     thmax: f64,
     step: f64,
     lam: f64,
-    cmm: Complex<f64>,
+    cmm: Complex64,
     rad: f64,
 }
 
@@ -85,7 +86,7 @@ fn mie(miec: &MieConfig) -> Result<MieResult, MieError> {
     Ok(mier)
 }
 
-fn get_scattering_matrix(miec: &MieConfig, m: Complex<f64>) -> Result<MieResult, MieError> {
+fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult, MieError> {
     let mut mier = MieResult {
         u: vec![],
         wth: vec![],
@@ -296,12 +297,12 @@ fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
 }
 
 fn fichid(
-    m: Complex<f64>,
+    m: Complex64,
     x: f64,
     nchi: usize,
     nmax: usize,
     nd: usize,
-) -> (Vec<f64>, Vec<f64>, Vec<Complex<f64>>) {
+) -> (Vec<f64>, Vec<f64>, Vec<Complex64>) {
     let z = m * x;
     let perz = 1.0 / z;
     let perx = 1.0 / x;
@@ -311,7 +312,7 @@ fn fichid(
 
     let mut psi: Vec<f64> = vec![0.0; nchi + 1];
     let mut chi: Vec<f64> = vec![0.0; nmax + 2];
-    let mut d: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nd];
+    let mut d: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nd];
 
     for n in (0..nchi).rev() {
         let nf = n as f64;
@@ -348,18 +349,18 @@ fn fichid(
 }
 
 fn anbn(
-    m: Complex<f64>,
+    m: Complex64,
     x: f64,
     psi: Vec<f64>,
     chi: Vec<f64>,
-    d: Vec<Complex<f64>>,
+    d: Vec<Complex64>,
     nmax: usize,
-) -> (Vec<Complex<f64>>, Vec<Complex<f64>>) {
+) -> (Vec<Complex64>, Vec<Complex64>) {
     let perm = 1.0 / m;
     let perx = 1.0 / x;
 
-    let mut an: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmax];
-    let mut bn: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmax];
+    let mut an: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nmax];
+    let mut bn: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nmax];
 
     for n in 0..nmax {
         let nf = n as f64;

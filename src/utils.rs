@@ -246,7 +246,7 @@ pub mod legendre {
 pub mod bessel {
     use anyhow::bail;
     use anyhow::Result;
-    use num_complex::Complex;
+    use num_complex::{Complex, Complex64};
 
     use crate::fractal::FractalGeometry;
     use crate::fractal::{FractalConfig, FractalCutoff};
@@ -352,7 +352,7 @@ pub mod bessel {
     /// # Remarks
     /// [`BoundaryCondition::TazakiTanaka`] is used for the boundary condition and is
     /// recommended; although [`BoundaryCondition::Jablonski`] is also available.
-    pub fn int_sph_bessel(fracc: &FractalConfig, x_g: f64, p: usize) -> Result<Complex<f64>> {
+    pub fn int_sph_bessel(fracc: &FractalConfig, x_g: f64, p: usize) -> Result<Complex64> {
         let pf = p as f64;
 
         let floor_val = 1e-30;
@@ -372,7 +372,7 @@ pub mod bessel {
         let du = (umax - umin).powf(1.0 / (nnf - 1.0));
 
         let mut u = vec![0.0; nn];
-        let mut intg: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nn];
+        let mut intg: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
         let mut intg_unit = vec![0.0; nn];
 
         for (n, val) in u.iter_mut().enumerate().take(nn) {
@@ -408,13 +408,13 @@ pub mod bessel {
         }
 
         // Use iterators to apply the trapezoidal rule
-        let wa: Complex<f64> = intg
+        let wa: Complex64 = intg
             .windows(2)
             .zip(u.windows(2))
             .map(|(intg_pair, u_pair)| {
                 0.5 * (intg_pair[0] + intg_pair[1]) * (u_pair[1] - u_pair[0])
             })
-            .sum::<Complex<f64>>();
+            .sum::<Complex64>();
 
         let mut unitary: f64 = intg_unit
             .windows(2)
@@ -442,7 +442,7 @@ pub mod bessel {
         Ok(sp)
     }
 
-    pub fn sph_bessel(m: usize, x: f64, isol: usize) -> Result<(Vec<f64>, Vec<f64>)> {
+    fn sph_bessel(m: usize, x: f64, isol: usize) -> Result<(Vec<f64>, Vec<f64>)> {
         let imax = 100; // truncation order of the series expansion
         let nwarmup = 100; // number of warm-up iterations
 

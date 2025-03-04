@@ -13,14 +13,15 @@ use std::f64::consts::PI;
 
 use anyhow::Result;
 use ndarray::Array2;
-use num_complex::{Complex, ComplexFloat};
+use num_complex::ComplexFloat;
+use num_complex::{Complex, Complex64};
 
 pub struct DHSConfig {
     r_core: f64,
     r_shell: f64,
     wave_number: f64,
-    r_indsh: Complex<f64>,
-    r_indco: Complex<f64>,
+    r_indsh: Complex64,
+    r_indco: Complex64,
     mu: Vec<f64>,
     numang: usize,
     max_angle: usize,
@@ -69,8 +70,8 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     let c_0 = Complex::new(0.0, 0.0);
     let c_i = Complex::new(0.0, 1.0);
 
-    let mut w: Array2<Complex<f64>> = Array2::zeros((3, ll));
-    let mut acap: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); ll];
+    let mut w: Array2<Complex64> = Array2::zeros((3, ll));
+    let mut acap: Vec<Complex64> = vec![Complex::new(0.0, 0.0); ll];
 
     let x_shell = dhsc.r_shell * dhsc.wave_number;
     let x_core = dhsc.r_core * dhsc.wave_number;
@@ -124,7 +125,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     let k2 = dhsc.r_indsh * dhsc.wave_number;
     let k3 = Complex::new(1.0, 0.0) * dhsc.wave_number;
 
-    let mut z: Vec<Complex<f64>> = vec![c_0; 4];
+    let mut z: Vec<Complex64> = vec![c_0; 4];
     z[0] = dhsc.r_indsh * x_shell;
     z[1] = Complex::new(1.0, 0.0) * x_shell;
     z[2] = dhsc.r_indco * x_core;
@@ -164,7 +165,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     t[1] = x_shell.sin();
 
     let mut wm1 = Complex::new(t[0], -t[1]);
-    let mut wfn: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); 2];
+    let mut wfn: Vec<Complex64> = vec![Complex::new(0.0, 0.0); 2];
     let mut ta: Vec<f64> = vec![0.0; 4];
 
     wfn[0] = Complex::new(t[1], t[0]);
@@ -227,7 +228,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     p23_h23 /= (d_h3 + 1.0 / z[3]) * (w[[2, n]] + 1.0 / z[3]);
     p23_h20 /= (d_h0 + 1.0 / z[0]) * (w[[2, n]] + 1.0 / z[3]);
 
-    let mut u: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); 8];
+    let mut u: Vec<Complex64> = vec![Complex::new(0.0, 0.0); 8];
 
     u[0] = k3 * acap[n] - k2 * w[[0, n]];
     u[1] = k3 * acap[n] - k2 * d_h1;
@@ -259,8 +260,8 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     let mut ac = 1.5 * acoe;
     let mut bc = 1.5 * bcoe;
 
-    let mut s0: Array2<Complex<f64>> = Array2::zeros((3, 3));
-    let mut s1: Array2<Complex<f64>> = Array2::zeros((3, 3));
+    let mut s0: Array2<Complex64> = Array2::zeros((3, 3));
+    let mut s1: Array2<Complex64> = Array2::zeros((3, 3));
 
     for j in 0..dhsc.numang {
         s0[[j, 0]] = ac * pi[[j, 1]] + bc * tau[[j, 1]];
