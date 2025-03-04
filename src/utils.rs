@@ -537,15 +537,134 @@ pub mod bessel {
 }
 
 pub mod linalg {
-    pub fn lu_decomposition() {
-        todo!()
+    use anyhow::{bail, Result};
+    use ndarray::Array2;
+    use num_complex::Complex64;
+
+    fn lu_decomposition(a: &mut Array2<f64>, n: usize) -> Result<Vec<usize>> {
+        let mut d = 1.0;
+        let mut imax = 0;
+        let eps = 1e-20;
+
+        let mut vv = vec![0.0; 1000];
+        let mut indx = vec![0; n];
+
+        let mut aamax;
+
+        for i in 0..n {
+            aamax = 0.0;
+            for j in 0..n {
+                if a[[i, j]].abs() > aamax {
+                    aamax = a[[i, j]].abs();
+                }
+            }
+            if aamax == 0.0 {
+                bail!("ERROR: Singular matrix in routine lu_decomposition");
+            }
+            vv[i] = 1.0 / aamax;
+        }
+
+        for j in 0..n {
+            for i in 0..j {
+                let mut sum = a[[i, j]];
+                for k in 0..i {
+                    sum -= a[[i, k]] * a[[k, j]];
+                }
+                a[[i, j]] = sum;
+            }
+            aamax = 0.0;
+            for i in j..n {
+                let mut sum = a[[i, j]];
+                for k in 0..j {
+                    sum -= a[[i, k]] * a[[k, j]];
+                }
+                a[[i, j]] = sum;
+                let dum = vv[i] * sum.abs();
+                if dum >= aamax {
+                    imax = i;
+                    aamax = dum;
+                }
+            }
+            if j != imax {
+                for k in 0..n {
+                    let dum = a[[imax, k]];
+                    a[[imax, k]] = a[[j, k]];
+                    a[[j, k]] = dum;
+                }
+                d = -d;
+                vv[imax] = vv[j];
+            }
+            indx[j] = imax;
+            if a[[j, j]] == 0.0 {
+                a[[j, j]] = eps;
+            }
+            if j != n - 1 {
+                let dum = 1.0 / a[[j, j]];
+                for i in j + 1..n {
+                    a[[i, j]] *= dum;
+                }
+            }
+        }
+
+        Ok(indx)
     }
 
-    pub fn lu_backsubstitution() {
-        todo!()
+    fn lu_backsubstitution(a: &Array2<f64>, b: &mut [f64], indx: &[usize], n: usize) {
+        let mut ii = 0;
+        for i in 0..n {
+            let ll = indx[i];
+            let mut sum = b[ll];
+            b[ll] = b[i];
+            if ii != 0 {
+                for j in ii..i {
+                    sum -= a[[i, j]] * b[j];
+                }
+            } else if sum != 0.0 {
+                ii = i + 1;
+            }
+            b[i] = sum;
+        }
+        for i in (0..n).rev() {
+            let mut sum = b[i];
+            for j in i + 1..n {
+                sum -= a[[i, j]] * b[j];
+            }
+            b[i] = sum / a[[i, i]];
+        }
     }
-    pub fn complex_matrix_inverse() {
-        todo!()
+
+    pub fn complex_matrix_inverse(
+        n: usize,
+        np: usize,
+        p: &[Complex64],
+        t: &Array2<Complex64>,
+    ) -> Result<Vec<Complex64>> {
+        let mut a: Array2<f64> = Array2::zeros((np, np));
+        let mut b = vec![0.0; np];
+
+        let mut r: Vec<Complex64> = vec![Complex64::new(0.0, 0.0); np];
+
+        for i in 0..n {
+            for j in 0..n {
+                a[[i, j]] = t[[i, j]].re;
+                a[[i, j + n]] = -t[[i, j]].im;
+                a[[i + n, j]] = t[[i, j]].im;
+                a[[i + n, j + n]] = t[[i, j]].re;
+            }
+            b[i] = p[i].re;
+            b[i + n] = p[i].im;
+        }
+
+        // LU decomposition
+        let indx = lu_decomposition(&mut a, np)?;
+        // LU backsubstitution
+        lu_backsubstitution(&a, &mut b, &indx, np);
+
+        for i in 0..n {
+            r[i] = Complex64::new(b[i], b[i + n]);
+        }
+
+        Ok(r)
     }
 }
 
