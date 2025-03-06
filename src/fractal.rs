@@ -87,6 +87,8 @@ pub enum FractalSolver {
     ModifiedMeanField,
 }
 
+#[repr(i32)]
+#[derive(Clone, Copy)]
 pub enum FractalCutoff {
     Gaussian,
     Exponential,
