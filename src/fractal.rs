@@ -493,6 +493,7 @@ fn renormalize(
 
 /// Solves the mean field theory.
 ///
+/// # PART I.
 /// Calculate a(nu,n,p) and b(nu,n,p):
 ///
 ///                   2p + 1  /+1
@@ -507,52 +508,8 @@ fn renormalize(
 ///  `P_n` is the Legendre polynominal function
 ///  (see Equations (29, 30) in Tazaki & Tanaka 2018).
 ///  The integration is performed with the Gauss-Legendre quadrature.
-fn mean_field(
-    fracc: &FractalConfig,
-    x_g: f64,
-    jm: usize,
-    nstop: usize,
-    nmax: usize,
-    numax: usize,
-) -> Result<(), FractalError> {
-    // Solve the mean field theory
-    let x1 = -1.0;
-    let x2 = 1.0;
-
-    let (x, w) = legendre::gauss_legendre(x1, x2, jm);
-
-    let order = 1;
-    let degmax = nstop;
-    let pmax = 2 * nstop;
-
-    let mut al1n: Array2<f64> = Array2::zeros((jm, degmax));
-    let mut ln: Array2<f64> = Array2::zeros((jm, pmax));
-    let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
-
-    for (j, xj) in x.iter().enumerate().take(jm) {
-        let (pmn, _) = legendre::lpmns(order, degmax, *xj)
-            .map_err(|_| FractalError::IntegrationFailure("In Legendre".to_string()))?;
-        let (lp, dlp) = legendre::lpn(pmax, *xj);
-        al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
-        ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
-        dln.slice_mut(s![j, ..]).assign(&Array::from_vec(dlp));
-    }
-
-    let mut s_p = vec![Complex::new(0.0, 0.0); numax + nmax];
-
-    for (p, val) in s_p.iter_mut().enumerate().take(numax + nmax) {
-        *val = bessel::int_sph_bessel(fracc, x_g, p).map_err(|_| {
-            FractalError::IntegrationFailure(
-                "Something went wrong in Bessel integration".to_string(),
-            )
-        })?;
-    }
-
-    get_translation_matrix_coefficients(numax, nmax, jm, &al1n, &ln, &dln, &w, &s_p);
-
-    Ok(())
-}
-
+///
+/// # PART II.
 /// Calculate translation matrix coefficients
 ///
 /// Translation coefficients: A and B (Equation # from Tazaki & Tanaka 2018)
@@ -575,18 +532,48 @@ fn mean_field(
 /// - b(nu,n,p) .ne. 0 and a(nu,n,p) = 0 when p has the opposite parity to n+nu
 ///
 ///--------------------------------------------------------------------------------
-fn get_translation_matrix_coefficients(
-    numax: usize,
+fn mean_field(
+    fracc: &FractalConfig,
+    ad: &Array2<Complex64>,
+    x_g: f64,
     nmax: usize,
-    jm: usize,
-    al1n: &Array2<f64>,
-    ln: &Array2<f64>,
-    dln: &Array2<f64>,
-    w: &[f64],
-    sp: &[Complex<f64>],
-) -> Array3<Complex<f64>> {
-    let mut t: Array3<Complex<f64>> = Array3::zeros((2, numax, nmax));
-    for nu in 0..numax {
+) -> Result<VecComplex64, FractalError> {
+    let jm = 400; // Number of grid points for Gauss-Legendre quadrature
+
+    // Integration limits
+    let x1 = -1.0;
+    let x2 = 1.0;
+
+    // Gauss-Legendre quadrature
+    let (x, w) = legendre::gauss_legendre(x1, x2, jm);
+
+    let order = 1;
+    let pmax = 2 * nmax;
+
+    // Store values of Legendre polynomials (P_n^m) and their derivatives
+    let mut al1n: Array2<f64> = Array2::zeros((jm, nmax));
+    let mut ln: Array2<f64> = Array2::zeros((jm, pmax));
+    let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
+
+    for (j, xj) in x.iter().enumerate() {
+        let (pmn, _) = legendre::lpmns(order, nmax, *xj)
+            .map_err(|_| FractalError::IntegrationFailure("In Legendre".to_string()))?;
+        let (lp, dlp) = legendre::lpn(pmax, *xj);
+        al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
+        ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
+        dln.slice_mut(s![j, ..]).assign(&Array::from_vec(dlp));
+    }
+
+    // Pre-compute the spherical Bessel functions and the T-matrix
+    let mut s_p = vec![Complex::new(0.0, 0.0); pmax];
+
+    for (p, val) in s_p.iter_mut().enumerate() {
+        *val = bessel::int_sph_bessel(fracc, x_g, p)
+            .map_err(|_| FractalError::IntegrationFailure("In Bessel".to_string()))?;
+    }
+
+    let mut t: Array3<Complex<f64>> = Array3::zeros((2, nmax, nmax));
+    for nu in 0..nmax {
         let nuf = nu as f64;
         for n in 0..nmax {
             let nf = n as f64;
@@ -594,7 +581,7 @@ fn get_translation_matrix_coefficients(
             let pmax = n + nu;
             let mut sum_a = Complex::new(0.0, 0.0);
             let mut sum_b = Complex::new(0.0, 0.0);
-            for (p, val) in sp.iter().enumerate().take(pmax + 1).skip(pmin) {
+            for (p, val) in s_p.iter().enumerate().take(pmax + 1).skip(pmin) {
                 let val = *val;
                 let pf = p as f64;
                 let mut anunp = 0.0;
@@ -602,7 +589,6 @@ fn get_translation_matrix_coefficients(
                 if pmax % 2 == p % 2 {
                     anunp = w
                         .iter()
-                        .take(jm)
                         .zip(al1n.row(nu))
                         .zip(al1n.row(n))
                         .zip(ln.row(p))
@@ -611,7 +597,6 @@ fn get_translation_matrix_coefficients(
                 } else {
                     bnunp = w
                         .iter()
-                        .take(jm)
                         .zip(al1n.row(nu))
                         .zip(al1n.row(n))
                         .zip(dln.row(p))
@@ -628,5 +613,44 @@ fn get_translation_matrix_coefficients(
             t[[1, nu, n]] = sum_b * 2.0 * (2.0 * nuf + 1.0) / (nf * (nf + 1.0) * nuf * (nuf + 1.0));
         }
     }
-    t
+
+    let mut s: Array2<Complex64> = Array2::ones((pmax, 2));
+    let mut y: Vec<Complex64> = vec![Complex::new(0.0, 0.0); pmax];
+
+    for n in 0..nmax {
+        for nu in 0..nmax {
+            s[[2 * n - 1, 2 * n - 1]] = (fracc.pn - 1.0) * ad[[0, n]] * t[[0, nu, n]];
+            s[[2 * n - 1, 2 * n]] = (fracc.pn - 1.0) * ad[[0, n]] * t[[1, nu, n]];
+            s[[2 * n, 2 * n - 1]] = (fracc.pn - 1.0) * ad[[1, n]] * t[[0, nu, n]];
+            s[[2 * n, 2 * n]] = (fracc.pn - 1.0) * ad[[1, n]] * t[[1, nu, n]];
+        }
+        y[2 * n - 1] = ad[[0, n]];
+        y[2 * n] = ad[[1, n]];
+    }
+
+    // Invert the T-matrix elements S
+    // and find mean-field vector r
+    let r = linalg::complex_matrix_inverse(pmax, 2 * pmax, &y, &s)
+        .map_err(|_| FractalError::SingularMatrix)?;
+
+    Ok(r)
+}
+
+fn get_geometric_cross_section_okuzumi(pn: f64, a0: f64, ac: f64) -> f64 {
+    let k0_bcca = 1.04; // Tazaki+2016; BCCA with oblique collisions
+    let df_bcca = 1.90; // Tazaki+2016; BCCA with oblique collisions
+
+    let ac_bcca = (5.0f64 / 3.0f64).sqrt() * a0 * (pn / k0_bcca).powf(1.0 / df_bcca);
+    let gc0 = PI * a0 * a0;
+    let gcc = PI * ac * ac;
+
+    let gc_bcca2 = PI * ac_bcca * ac_bcca;
+
+    let gc_bcca = if pn <= 16.0 {
+        12.5 * pn.powf(0.685) * (-2.53 / pn.powf(0.0920)).exp() * gc0
+    } else {
+        0.352 * pn + 0.566 * pn.powf(0.862) * gc0
+    };
+
+    (1.0 / (1.0 / gc_bcca + 1.0 / gcc - 1.0 / gc_bcca2)).min(pn * PI * a0 * a0)
 }
