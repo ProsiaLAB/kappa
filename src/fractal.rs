@@ -249,10 +249,10 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<(), FractalError> {
 /// - Effective refractive index of the aggregates.
 ///
 /// # Notes
-/// - eps_1 : Dielectric constant of the first material.
-/// - eps_2 : Dielectric constant of vacuum.
-/// - f1 : Volume filling factor of the first material.
-fn maxwell_garnett_mixing(refrel: Complex<f64>, f1: f64) -> Complex<f64> {
+/// - `eps_1` : Dielectric constant of the first material.
+/// - `eps_2` : Dielectric constant of vacuum.
+/// - `f1` : Volume filling factor of the first material.
+fn maxwell_garnett_mixing(refrel: Complex64, f1: f64) -> Complex64 {
     let eps_1 = refrel * refrel;
     let eps_2 = Complex::new(1.0, 0.0);
     let mg = eps_2 * (2.0 * f1 * (eps_1 - eps_2) + eps_1 + 2.0 * eps_2)
@@ -379,9 +379,9 @@ fn structure_factor_fn(x: f64, c: f64, d: f64, q: f64, r_g: f64) -> f64 {
 /// slight modifications.
 fn lorenz_mie(
     x: f64,
-    refrel: Complex<f64>,
+    refrel: Complex64,
     nstop: usize,
-) -> Result<(ComplexVec, ComplexVec), FractalError> {
+) -> Result<(VecComplex64, VecComplex64), FractalError> {
     let nmxx = 150_000;
 
     let y = refrel * x;
@@ -392,7 +392,7 @@ fn lorenz_mie(
         return Err(FractalError::MieOverflow);
     }
 
-    let mut d: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nmx];
+    let mut d: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nmx];
 
     for n in 0..nmx - 1 {
         let en = nmx - 1 - n;
@@ -406,8 +406,8 @@ fn lorenz_mie(
     let mut chi_1 = psi_0;
     let mut xi_1 = Complex::new(psi_1, -chi_1);
 
-    let mut a: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nstop];
-    let mut b: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); nstop];
+    let mut a: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nstop];
+    let mut b: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nstop];
 
     for n in 0..nstop {
         let nf = n as f64;
