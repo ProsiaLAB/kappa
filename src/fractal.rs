@@ -15,12 +15,17 @@ use ndarray::Array;
 use ndarray::Array2;
 use ndarray::Array3;
 use num_complex::Complex;
+use num_complex::Complex64;
+use statrs::function::gamma::gamma;
 
+use crate::geofractal::get_geometric_cross_section_tazaki;
 use crate::utils::bessel;
 use crate::utils::legendre;
+use crate::utils::linalg;
+use crate::utils::special;
 
 /// Complex vector type.
-type ComplexVec = Vec<Complex<f64>>;
+type VecComplex64 = Vec<Complex64>;
 
 pub struct FractalConfig {
     pub solver: FractalSolver,
@@ -32,7 +37,7 @@ pub struct FractalConfig {
     pub df: f64,
     pub k0: f64,
     pub lmd: f64,
-    pub refrel: Complex<f64>,
+    pub refrel: Complex64,
     pub gauss_leg_grid_size: usize,
     pub truncation_order: usize,
 }
