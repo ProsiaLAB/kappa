@@ -1,8 +1,9 @@
 use std::f64::consts::PI;
 
-use anyhow::bail;
 use anyhow::Result;
 use statrs::function::gamma::{gamma, gamma_ur};
+
+use crate::fractal::FractalError;
 
 /// Computing geometrical cross-section of randomly oriented
 /// fractal dust aggregates based on a statistical distribution
@@ -23,34 +24,30 @@ use statrs::function::gamma::{gamma, gamma_ur};
 ///         --------------------------------------------------------
 ///
 ///
-pub fn get_geometric_cross_section(
+pub fn get_geometric_cross_section_tazaki(
     iqapp: i32,
     iqcon: i32,
     iqcor: i32,
     pn: f64,
     k0: f64,
     df: f64,
-) -> Result<f64> {
+) -> Result<f64, FractalError> {
     let g: f64;
 
     if pn <= 0.9999 {
-        bail!("The number of monomers should be greater than 1");
+        return Err(FractalError::NotEnoughMonomers);
     }
 
     if !(0.9999..=3.0001).contains(&df) {
-        bail!("The fractal dimension should be between 1 and 3");
+        return Err(FractalError::ExceedsMaxFractalDimension);
     }
 
     if iqcon != 1 && iqcon != 2 {
-        bail!("iqcon should be 1 or 2");
-    }
-
-    if iqcor != 1 && iqcor != 2 && iqcor != 3 {
-        bail!("iqcor should be 1, 2 or 3");
+        return Err(FractalError::UnknownRegimeFactor);
     }
 
     if iqapp != 1 && iqapp != 2 {
-        bail!("iqapp should be 1 or 2");
+        return Err(FractalError::UnknownIntegrationMethod);
     }
 
     let mut a = 1.0;
