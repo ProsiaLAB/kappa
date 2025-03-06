@@ -166,36 +166,34 @@ pub struct TMatrixConfig {
 /// - `iqcor = 3`: [Botet et al. (1995), JPhA, 28, 297](https://iopscience.iop.org/article/10.1088/0305-4470/28/2/008)
 /// - `iqgeo = 2`: [Okuzumi et al. (2009), ApJ, 707, 1247](https://iopscience.iop.org/article/10.1088/0004-637X/698/2/1122/meta)
 /// - `iqgeo = 3`: [Tazaki (2021), MNRAS, 504, 2811](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract)
-pub fn mean_scattering(fracc: &FractalConfig) -> Result<(), FractalError> {
-    let jm = 400; // Number of grid points for Gauss-Legendre quadrature
-
+pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult, FractalError> {
     let k = 2.0 * PI / fracc.lmd; // Wavenumber
     let r_g = fracc.r0 * (fracc.pn / fracc.k0).powf(1.0 / fracc.df); // Radius of gyration of the aggregate
     let r_c = (5.0f64 / 3.0f64).powf(r_g); // Characteristic radius of the aggregate
     let x_g = k * r_g; // Size parameter of the aggregate
     let x0 = k * fracc.r0; // Size parameter of the monomer
 
+    let eta = 25.0;
+    let q_r_g_critical = 26.0;
+
     // Truncation order of the monomer's scattering field
-    let x_stop = x0 + 4.0 * x0.powf(1.0 / 3.0) + 2.0;
-    let nstop = x_stop as usize;
-    let numax = nstop;
-    let nmax = nstop;
+    let xmax = x0 + 4.0 * x0.powf(1.0 / 3.0) + 2.0;
+    let nmax = xmax as usize;
 
     if fracc.nang <= 1 {
-        return Err(FractalError::ScatteringAngleResolutionTooLow);
+        return Err(FractalError::LowScatteringAngleResolution);
     }
 
     if fracc.pn < 1.0 {
-        return Err(FractalError::InsufficientNumberOfMonomers);
+        return Err(FractalError::NotEnoughMonomers);
     }
 
     if fracc.df > 3.0 {
-        return Err(FractalError::FractalDimensionTooLarge);
+        return Err(FractalError::ExceedsMaxFractalDimension);
     }
 
-    if numax + nmax >= 500 {
-        eprintln!("WARNING: numax + nmax >= 500");
-        eprintln!("         The truncation order of monomer's scattered light");
+    if (2 * nmax) >= 500 {
+        eprintln!("WARNING: The truncation order of monomer's scattered light");
         eprintln!("         field exceeds the maximum value (=500).          ");
         eprintln!("         This may cause a code crush at computations of   ");
         eprintln!("         the spherical Bessel function of the first kind. ");
@@ -215,10 +213,10 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<(), FractalError> {
         eprintln!("         physically guaranteed.                        ");
     }
 
-    let (an, bn) = lorenz_mie(x0, fracc.refrel, nstop)?;
+    let (an, bn) = lorenz_mie(x0, fracc.refrel, nmax)?;
 
-    let mut ad: Array2<Complex<f64>> = Array2::zeros((nstop, 2));
-    let mut dd: Array2<Complex<f64>> = Array2::zeros((nstop, 2));
+    let mut ad: Array2<Complex64> = Array2::zeros((nmax, 2));
+    let mut dd: Array2<Complex64> = Array2::zeros((nmax, 2));
 
     ad.slice_mut(s![.., 0]).assign(&Array::from_vec(an));
     ad.slice_mut(s![.., 1]).assign(&Array::from_vec(bn));
@@ -230,12 +228,220 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<(), FractalError> {
             dd.slice_mut(s![.., 1]).assign(&ad.slice(s![.., 1]));
         }
         FractalSolver::MeanField | FractalSolver::ModifiedMeanField => {
-            mean_field(fracc, x_g, jm, nstop, nmax, numax)?;
+            let r = mean_field(fracc, &ad, x_g, nmax)?;
+            for n in 0..nmax {
+                dd[[n, 0]] = r[2 * n - 1];
+                dd[[n, 1]] = r[2 * n];
+            }
         }
     }
 
-    // let fracr: FractalResult;
-    Ok(())
+    let dang = PI / 2.0 / (fracc.nang - 1) as f64;
+    let (s1, s2) = renormalize(fracc, &dd, dang, nmax);
+
+    let mut smat: Array2<f64> = Array2::zeros((2 * fracc.nang, 4));
+    let ang = (0..(2 * fracc.nang))
+        .map(|j| j as f64 * dang)
+        .collect::<Vec<f64>>();
+
+    for j in 0..(2 * fracc.nang) {
+        let q = 2.0 * k * (0.5 * ang[j]).sin();
+        let s11 = 0.5 * (s2[j].norm().powi(2) + s1[j].norm().powi(2));
+        let s12 = 0.5 * (s2[j].norm().powi(2) - s1[j].norm().powi(2));
+        let s33 = (s1[j] * s2[j].conj()).re;
+        let s34 = (s2[j] * s1[j].conj()).im;
+        let sq = match fracc.cutoff {
+            FractalCutoff::Gaussian => {
+                if fracc.df == 3.0 {
+                    if q * q * r_g * r_g >= eta {
+                        0.0
+                    } else {
+                        (-q * q * r_g * r_g / 3.0).exp()
+                    }
+                } else {
+                    let al = 0.5 * fracc.df;
+                    let bb = 1.5;
+                    let xx = -q * q * r_g * r_g / fracc.df;
+                    if q * r_g < q_r_g_critical {
+                        special::confluent_hypergeometric(al, bb, xx)
+                    } else {
+                        let cc = PI.sqrt() * fracc.df.powf(0.5 * fracc.df)
+                            / (2.0 * gamma(0.5 * (3.0 - fracc.df)));
+                        cc * (q * r_g).powf(-fracc.df)
+                    }
+                }
+            }
+            FractalCutoff::Exponential => {
+                let xi = (2.0 / (fracc.df * (fracc.df + 1.0))).sqrt() * r_g;
+                if j == 0 {
+                    1.0
+                } else {
+                    ((fracc.df - 1.0) * (q * xi).atan()).sin()
+                        / (q * xi
+                            * (fracc.df - 1.0)
+                            * (1.0 + (q * xi).powi(2)).powf((fracc.df - 1.0) / 2.0))
+                }
+            }
+            FractalCutoff::FractalDimension => structure_factor_integration(fracc.df, q, r_g),
+        };
+
+        smat[[j, 0]] = fracc.pn * s11 * (1.0 + (fracc.pn - 1.0) * sq);
+        smat[[j, 1]] = fracc.pn * s12 * (1.0 + (fracc.pn - 1.0) * sq);
+        smat[[j, 2]] = fracc.pn * s33 * (1.0 + (fracc.pn - 1.0) * sq);
+        smat[[j, 3]] = fracc.pn * s34 * (1.0 + (fracc.pn - 1.0) * sq);
+
+        if smat[[j, 0]] < 0.0 {
+            return Err(FractalError::IllegalMatrixElement);
+        }
+    }
+
+    let mut c_sca: f64 = (0..(fracc.nang - 1))
+        .map(|j| {
+            dang * (smat[[j, 0]] * (ang[j].sin())
+                + 4.0 * smat[[j + 1, 0]] * (ang[j + 1].sin())
+                + smat[[j + 2, 0]] * (ang[j + 2].sin()))
+                / 3.0
+        })
+        .sum::<f64>()
+        * 2.0
+        * PI
+        / (k * k);
+
+    let pf = (smat.slice(s![.., 0]).to_owned() / c_sca / (k * k)).to_vec();
+    let g = (0..(fracc.nang - 1))
+        .map(|j| {
+            dang * (pf[j] * (ang[j].sin()) * (ang[j].cos())
+                + 4.0 * pf[j + 1] * (ang[j + 1].sin()) * (ang[j + 1].cos())
+                + pf[j + 2] * (ang[j + 2].sin()) * (ang[j + 2].cos()))
+                / 3.0
+        })
+        .sum::<f64>()
+        * 2.0
+        * PI;
+    let nrm = (0..(fracc.nang - 1))
+        .map(|j| {
+            dang * (pf[j] * (ang[j].sin())
+                + 4.0 * pf[j + 1] * (ang[j + 1].sin())
+                + pf[j + 2] * (ang[j + 2].sin()))
+                / 3.0
+        })
+        .sum::<f64>()
+        * 2.0
+        * PI;
+
+    // Check normalization of phase function
+    if (nrm - 1.0).abs() > 1e-3 {
+        return Err(FractalError::UnnormalizedPhaseFunction);
+    }
+    let c_abs: f64;
+    let c_ext: f64;
+    (c_sca, c_abs, c_ext) = match fracc.solver {
+        FractalSolver::RayleighGansDebye => {
+            let c_abs = (0..nmax)
+                .map(|j| {
+                    let jf = j as f64;
+                    let cn1 = 1.0 / ad[[j, 0]].conj() - 1.0;
+                    let cn2 = 1.0 / ad[[j, 1]].conj() - 1.0;
+
+                    (2.0 * jf + 3.0)
+                        * (cn1 * ad[[j, 0]].norm() * ad[[j, 0]].norm()
+                            + cn2 * ad[[j, 1]].norm() * ad[[j, 1]].norm())
+                        .re
+                })
+                .sum::<f64>()
+                * 2.0
+                * PI
+                * fracc.pn
+                / k
+                / k;
+            let c_ext = c_abs + c_sca;
+            (c_sca, c_abs, c_ext)
+        }
+        FractalSolver::MeanField => {
+            let c_ext = (0..nmax)
+                .map(|j| {
+                    let jf = j as f64;
+                    (2.0 * jf + 3.0) * (dd[[j, 0]] + dd[[j, 1]]).re
+                })
+                .sum::<f64>()
+                * 2.0
+                * PI
+                * fracc.pn
+                / k
+                / k;
+            let c_abs = c_ext - c_sca;
+            (c_sca, c_abs, c_ext)
+        }
+        FractalSolver::ModifiedMeanField => {
+            let c_ext = (0..nmax)
+                .map(|j| {
+                    let jf = j as f64;
+                    (2.0 * jf + 3.0) * (dd[[j, 0]] + dd[[j, 1]]).re
+                })
+                .sum::<f64>()
+                * 2.0
+                * PI
+                * fracc.pn
+                / k
+                / k;
+            let mut c_abs = (0..nmax)
+                .map(|j| {
+                    let cn1 = 1.0 / ad[[j, 0]].conj() - 1.0;
+                    let cn2 = 1.0 / ad[[j, 1]].conj() - 1.0;
+                    (2.0 * j as f64 + 3.0)
+                        * (cn1 * ad[[j, 0]].norm() * ad[[j, 0]].norm()
+                            + cn2 * ad[[j, 1]].norm() * ad[[j, 1]].norm())
+                        .re
+                })
+                .sum::<f64>()
+                * 2.0
+                * PI
+                * fracc.pn
+                / k
+                / k;
+
+            let gc = match fracc.geometry {
+                FractalGeometry::Circular => PI * r_c * r_c,
+                FractalGeometry::Okuzumi => {
+                    get_geometric_cross_section_okuzumi(fracc.pn, fracc.r0, r_c)
+                }
+                FractalGeometry::Tazaki => {
+                    get_geometric_cross_section_tazaki(
+                        3, // Use approximation
+                        1, // Without small-cluster limit
+                        fracc.cutoff as i32,
+                        fracc.pn,
+                        fracc.k0,
+                        fracc.df,
+                    )? * fracc.pn
+                        * PI
+                        * fracc.r0
+                        * fracc.r0
+                }
+            };
+            let tau = c_abs / gc;
+            if tau >= 10.0 {
+                c_abs = gc;
+            } else {
+                c_abs = gc * (1.0 - (-tau).exp());
+            }
+            c_abs = c_abs.max(c_ext - c_sca);
+            c_sca = c_ext - c_abs;
+            (c_sca, c_abs, c_ext)
+        }
+    };
+
+    let fracr = FractalResult {
+        c_ext,
+        c_sca,
+        c_abs,
+        g,
+        dphi,
+        ang,
+        smat,
+        pf,
+    };
+    Ok(fracr)
 }
 
 /// This function finds effective refractive index of an aggregates
