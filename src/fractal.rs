@@ -100,17 +100,6 @@ pub enum FractalGeometry {
     Tazaki,
 }
 
-pub struct TMatrixConfig {
-    pub numax: usize,
-    pub nmax: usize,
-    pub jm: usize,
-    pub al1n: Array2<f64>,
-    pub ln: Array2<f64>,
-    pub dln: Array2<f64>,
-    pub w: Vec<f64>,
-    pub sp: Vec<Complex<f64>>,
-}
-
 /// Computes light scattering properties of randomly oriented
 /// fractal dust aggregates by means of the modified mean field theory developed
 /// in [Tazaki & Tanaka (2018)](https://iopscience.iop.org/article/10.3847/1538-4357/aac32d/meta). This code is also capable of computing the light
