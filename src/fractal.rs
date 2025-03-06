@@ -74,10 +74,15 @@ pub struct FractalResult {
 }
 
 pub enum FractalError {
-    ScatteringAngleResolutionTooLow,
-    InsufficientNumberOfMonomers,
-    FractalDimensionTooLarge,
+    LowScatteringAngleResolution,
+    NotEnoughMonomers,
+    ExceedsMaxFractalDimension,
     MieOverflow,
+    SingularMatrix,
+    IllegalMatrixElement,
+    UnnormalizedPhaseFunction,
+    UnknownRegimeFactor,
+    UnknownIntegrationMethod,
     IntegrationFailure(String),
 }
 
