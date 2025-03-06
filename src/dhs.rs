@@ -43,7 +43,7 @@ pub enum DHSError {
     InvalidShellRadius,
     InvalidCoreRadius,
     InvalidRefractiveIndex,
-    TooFewAngles,
+    NotEnoughAngles,
     TooManyAngles,
     InvalidAngle,
     InsufficentDimensions,
