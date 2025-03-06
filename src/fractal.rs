@@ -433,7 +433,63 @@ fn lorenz_mie(
 /// The original BHMIE code is taken from Bruce Draine's homepage:
 /// <https://www.astro.princeton.edu/~draine/scattering.html>, with
 /// slight modifications.
-fn renormalize() {}
+fn renormalize(
+    fracc: &FractalConfig,
+    d: &Array2<Complex64>,
+    dang: f64,
+    nmax: usize,
+) -> (Vec<Complex64>, Vec<Complex64>) {
+    let amu = (0..fracc.nang)
+        .map(|j| j as f64 * dang)
+        .map(|theta| theta.cos())
+        .collect::<Vec<f64>>();
+
+    let mut pi = vec![0.0; fracc.nang];
+    let mut pi0 = vec![0.0; fracc.nang];
+    let mut pi1 = vec![1.0; fracc.nang];
+
+    let mut tau = vec![0.0; fracc.nang];
+
+    let nn = 2 * fracc.nang;
+    let mut s1: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
+    let mut s2: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
+
+    let mut p = -1.0;
+    // let mut an = Complex::new(0.0, 0.0);
+    // let mut an1 = Complex::new(0.0, 0.0);
+    // let mut bn = Complex::new(0.0, 0.0);
+    // let mut bn1 = Complex::new(0.0, 0.0);
+
+    for n in 0..nmax {
+        let nf = n as f64;
+        let f_n = (2.0 * nf + 3.0) / (nf + 1.0) / (nf + 2.0);
+        // if n > 1 {
+        //     an1 = an;
+        //     bn1 = bn;
+        // }
+        let an = d[[n, 0]];
+        let bn = d[[n, 1]];
+
+        for j in 0..fracc.nang {
+            pi[j] = pi1[j];
+            tau[j] = nf * amu[j] * pi[j] - (nf + 2.0) * pi0[j];
+            s1[j] += f_n * (an * pi[j] + bn * tau[j]);
+            s2[j] += f_n * (an * tau[j] + bn * pi[j]);
+        }
+        p = -p;
+        for j in 0..(fracc.nang - 1) {
+            let jj = 2 * fracc.nang - j - 1;
+            s1[jj] += f_n * p * (an * pi[j] - bn * tau[j]);
+            s2[jj] += f_n * p * (-an * tau[j] + bn * pi[j]);
+        }
+
+        for j in 0..fracc.nang {
+            pi1[j] = ((2.0 * nf + 3.0) * amu[j] * pi[j] - (nf + 2.0) * pi0[j]) / (nf + 1.0);
+            pi0[j] = pi[j];
+        }
+    }
+    (s1, s2)
+}
 
 /// Solves the mean field theory.
 ///
