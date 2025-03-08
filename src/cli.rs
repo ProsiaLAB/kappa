@@ -4,7 +4,10 @@ use anyhow::Result;
 use clap::ArgAction;
 use clap::{Arg, Command};
 
-pub fn run() -> Result<()> {
+use crate::io::read_lnk_file;
+use crate::opac::KappaError;
+
+pub fn run() -> Result<(), KappaError> {
     let matches = Command::new("kappa")
         .version("0.1.0")
         .about(
@@ -19,7 +22,7 @@ pub fn run() -> Result<()> {
                 .help("List available materials"),
         )
         .arg(
-            Arg::new("materials")
+            Arg::new("add-material-one-by-one")
                 .short('c')
                 .num_args(1..=2) // Accepts one or more arguments
                 .action(ArgAction::Append) // Allows multiple uses of `-c`
@@ -27,7 +30,7 @@ pub fn run() -> Result<()> {
                 .help("Specify a material and its mass fractions (optionally)."),
         )
         .arg(
-            Arg::new("material")
+            Arg::new("materials")
                 .num_args(1..)
                 .action(ArgAction::Append)
                 .help("Specify materials. Example: c-gra 0.5 c-sil 0.3"),
@@ -140,22 +143,33 @@ pub fn run() -> Result<()> {
         )
         .get_matches();
 
-    if let Some(materials) = matches.get_many::<String>("materials") {
-        let materials: Vec<&String> = materials.collect();
-        println!("Materials: {:?}", materials);
-    }
+    // check if first argument is a toml file
+    // println!("Arguments: {:?}", matches.);
+    // exit(1);
 
-    if let Some(materials) = matches.get_many::<String>("material") {
-        let materials: Vec<&String> = materials.collect();
-        println!("Materials: {:?}", materials);
-    }
+    // if let Some(materials) = matches.get_many::<String>("materials") {
+    //     let materials: Vec<&String> = materials.collect();
+    //     println!("Materials: {:?}", materials);
+    // }
+
+    // if let Some(materials) = matches.get_many::<String>("material") {
+    //     let materials: Vec<&String> = materials.collect();
+    //     println!("Materials: {:?}", materials);
+    // }
 
     // Check if `-a` was provided with values
     if let Some(values) = matches.get_many::<String>("grain-size") {
         let values: Vec<String> = values.map(|s| s.to_string()).collect();
 
         if values.len() == 1 {
-            println!("Reading size distribution from file: {}", values[0]);
+            // Make sure the value is a file
+            if values[0].contains(".lnk") {
+                println!("Reading size distribution from file: {}", values[0]);
+                // Read the file
+                _ = read_lnk_file(&values[0]).map_err(|_| KappaError::InvalidLNKFile)?;
+            } else {
+                return Err(KappaError::InvalidSizeInput);
+            }
         } else if values.len() >= 2 && values[2].contains(':') {
             println!(
                 "Using AMIN={}, AMAX={}, AMEAN:ASIG={} (Gaussian-like distribution)",
