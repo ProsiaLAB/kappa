@@ -18,3 +18,6 @@ target/
 
 # Mac
 .DS_Store
+
+# Data files
+*.lnk
