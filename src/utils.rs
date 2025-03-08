@@ -286,50 +286,48 @@ pub mod bessel {
     }
 
     ///  This subroutine performs integration of S_p(kRg) (Equation 31):
-    ///     
-    ///                    pi^2     /Infinity
-    ///       S_p(k*Rg) =  ----  *  |  du  u * J_{p+1/2}(u) * H_{p+1/2}^(1)(u) * g(u/k),
-    ///                     k^3     /0
-    ///     
+    ///  $$
+    ///         S_p(k R_g) = \frac{\pi^2}{k^3} \int_0^{\infty} du \, u \, J_{p+1/2}(u) \, H_{p+1/2}^{(1)}(u) \, g(u/k)
+    ///  $$   
     ///  where g(u) is the two-point correlation function (Equations 18 and 19):
-    ///     
-    ///                    1       / u  \ ^{d_f-3}       / u  \
-    ///       g(u) =   ---------  |----- |       *  fc  | ---- |,
-    ///                4*pi*Rg^3   \ Rg /                \ Rg /
-    ///     
+    ///  $$
+    ///         g(u) = \frac{1}{4 \pi R_g^3} \left( \frac{u}{R_g} \right)^{d_f - 3} \cdot fc \left( \frac{u}{R_g} \right)
+    ///  $$
     ///  where fc is the cut-off function. By substituting g(u) into S_p, we have
-    ///     
-    ///                      pi   /u_max
-    ///       S_p(k*Rg) = ------ *|  du  u^{df-2} * J_{p+1/2}(u) * H_{p+1/2}^(1)(u) * fc(u/xg),
-    ///                    4Xg^df /u_min
-    ///     
-    ///  where the integration range is approximated by the range [u_min,u_max].
+    ///  $$
+    ///         S_p(k R_g) = \frac{\pi}{4 X_g^{d_f}} \int_{u_{\min}}^{u_{\max}} du \, u^{d_f - 2} J_{p+1/2}(u) H_{p+1/2}^{(1)}(u) fc(u / X_g)
+    ///  $$
+    ///
+    ///  where the integration range is approximated by the range `[u_min,u_max]`.
     ///  By using the spherical Bessel j_p(u) and Hankel functions of 1st kind h_p^(1)(u),
     ///  the Bessel function and the Hankel function are rewritten by
-    ///
-    ///               J_{p+1/2}    (u) = sqrt(2u/pi) * j_p(u)
-    ///               H_{p+1/2}^(1)(u) = sqrt(2u/pi) * h_p^(1)(u)
-    ///
-    ///  we have
-    ///     
-    ///                      1        /u_max
-    ///       S_p(k*Rg) =  ------  *  |  du  u^{df-1} * j_{p}(u) * h_{p}^(1)(u) * fc(u/xg),
-    ///                    2*Xg^df    /u_min
-    ///     
-    ///  For the unitary condition of the two-point correlation function is
-    ///     
-    ///                     /Infinity
-    ///       1         =   |  dw  4*pi*w^2 g(w),
-    ///                     /0
-    ///     
-    ///  If we take the integration variable as w = u/k, then we obtain
-    ///     
-    ///                     1     /u_max
-    ///       1         = ------  |  du u^{df-1} fc(u/xg),    .... Eq. (*)
-    ///                    Xg^df  /u_min
-    ///     
-    ///     
-    ///  The integration range [umin,umax] is determined as follows.
+    ///  $$
+    ///  J_{p+1/2} (u) = \sqrt{\frac{2u}{\pi}} \, j_p(u)
+    ///  $$
+    ///  
+    ///  $$
+    ///  H_{p+1/2}^{(1)}(u) = \sqrt{\frac{2u}{\pi}} \, h_p^{(1)}(u)
+    ///  $$
+    ///  
+    ///  We have:
+    ///  
+    ///  $$
+    ///  S_p(k R_g) = \frac{1}{2 X_g^{d_f}} \int_{u_{\min}}^{u_{\max}} du \, u^{d_f - 1} j_p(u) h_p^{(1)}(u) fc(u / X_g)
+    ///  $$
+    ///  
+    ///  For the unitary condition of the two-point correlation function:
+    ///  
+    ///  $$
+    ///  1 = \int_0^{\infty} dw \, 4\pi w^2 g(w)
+    ///  $$
+    ///  
+    ///  If we take the integration variable as \( w = u/k \), then we obtain:
+    ///  
+    ///  $$
+    ///  1 = \frac{1}{X_g^{d_f}} \int_{u_{\min}}^{u_{\max}} du \, u^{d_f - 1} fc(u / X_g) \quad \text{.... Eq. (*)}
+    ///  $$
+    ///  
+    ///  The integration range `[umin,umax]` is determined as follows.
     ///  The integrand of Equation (*) is
     ///
     ///         (u/xg)^{df-1}fc(u/xg) du = (u/xg) ^{d_f}fc(u/xg) dlnu

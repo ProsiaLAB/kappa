@@ -474,10 +474,9 @@ fn maxwell_garnett_mixing(refrel: Complex64, f1: f64) -> Complex64 {
 /// The statis structure factor `S(q)` is given by
 ///
 ///
-///                     c*df     /x_max
-///             S(q) =  ----  *  |  dx x^{df-2}*sin(q*Rg*x)*exp[-c*x^df],
-///                     q*Rg     /0
-///
+/// $$
+/// S(q) = \frac{c \cdot df}{q R_g} \int_0^{x_{\max}} dx \, x^{df-2} \sin(q R_g x) e^{-c x^{df}}
+/// $$
 ///
 /// where `x = u/Rg`; where `Rg` is the radius of gyration and `u` is the
 /// distance between two monomers; `q` is the magnitude of scattering
