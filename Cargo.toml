@@ -9,3 +9,6 @@ clap = { version = "4.5.30", features = ["derive"] }
 ndarray = "0.16.1"
 num-complex = "0.4.6"
 statrs = "0.18.0"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", ".katex-header.html"]
