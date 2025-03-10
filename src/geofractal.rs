@@ -176,7 +176,6 @@ fn radial_integrand(a: f64, x: f64) -> f64 {
     x.powf(a) * (-x).exp()
 }
 
-#[allow(clippy::needless_range_loop)]
 fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
     let nmax_u = 1000;
 
@@ -195,9 +194,9 @@ fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
     let umax = 1.0 / rho;
 
     let du = (umax - umin) / (nmax_u - 1) as f64;
-    for j in 0..nmax_u {
+    for (j, val) in u.iter_mut().enumerate().take(nmax_u) {
         let jf = j as f64;
-        u[j] = umin + du * jf;
+        *val = umin + du * jf;
     }
     for j in 0..nmax_u - 1 {
         sang += 0.5 * (angular_integrand(rho, u[j]) + angular_integrand(rho, u[j + 1])) * du;
