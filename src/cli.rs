@@ -7,7 +7,7 @@ use clap::{Arg, Command};
 use crate::io::read_lnk_file;
 use crate::opac::KappaError;
 
-pub fn run() -> Result<(), KappaError> {
+pub fn launch() -> Result<(), KappaError> {
     let matches = Command::new("kappa")
         .version("0.1.0")
         .about(
