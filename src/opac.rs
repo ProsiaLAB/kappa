@@ -2,6 +2,12 @@
 //!
 //!
 
+use std::mem::swap;
+
+use anyhow::Result;
+use num_complex::ComplexFloat;
+use num_complex::{Complex, Complex64};
+
 pub struct KappaConfig {
     pub amin: f64,
     pub amax: f64,
@@ -136,6 +142,117 @@ pub enum KappaError {
     InvalidFeature,
     InvalidPorosity,
     IncompatibleArguments(String),
+    UnnormalizedAbundance,
+    ReorderSizeParams,
+    SamplingRequired,
+    ForceUnitSampling,
+    UnexpectedApow,
+    ForceLogNormal,
+}
+
+/// Mueller matrix structure
+pub struct Mueller {
+    pub f11: Vec<f64>,
+    pub f12: Vec<f64>,
+    pub f22: Vec<f64>,
+    pub f33: Vec<f64>,
+    pub f44: Vec<f64>,
+    pub f34: Vec<f64>,
+}
+
+/// Particle
+pub struct Particle {
+    pub rv: f64,
+    pub rvmin: f64,
+    pub rvmax: f64,
+    pub rho: f64,
+    pub k_abs: Vec<f64>,
+    pub k_sca: Vec<f64>,
+    pub k_ext: Vec<f64>,
+    pub g: Vec<f64>,
+    pub f: Vec<Mueller>,
+    pub trust: Vec<bool>,
+    pub is_ok: bool,
+    pub is_ok_lmin: f64,
+}
+
+pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
+    prepare_inputs(kpc)?;
+
+    compute_kappa(kpc)?;
+    Ok(())
+}
+
+fn prepare_inputs(kpc: &mut KappaConfig) -> Result<(), KappaError> {
+    if let Err(e) = check_inputs(kpc) {
+        match e {
+            KappaError::ReorderSizeParams => {
+                eprintln!("Reordering size parameters");
+                swap(&mut kpc.amin, &mut kpc.amax);
+            }
+            KappaError::ForceUnitSampling => {
+                eprintln!("Setting na = 1 as amin = amax");
+                kpc.na = 1;
+            }
+            KappaError::SamplingRequired => {
+                eprintln!("Sampling required");
+                kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
+            }
+            KappaError::InvalidSizeParam(msg) => {
+                return Err(KappaError::InvalidSizeParam(msg));
+            }
+            KappaError::ForceLogNormal => {
+                eprintln!("Forcing log-normal distribution");
+                kpc.sizedis = SizeDistribution::Lognorm;
+            }
+            e => return Err(e),
+        }
+    }
+    Ok(())
+}
+
+fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
+    // Materials
+    if kpc.nmat >= 20 {
+        return Err(KappaError::TooManyMaterials);
+    }
+    if kpc.nmat == kpc.nmant && kpc.nmant > 0 {
+        return Err(KappaError::NotEnoughMaterials);
+    }
+
+    // Porosity
+    if kpc.pcore < 0.0 || kpc.pcore >= 1.0 || kpc.pmantle < 0.0 || kpc.pmantle >= 1.0 {
+        return Err(KappaError::InvalidPorosity);
+    }
+
+    // Grain size distribution
+    if kpc.amin <= 0.0 || kpc.amax <= 0.0 {
+        return Err(KappaError::InvalidSizeInput);
+    }
+    if kpc.amin >= kpc.amax {
+        // This error will actually be dealt with later
+        return Err(KappaError::ReorderSizeParams);
+    }
+    if kpc.na == 0 {
+        // This error will actually be dealt with later
+        return Err(KappaError::SamplingRequired);
+    }
+    if kpc.amin == kpc.amax && kpc.na != 1 {
+        return Err(KappaError::ForceUnitSampling);
+    }
+    kpc.sizedis.validate(kpc)?;
+
+    Ok(())
+}
+
+fn compute_kappa(kpc: &KappaConfig) -> Result<(), KappaError> {
+    let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
+
+    // bruggeman_blend();
+    // maxwell_garnet_blend();
+    todo!()
+}
+
 fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64, KappaError> {
     let mut abunvac = 1.0 - abun.iter().sum::<f64>();
     let mvac = Complex::new(1.0, 0.0);
