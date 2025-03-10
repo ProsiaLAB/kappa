@@ -81,6 +81,31 @@ pub enum SizeDistribution {
     Lognorm,
 }
 
+impl SizeDistribution {
+    fn validate(&self, kpc: &KappaConfig) -> Result<(), KappaError> {
+        match self {
+            SizeDistribution::Apow if kpc.apow < 0.0 => Err(KappaError::UnexpectedApow),
+            SizeDistribution::Norm => {
+                if kpc.amean <= 0.0 {
+                    return Err(KappaError::InvalidSizeParam(
+                        "`amean` must be positive for (log-)normal distribution".to_string(),
+                    ));
+                }
+                if kpc.asigma == 0.0 {
+                    return Err(KappaError::InvalidSizeParam(
+                        "`asigma` cannot be zero for (log-)normal distribution".to_string(),
+                    ));
+                }
+                if kpc.asigma > 0.0 {
+                    return Err(KappaError::ForceLogNormal);
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 pub enum KappaMethod {
     DHS,
     MMF,
