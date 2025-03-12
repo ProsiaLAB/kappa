@@ -143,9 +143,12 @@ pub enum KappaError {
     InvalidPorosity,
     IncompatibleArguments(String),
     UnnormalizedAbundance,
-    ReorderSizeParams,
+    SetSampling,
     SamplingRequired,
-    ForceUnitSampling,
+    SizeReorderRange,
+    SizeForceUnitSampling,
+    WavelengthReorderRange,
+    WavelengthForceUnitSampling,
     UnexpectedApow,
     ForceLogNormal,
 }
@@ -186,16 +189,20 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
 fn prepare_inputs(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     if let Err(e) = check_inputs(kpc) {
         match e {
-            KappaError::ReorderSizeParams => {
-                eprintln!("Reordering size parameters");
+            KappaError::SizeReorderRange => {
+                eprintln!("Reordering size distribution range");
                 swap(&mut kpc.amin, &mut kpc.amax);
             }
-            KappaError::ForceUnitSampling => {
+            KappaError::WavelengthReorderRange => {
+                eprintln!("Reordering wavelength range");
+                swap(&mut kpc.lmin, &mut kpc.lmax);
+            }
+            KappaError::SizeForceUnitSampling => {
                 eprintln!("Setting na = 1 as amin = amax");
                 kpc.na = 1;
             }
-            KappaError::SamplingRequired => {
-                eprintln!("Sampling required");
+            KappaError::SetSampling => {
+                eprintln!("Setting sampling for size distribution");
                 kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
             }
             KappaError::InvalidSizeParam(msg) => {
@@ -231,16 +238,30 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
     }
     if kpc.amin >= kpc.amax {
         // This error will actually be dealt with later
-        return Err(KappaError::ReorderSizeParams);
+        return Err(KappaError::SizeReorderRange);
     }
     if kpc.na == 0 {
         // This error will actually be dealt with later
         return Err(KappaError::SamplingRequired);
     }
     if kpc.amin == kpc.amax && kpc.na != 1 {
-        return Err(KappaError::ForceUnitSampling);
+        return Err(KappaError::SizeForceUnitSampling);
     }
     kpc.sizedis.validate(kpc)?;
+
+    // Wavelength grid
+    if kpc.lmin <= 0.0 || kpc.lmax <= 0.0 {
+        return Err(KappaError::InvalidWavelengthInput);
+    }
+    if kpc.lmin > kpc.lmax {
+        return Err(KappaError::WavelengthReorderRange);
+    }
+    if kpc.nlam <= 1 && kpc.lmin != kpc.lmax {
+        return Err(KappaError::SamplingRequired);
+    }
+    if kpc.lmin == kpc.lmax && kpc.nlam != 1 {
+        return Err(KappaError::WavelengthForceUnitSampling);
+    }
 
     Ok(())
 }
