@@ -1,6 +1,9 @@
-/// Defines a material component.
+/// Defines a material component which is statically defined.
+///
+/// These are defined by consuming the LNK files and can be instantiated
+/// by passing the `key`
 #[derive(Debug)]
-pub struct Component {
+pub struct StaticComponent {
     /// Name of the component.
     pub name: &'static str,
     /// Class of the component.
@@ -2545,7 +2548,7 @@ static K0_ASTROSIL: &[f64; 837] = &[
 /// - Reference: Draine 2003, ApJ 598, 1017
 /// - ADS: <https://ui.adsabs.harvard.edu/abs/2003ApJ...598.1017D>
 /// - BibTeX: 2003ApJ...598.1017D
-pub static ASTROSIL: Component = Component {
+pub static ASTROSIL: StaticComponent = StaticComponent {
     name: "Astronomical Silicate",
     class: "Silicates",
     state: "Amorphous",
@@ -2589,7 +2592,7 @@ static K0_C_NANO: &[f64; 88] = &[
 /// Carbon Nano Diamonds
 ///
 /// - ADS: <https://ui.adsabs.harvard.edu/abs/2004A&A...423..983M>
-pub static C_NANO: Component = Component {
+pub static C_NANO: StaticComponent = StaticComponent {
     name: "Nano Diamonds",
     class: "Carbon",
     state: "Crystalline",
@@ -3076,7 +3079,7 @@ static K0_C_GRA: &[f64; 1201] = &[
 /// graphite planes are randomized in many small regions.
 /// The axis-specific data are also included in optool, and you can use
 /// the python interface to mix opacities instead of refractive indices.
-pub static C_GRA: Component = Component {
+pub static C_GRA: StaticComponent = StaticComponent {
     name: "Graphite",
     class: "Carbon",
     state: "Crystalline",
@@ -3441,7 +3444,7 @@ static K0_C_ORG: &[f64; 113] = &[
 /// - References:
 ///     1. [Pollack et al. 1994](https://ui.adsabs.harvard.edu/abs/1994ApJ...421..615P/abstract)
 ///     2. [Henning & Stognienko 1996](https://ui.adsabs.harvard.edu/abs/1996A%26A...311..291H/abstract)
-pub static C_ORG: Component = Component {
+pub static C_ORG: StaticComponent = StaticComponent {
     name: "Organics",
     class: "Carbon",
     state: "Amorphous",
@@ -3483,7 +3486,7 @@ static K0_C_P: &[f64; 90] = &[
 /// Carbon
 ///
 /// Reference: [Preibisch et al. 1993](<https://ui.adsabs.harvard.edu/abs/1993A%26A...279..577P/abstract>)
-pub static C_P: Component = Component {
+pub static C_P: StaticComponent = StaticComponent {
     name: "Carbon",
     class: "Carbon",
     state: "Amorphous",
@@ -9684,7 +9687,7 @@ static K0_C_Z: &[f64] = &[
 /// Carbon
 ///
 /// Reference: [Zubko et al 1996](<https://ui.adsabs.harvard.edu/abs/1996MNRAS.282.1321Z>)
-pub static C_Z: Component = Component {
+pub static C_Z: StaticComponent = StaticComponent {
     name: "Carbon",
     class: "Carbon",
     state: "Amorphous",
@@ -12725,7 +12728,7 @@ static K0_CH3OH_A: &[f64; 1006] = &[
 /// # References
 /// - <https://science.gsfc.nasa.gov/691/cosmicice/constants.html>
 /// - <https://ui.adsabs.harvard.edu/abs/2020ApJ...901...52G>
-pub static CH3OH_A: Component = Component {
+pub static CH3OH_A: StaticComponent = StaticComponent {
     name: "Methanol ice",
     class: "Ice",
     state: "Amorphous",
