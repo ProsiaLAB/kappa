@@ -237,7 +237,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     u[4] = k1 * w[[2, n]] - k2 * w[[1, n]];
     u[5] = k2 * w[[2, n]] - k1 * w[[1, n]];
     u[6] = -c_i * (temp * p23_h20 - p23_h23);
-    u[8] = ta[2] / wfn[1];
+    u[7] = ta[2] / wfn[1];
 
     let mut acoe = u[7] * (u[0] * u[4] * u[6] + k1 * u[0] - tempsq * k3 * u[4])
         / (u[1] * u[4] * u[6] + k1 * u[1] - tempsq * k3 * u[4]);
