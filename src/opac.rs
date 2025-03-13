@@ -2,6 +2,7 @@
 //!
 //!
 
+use std::f64::consts::PI;
 use std::mem::swap;
 
 use anyhow::Result;
@@ -30,6 +31,11 @@ pub struct KappaConfig {
     pub write_fits: bool,
     pub write_scatter: bool,
     pub for_radmc: bool,
+    pub nsparse: usize,
+    pub mmf_struct: f64,
+    pub mmf_a0: f64,
+    pub split: bool,
+    pub blend_only: bool,
 }
 
 impl Default for KappaConfig {
@@ -56,6 +62,11 @@ impl Default for KappaConfig {
             write_fits: false,
             write_scatter: false,
             for_radmc: false,
+            nsparse: 0,
+            mmf_struct: 0.0,
+            mmf_a0: 0.0,
+            split: true,
+            blend_only: false,
         }
     }
 }
@@ -80,6 +91,7 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
+#[derive(PartialEq)]
 pub enum SizeDistribution {
     Apow,
     File,
@@ -151,6 +163,7 @@ pub enum KappaError {
     WavelengthForceUnitSampling,
     UnexpectedApow,
     ForceLogNormal,
+    DisableSplit,
 }
 
 /// Mueller matrix structure
@@ -179,6 +192,31 @@ pub struct Particle {
     pub is_ok_lmin: f64,
 }
 
+/// Defines a material component which is initialized
+/// at runtime by consuming a LNK file.
+///
+/// See [`crate::components::StaticComponent`] for an equivalent
+/// version which can is instantiated statically at compile time.
+#[derive(Debug)]
+pub struct Component {
+    /// Name of the component.
+    pub name: String,
+    /// Class of the component.
+    pub class: String,
+    /// State of the component.
+    pub state: String,
+    /// Density of the component.
+    pub rho: f64,
+    /// size
+    pub size: usize,
+    /// Wavelengths.
+    pub l0: Vec<f64>,
+    /// Refractive index.
+    pub n0: Vec<f64>,
+    /// Extinction coefficient.
+    pub k0: Vec<f64>,
+}
+
 pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
 
@@ -201,6 +239,10 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<(), KappaError> {
                 eprintln!("Setting na = 1 as amin = amax");
                 kpc.na = 1;
             }
+            KappaError::WavelengthForceUnitSampling => {
+                eprintln!("Setting nlam = 1 as lmin = lmax");
+                kpc.nlam = 1;
+            }
             KappaError::SetSampling => {
                 eprintln!("Setting sampling for size distribution");
                 kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
@@ -211,6 +253,9 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<(), KappaError> {
             KappaError::ForceLogNormal => {
                 eprintln!("Forcing log-normal distribution");
                 kpc.sizedis = SizeDistribution::Lognorm;
+            }
+            KappaError::DisableSplit => {
+                kpc.split = false;
             }
             e => return Err(e),
         }
@@ -261,6 +306,48 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
     }
     if kpc.lmin == kpc.lmax && kpc.nlam != 1 {
         return Err(KappaError::WavelengthForceUnitSampling);
+    }
+    if kpc.nsparse > 0 {
+        println!("Creating sparse scattering matrix file");
+    }
+
+    // DHS
+    match kpc.method {
+        KappaMethod::DHS => {
+            if kpc.fmax < 0.0 || kpc.fmax >= 1.0 {
+                return Err(KappaError::InvalidArgument);
+            }
+        }
+        KappaMethod::MMF => {
+            if kpc.mmf_struct > 3.0 {
+                return Err(KappaError::InvalidArgument);
+            }
+            if kpc.mmf_struct <= 0.0 {
+                return Err(KappaError::InvalidArgument);
+            }
+            if kpc.mmf_a0 >= kpc.amin {
+                return Err(KappaError::InvalidArgument);
+            }
+        }
+        KappaMethod::CDE => {
+            if kpc.lmin <= 2.0 * PI * kpc.amax {
+                eprintln!("WARNING: CDE requires Rayleigh limit!");
+            }
+        }
+    }
+
+    // Angular grid
+    if kpc.nang % 2 == 1 {
+        return Err(KappaError::InvalidArgument);
+    }
+
+    // Other
+    if kpc.split && kpc.blend_only {
+        eprintln!("WARNING: Turning off `-s` for `-blend_only`");
+        return Err(KappaError::DisableSplit);
+    }
+    if kpc.split && kpc.sizedis != SizeDistribution::Apow {
+        return Err(KappaError::InvalidArgument);
     }
 
     Ok(())
