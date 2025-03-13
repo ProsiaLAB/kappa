@@ -4,25 +4,42 @@ use anyhow::Result;
 
 use std::io::BufRead;
 
-type LNKData = (Vec<f64>, Vec<f64>, Vec<f64>);
+use crate::opac::Component;
 
-pub fn read_lnk_file(file: &str) -> Result<(LNKData, usize, f64)> {
+pub fn read_lnk_file(file: &str) -> Result<Component> {
     let file = std::fs::File::open(file)?;
     let reader = std::io::BufReader::new(file);
-    let mut lines = reader.lines();
-    let header = lines
+    let all_lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let mut lines_iter = all_lines.iter();
+
+    let mut name = String::new();
+    let mut class = String::new();
+    let mut state = String::new();
+
+    let header = lines_iter
         .find_map(|line| {
-            let line = line.ok()?;
-            if !line.starts_with('#') {
-                Some(line)
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                if let Some((key, value)) = trimmed.trim_start_matches('#').trim().split_once(':') {
+                    match key.trim() {
+                        "Name" => name = value.trim().to_string(),
+                        "Class" => class = value.trim().to_string(),
+                        "State" => state = value.trim().to_string(),
+                        _ => {}
+                    }
+                }
+                None
+            } else if !trimmed.is_empty() {
+                Some(trimmed.to_string())
             } else {
                 None
             }
         })
         .expect("Missing header in the size distribution file");
+
     // Extract header values: first value is nlam, second is rho
     let mut header_parts = header.split_whitespace();
-    let nlam: usize = header_parts
+    let size: usize = header_parts
         .next()
         .expect("Missing nlam in the size distribution file")
         .parse()
@@ -34,25 +51,40 @@ pub fn read_lnk_file(file: &str) -> Result<(LNKData, usize, f64)> {
         .expect("Invalid rho in the size distribution file");
 
     // Read the rest of the file
-    let mut l_vec = vec![0.0; nlam];
-    let mut n_vec = vec![0.0; nlam];
-    let mut k_vec = vec![0.0; nlam];
+    let mut l0 = vec![0.0; size];
+    let mut n0 = vec![0.0; size];
+    let mut k0 = vec![0.0; size];
 
-    let mut l_iter = l_vec.iter_mut();
-    let mut n_iter = n_vec.iter_mut();
-    let mut k_iter = k_vec.iter_mut();
+    let mut iter = lines_iter
+        .filter(|line| !line.starts_with('#')) // Ignore remaining comments
+        .map(|line| {
+            let mut values = line
+                .split_whitespace()
+                .map(|s| s.parse::<f64>().expect("Invalid number in data"));
+            (
+                values.next().expect("Missing l"),
+                values.next().expect("Missing n"),
+                values.next().expect("Missing k"),
+            )
+        });
 
-    for line in lines
-        .map_while(Result::ok)
-        .filter(|line| !line.starts_with('#'))
-    {
-        let mut values = line
-            .split_whitespace()
-            .map(|s| s.parse::<f64>().expect("Invalid number in data"));
-        *l_iter.next().expect("Too many rows") = values.next().expect("Missing l");
-        *n_iter.next().expect("Too many rows") = values.next().expect("Missing n");
-        *k_iter.next().expect("Too many rows") = values.next().expect("Missing k");
+    for ((l, n), k) in l0.iter_mut().zip(n0.iter_mut()).zip(k0.iter_mut()) {
+        let (l_val, n_val, k_val) = iter.next().expect("Too few rows in the file");
+        *l = l_val;
+        *n = n_val;
+        *k = k_val;
     }
 
-    Ok(((l_vec, n_vec, k_vec), nlam, rho))
+    let component = Component {
+        name,
+        class,
+        state,
+        rho,
+        size,
+        l0,
+        n0,
+        k0,
+    };
+
+    Ok(component)
 }
