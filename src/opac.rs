@@ -354,14 +354,22 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
 }
 
 fn compute_kappa(kpc: &KappaConfig) -> Result<(), KappaError> {
-    let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
+    let _ = kpc.na;
+    // let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
+
+    // let r = vec![0.0; ns];
+    // let nr = vec![0.0; ns];
+    // let f = vec![0.0; nf];
+    // let wf = vec![0.0; nf];
+    // let e1mantle = vec![0.0; kpc.nlam];
+    // let e2mantle = vec![0.0; kpc.nlam];
 
     // bruggeman_blend();
     // maxwell_garnet_blend();
     todo!()
 }
 
-fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64, KappaError> {
+pub fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64, KappaError> {
     let mut abunvac = 1.0 - abun.iter().sum::<f64>();
     let mvac = Complex::new(1.0, 0.0);
     if abunvac < 0.0 {
@@ -395,7 +403,7 @@ fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64, KappaE
     Ok(me)
 }
 
-fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
+pub fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
     let vf_c = 1.0 - vf_m;
     let me = m2.powi(2)
         * ((2.0 * m2.powi(2) + m1.powi(2) - 2.0 * vf_c * (m2.powi(2) - m1.powi(2)))
