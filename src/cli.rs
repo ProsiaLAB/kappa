@@ -1,11 +1,14 @@
 //! Command line interface for the `kappa`.
-use std::{collections::HashMap, env, iter::Peekable};
+use std::collections::HashMap;
+use std::env;
+use std::path::Path;
 
 use anyhow::Result;
 use colored::{Color, Colorize};
 
 // use crate::io::read_lnk_file;
 use crate::components::StaticComponent;
+use crate::io::read_size_dis_file;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 
 enum SizeArg {
@@ -50,9 +53,44 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 kpc = KappaConfig::dsharp_no_ice();
             }
             // Size distribution options
-            "-a" => {
-                todo!()
-            }
+            "-a" => match process_grain_size(&mut args)? {
+                SizeArg::PowerLaw {
+                    amin,
+                    amax,
+                    apow,
+                    na,
+                } => {
+                    kpc.amin = amin;
+                    if let Some(amax) = amax {
+                        kpc.amax = amax;
+                    }
+                    if let Some(apow) = apow {
+                        kpc.apow = apow;
+                    }
+                    if let Some(na) = na {
+                        kpc.na = na;
+                    }
+                }
+                SizeArg::LogNormal {
+                    amin,
+                    amax,
+                    amean,
+                    asigma,
+                    na,
+                } => {
+                    kpc.amin = amin;
+                    kpc.amax = amax;
+                    kpc.amean = amean;
+                    kpc.asigma = asigma;
+                    if let Some(na) = na {
+                        kpc.na = na;
+                    }
+                }
+                SizeArg::File(file) => {
+                    // Read file
+                    let _ = read_size_dis_file(&file);
+                }
+            },
             "--amin" => {
                 kpc.amin = args
                     .next()
@@ -220,10 +258,102 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             }
         }
     }
-    // println!("args: {:?}", args);
+    println!(
+        "args: {:?} {:?} {:?} {:?} {:?} {:?}",
+        kpc.amin, kpc.amax, kpc.apow, kpc.amean, kpc.asigma, kpc.na
+    );
     // todo!()
-    Ok(())
+    Ok(kpc)
 }
+
+fn process_grain_size<I>(args: &mut I) -> Result<SizeArg, KappaError>
+where
+    I: Iterator<Item = String>,
+{
+    let amin_str = args
+        .next()
+        .ok_or_else(|| KappaError::MissingArgument("--amin".to_string()))?;
+
+    if amin_str.parse::<f64>().is_err() && Path::new(&amin_str).exists() {
+        return Ok(SizeArg::File(amin_str));
+    }
+
+    let amin = amin_str
+        .parse::<f64>()
+        .map_err(|_| KappaError::InvalidType)?;
+
+    let amax_str = args.next();
+    if let Some(amax_str) = amax_str {
+        if let Ok(amax) = amax_str.parse::<f64>() {
+            let next_arg = args.next();
+            if let Some(next_arg) = next_arg {
+                if next_arg.contains(':') {
+                    let parts: Vec<&str> = next_arg.split(':').collect();
+                    if parts.len() != 2 {
+                        return Err(KappaError::InvalidArgument(
+                            "
+                        Could not parse centroid size and logarithmic width"
+                                .to_string(),
+                        ));
+                    }
+                    let amean = parts[0]
+                        .parse::<f64>()
+                        .map_err(|_| KappaError::InvalidType)?;
+                    let asigma = parts[1]
+                        .parse::<f64>()
+                        .map_err(|_| KappaError::InvalidType)?;
+                    let na = args
+                        .next()
+                        .map(|s| s.parse::<usize>().map_err(|_| KappaError::InvalidType))
+                        .transpose()?;
+                    return Ok(SizeArg::LogNormal {
+                        amin,
+                        amax,
+                        amean,
+                        asigma,
+                        na,
+                    });
+                } else if let Ok(apow) = next_arg.parse::<f64>() {
+                    let na = args
+                        .next()
+                        .map(|s| s.parse::<usize>().map_err(|_| KappaError::InvalidType))
+                        .transpose()?;
+                    return Ok(SizeArg::PowerLaw {
+                        amin,
+                        amax: Some(amax),
+                        apow: Some(apow),
+                        na,
+                    });
+                } else {
+                    return Err(KappaError::InvalidArgument(
+                        "Could not parse powerlaw or lognormal arguments".to_string(),
+                    ));
+                }
+            }
+            return Ok(SizeArg::PowerLaw {
+                amin,
+                amax: Some(amax),
+                apow: None,
+                na: None,
+            });
+        } else {
+            return Err(KappaError::InvalidType);
+        }
+    }
+
+    Ok(SizeArg::PowerLaw {
+        amin,
+        amax: None,
+        apow: None,
+        na: None,
+    })
+}
+
+fn process_wavelength_args() {
+    todo!()
+}
+
+// fn process
 
 fn print_short_help() {
     // Description
