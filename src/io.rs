@@ -94,6 +94,10 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     Ok(component)
 }
 
+pub fn read_size_dis_file(file: &str) -> Result<()> {
+    todo!()
+}
+
 fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     // Check if we need to reverse the arrays
     if l0[l0.len() - 1] < l0[0] {
