@@ -34,6 +34,7 @@ pub struct KappaConfig {
     pub nsparse: usize,
     pub mmf_struct: f64,
     pub mmf_a0: f64,
+    pub mmf_kf: f64,
     pub split: bool,
     pub blend_only: bool,
 }
@@ -65,6 +66,7 @@ impl Default for KappaConfig {
             nsparse: 0,
             mmf_struct: 0.0,
             mmf_a0: 0.0,
+            mmf_kf: 0.0,
             split: true,
             blend_only: false,
         }
