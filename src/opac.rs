@@ -144,7 +144,8 @@ pub enum KappaError {
     InvalidSizeParam(String),
     SizeDistFileNotFound,
     DeltaExceedsSize,
-    InvalidArgument,
+    InvalidArgument(String),
+    MissingArgument(String),
     InvalidWavelengthInput,
     MissingSizeParamLimit,
     MissingSizeParamDHSLimit,
@@ -164,6 +165,7 @@ pub enum KappaError {
     UnexpectedApow,
     ForceLogNormal,
     DisableSplit,
+    InvalidType,
 }
 
 /// Mueller matrix structure
@@ -315,18 +317,18 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
     match kpc.method {
         KappaMethod::DHS => {
             if kpc.fmax < 0.0 || kpc.fmax >= 1.0 {
-                return Err(KappaError::InvalidArgument);
+                return Err(KappaError::InvalidArgument("fmax".to_string()));
             }
         }
         KappaMethod::MMF => {
             if kpc.mmf_struct > 3.0 {
-                return Err(KappaError::InvalidArgument);
+                return Err(KappaError::InvalidArgument("mmf_struct".to_string()));
             }
             if kpc.mmf_struct <= 0.0 {
-                return Err(KappaError::InvalidArgument);
+                return Err(KappaError::InvalidArgument("mmf_struct".to_string()));
             }
             if kpc.mmf_a0 >= kpc.amin {
-                return Err(KappaError::InvalidArgument);
+                return Err(KappaError::InvalidArgument("mmf_a0".to_string()));
             }
         }
         KappaMethod::CDE => {
@@ -338,7 +340,7 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
 
     // Angular grid
     if kpc.nang % 2 == 1 {
-        return Err(KappaError::InvalidArgument);
+        return Err(KappaError::InvalidArgument("nang".to_string()));
     }
 
     // Other
@@ -347,7 +349,7 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
         return Err(KappaError::DisableSplit);
     }
     if kpc.split && kpc.sizedis != SizeDistribution::Apow {
-        return Err(KappaError::InvalidArgument);
+        return Err(KappaError::InvalidArgument("split".to_string()));
     }
 
     Ok(())
