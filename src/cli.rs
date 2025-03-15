@@ -30,7 +30,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
 
     let mut args = env::args().skip(1).peekable();
     if args.peek().is_none() {
-        return Ok(());
+        return Ok(kpc);
     }
 
     let mut materials: HashMap<String, StaticComponent> = HashMap::new();
@@ -56,44 +56,44 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--amin" => {
                 kpc.amin = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--amin".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--amax" => {
                 kpc.amax = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--amax".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--amean" => {
                 kpc.amean = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--amean".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
-            "--asig" => {
+            "--asig" | "--asigma" => {
                 kpc.asigma = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--asig".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--apow" => {
                 kpc.apow = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--apow".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--na" => {
                 kpc.na = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--na".to_string()))?
                     .parse::<usize>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             // Wavelength options
             "-l" => {
@@ -102,23 +102,23 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--lmin" => {
                 kpc.lmin = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--lmin".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--lmax" => {
                 kpc.lmax = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--lmax".to_string()))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             "--nlam" => {
                 kpc.nlam = args
                     .next()
-                    .unwrap()
+                    .ok_or_else(|| KappaError::MissingArgument("--nlam".to_string()))?
                     .parse::<usize>()
-                    .map_err(|_| KappaError::InvalidArgument)?;
+                    .map_err(|_| KappaError::InvalidType)?;
             }
             // Grain geometry and computational method options
             "-p" | "--porosity" => {
@@ -197,15 +197,15 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             // Miscellaneous options
             "-L" | "--list" => {
                 list_materials();
-                return Ok(());
+                return Ok(kpc);
             }
             "-h" => {
                 print_short_help();
-                return Ok(());
+                return Ok(kpc);
             }
             "--help" => {
                 print_long_help();
-                return Ok(());
+                return Ok(kpc);
             }
             "-q" | "--quiet" => {
                 todo!()
@@ -216,7 +216,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             // Unknown argument
             _ => {
                 println!("Unknown argument: {}", arg);
-                return Ok(());
+                return Ok(kpc);
             }
         }
     }
