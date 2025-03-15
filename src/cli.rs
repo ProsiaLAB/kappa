@@ -8,7 +8,24 @@ use colored::{Color, Colorize};
 use crate::components::StaticComponent;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 
-pub fn launch() -> Result<(), KappaError> {
+enum SizeArg {
+    PowerLaw {
+        amin: f64,
+        amax: Option<f64>,
+        apow: Option<f64>,
+        na: Option<usize>,
+    },
+    LogNormal {
+        amin: f64,
+        amax: f64,
+        amean: f64,
+        asigma: f64,
+        na: Option<usize>,
+    },
+    File(String),
+}
+
+pub fn launch() -> Result<KappaConfig, KappaError> {
     let mut kpc = KappaConfig::default();
 
     let mut args = env::args().skip(1).peekable();
