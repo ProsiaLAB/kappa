@@ -138,7 +138,48 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     kpc.fmax = 0.8;
                 }
             }
-            // "--xlim"
+            "--xlim" => {
+                let xlim = args
+                    .next()
+                    .ok_or_else(|| KappaError::InvalidArgument("--xlim".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+            }
+            "--xlim-dhs" => {
+                let xlim_dhs = args
+                    .next()
+                    .ok_or_else(|| KappaError::InvalidArgument("--xlim-dhs".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+            }
+            "--mmf" | "--mmf-ss" => {
+                kpc.method = KappaMethod::MMF;
+                if arg == "--mmf-ss" {
+                    let mmf_ss = args
+                        .next()
+                        .ok_or_else(|| KappaError::InvalidArgument("--mmf-ss".to_string()))?
+                        .parse::<bool>()
+                        .map_err(|_| KappaError::InvalidType)?;
+                }
+                kpc.mmf_a0 = args
+                    .next()
+                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-a0".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+                kpc.mmf_struct = args
+                    .next()
+                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-struct".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+                kpc.mmf_kf = args
+                    .next()
+                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-kf".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+            }
+            "--cde" => {
+                kpc.method = KappaMethod::CDE;
+            }
             // Miscellaneous options
             "-L" | "--list" => {
                 list_materials();
