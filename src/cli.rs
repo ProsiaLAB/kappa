@@ -1,26 +1,131 @@
 //! Command line interface for the `kappa`.
-use std::env;
+use std::{collections::HashMap, env, iter::Peekable};
 
 use anyhow::Result;
 use colored::{Color, Colorize};
 
 // use crate::io::read_lnk_file;
-use crate::opac::KappaError;
+use crate::components::StaticComponent;
+use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 
 pub fn launch() -> Result<(), KappaError> {
+    let mut kpc = KappaConfig::default();
+
     let mut args = env::args().skip(1).peekable();
     if args.peek().is_none() {
         return Ok(());
     }
 
+    let mut materials: HashMap<String, StaticComponent> = HashMap::new();
+
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "-m" => {
+                todo!()
+            }
+            "--diana" => {
+                kpc = KappaConfig::diana();
+            }
+            "--dsharp" => {
+                kpc = KappaConfig::dsharp();
+            }
+            "--dsharp-no-ice" => {
+                kpc = KappaConfig::dsharp_no_ice();
+            }
+            // Size distribution options
+            "-a" => {
+                todo!()
+            }
+            "--amin" => {
+                kpc.amin = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--amax" => {
+                kpc.amax = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--amean" => {
+                kpc.amean = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--asig" => {
+                kpc.asigma = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--apow" => {
+                kpc.apow = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--na" => {
+                kpc.na = args
+                    .next()
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            // Wavelength options
+            "-l" => {
+                todo!()
+            }
+            "--lmin" => {
+                kpc.lmin = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--lmax" => {
+                kpc.lmax = args
+                    .next()
+                    .unwrap()
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            "--nlam" => {
+                kpc.nlam = args
+                    .next()
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_| KappaError::InvalidArgument)?;
+            }
+            // Grain geometry and computational method options
+            "-p" => {
+                todo!()
+            }
+            "--dhs" | "--fmax" | "--mie" => {
+                kpc.method = KappaMethod::DHS;
+                if arg == "--mie" {
+                    kpc.fmax = 0.0;
+                } else if args.peek().is_some() {
+                    kpc.fmax = args
+                        .next()
+                        .unwrap()
+                        .parse::<f64>()
+                        .map_err(|_| KappaError::InvalidArgument)?;
+                } else {
+                    kpc.fmax = 0.8;
+                }
+            }
+            // "--xlim"
+            // Miscellaneous options
             "-L" | "--list" => {
                 list_materials();
                 return Ok(());
-            }
-            "-c" => {
-                process_materials();
             }
             "-h" => {
                 print_short_help();
@@ -36,6 +141,7 @@ pub fn launch() -> Result<(), KappaError> {
             "-v" | "--version" => {
                 todo!()
             }
+            // Unknown argument
             _ => {
                 println!("Unknown argument: {}", arg);
                 return Ok(());
@@ -45,10 +151,6 @@ pub fn launch() -> Result<(), KappaError> {
     // println!("args: {:?}", args);
     // todo!()
     Ok(())
-}
-
-fn process_materials() {
-    println!("Processing materials...");
 }
 
 fn print_short_help() {
@@ -81,10 +183,6 @@ fn print_short_help() {
     println!(":");
     println!("{}", "  -L, --list".bold());
     println!("      List built-in materials");
-    println!("{}", "  -c".bold().to_string() + " <MATERIAL> [MFRAC]...");
-    println!(
-        "      Specify a material to include in the grain, with its mass fraction (default: 1.0)"
-    );
     println!("{}", "  -m".bold().to_string() + " <MATERIAL> [MFRAC]...");
     println!(
         "      Specify a material to include in the mantle, with its mass fraction (default: 0.0)"
