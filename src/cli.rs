@@ -121,8 +121,16 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     .map_err(|_| KappaError::InvalidArgument)?;
             }
             // Grain geometry and computational method options
-            "-p" => {
-                todo!()
+            "-p" | "--porosity" => {
+                kpc.pcore = args
+                    .next()
+                    .ok_or_else(|| KappaError::MissingArgument("--porosity".to_string()))?
+                    .parse::<f64>()
+                    .map_err(|_| KappaError::InvalidType)?;
+                kpc.pmantle = match args.next() {
+                    Some(arg) => arg.parse::<f64>().map_err(|_| KappaError::InvalidType)?,
+                    None => kpc.pcore, // Default is to use the same porosity
+                };
             }
             "--dhs" | "--fmax" | "--mie" => {
                 kpc.method = KappaMethod::DHS;
@@ -141,7 +149,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         kpc.fmax = 0.8; // Default value when --fmax is the last argument
                     }
                 } else {
-                    kpc.fmax = 0.8;
+                    kpc.fmax = 0.8; // Default value if neither --mie nor --fmax is provided
                 }
             }
             "--xlim" => {
