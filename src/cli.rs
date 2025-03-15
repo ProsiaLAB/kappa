@@ -128,12 +128,18 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 kpc.method = KappaMethod::DHS;
                 if arg == "--mie" {
                     kpc.fmax = 0.0;
-                } else if args.peek().is_some() {
-                    kpc.fmax = args
-                        .next()
-                        .unwrap()
-                        .parse::<f64>()
-                        .map_err(|_| KappaError::InvalidArgument)?;
+                } else if arg == "--fmax" {
+                    // Peek at the next argument to check if it's a valid number
+                    if let Some(next_arg) = args.peek() {
+                        if let Ok(fmax_value) = next_arg.parse::<f64>() {
+                            args.next(); // Consume the number
+                            kpc.fmax = fmax_value;
+                        } else {
+                            kpc.fmax = 0.8; // Default value when no valid number follows
+                        }
+                    } else {
+                        kpc.fmax = 0.8; // Default value when --fmax is the last argument
+                    }
                 } else {
                     kpc.fmax = 0.8;
                 }
