@@ -1,3 +1,69 @@
+//! This module defines structs, variables and other statically defined
+//! data structures for built-in materials in `kappa`.
+
+pub const MATERIAL_KEYS: &[&str] = &[
+    // Pyroxenes
+    "pyr", // alias for pyr-mg70
+    "ens", // alias for pyr-c-mg96
+    "pyr-mg100",
+    "pyr-mg95",
+    "pyr-mg80",
+    "pyr-mg70",
+    "pyr-mg60",
+    "pyr-mg50",
+    "pyr-mg40",
+    "pyr-c-mg96",
+    // Olivines
+    "ol", // alias for ol-mg50
+    "ol-mg50",
+    "ol-mg40",
+    "for", // alias for ol-c-mg100
+    "ol-c-mg100",
+    "ol-c-mg95",
+    "fay", // alias for ol-c-mg00
+    "ol-c-mg00",
+    // Silicates
+    "astrosil",
+    // Carbon
+    "c", // alias for c-z
+    "c-z",
+    "c-p",
+    "gra", // alias for c-gra
+    "c-gra",
+    "org", // alias for c-org
+    "c-org",
+    "nano", // alias for c-nano
+    "c-nano",
+    // Iron
+    "iron", // alias for fe-c
+    "fe-c",
+    "tro", // alias for fes
+    "fes",
+    // Others
+    "sic",
+    "qua", // alias for sio2
+    "sio2",
+    "cor", // alias for cor-c
+    "cor-c",
+    "h2o", // alias for h2o-w
+    "h2o-w",
+    "h2o-a",
+    "co2", // alias for co2-w
+    "co2-w",
+    "nh3", // alias for nh3-m
+    "nh3-m",
+    "co", // alias for co-a
+    "co-a",
+    "co2-a",
+    "co2-c",
+    "ch4", // alias for ch4-a
+    "ch4-a",
+    "ch4-c",
+    "ch3oh", // alias for ch3oh-a
+    "ch3oh-a",
+    "ch3oh-c",
+];
+
 /// Defines a material component which is statically defined.
 ///
 /// These are defined by consuming the LNK files and can be instantiated
