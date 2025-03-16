@@ -1,14 +1,14 @@
 //! Command line interface for the `kappa`.
-use std::collections::HashMap;
 use std::env;
+use std::iter::{once, Peekable};
 use std::path::Path;
 
 use anyhow::Result;
 use colored::{Color, Colorize};
 
 // use crate::io::read_lnk_file;
-use crate::components::StaticComponent;
-use crate::io::read_size_dis_file;
+use crate::components::{StaticComponent, MATERIAL_KEYS};
+use crate::io::{read_lnk_file, read_size_dis_file};
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 
 enum SizeArg {
@@ -28,6 +28,17 @@ enum SizeArg {
     File(String),
 }
 
+enum MaterialArg {
+    Key(String),
+    File(String),
+}
+
+#[derive(Debug)]
+pub enum MaterialType {
+    Core,
+    Mantle,
+}
+
 pub fn launch() -> Result<KappaConfig, KappaError> {
     let mut kpc = KappaConfig::default();
 
@@ -36,12 +47,30 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         return Ok(kpc);
     }
 
-    let mut materials: HashMap<String, StaticComponent> = HashMap::new();
+    let mut materials: Vec<String> = Vec::with_capacity(20);
+    let mut materials_mfrac: Vec<f64> = Vec::with_capacity(20);
+    let mut material_types: Vec<MaterialType> = Vec::with_capacity(20);
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "-c" => {
+                process_material(
+                    &mut args,
+                    &mut materials,
+                    &mut materials_mfrac,
+                    &mut material_types,
+                    MaterialType::Core,
+                )?;
+            }
             "-m" => {
-                todo!()
+                // Same as "-c"
+                process_material(
+                    &mut args,
+                    &mut materials,
+                    &mut materials_mfrac,
+                    &mut material_types,
+                    MaterialType::Mantle,
+                )?;
             }
             "--diana" => {
                 kpc = KappaConfig::diana();
@@ -191,14 +220,14 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 }
             }
             "--xlim" => {
-                let xlim = args
+                kpc.xlim = args
                     .next()
                     .ok_or_else(|| KappaError::InvalidArgument("--xlim".to_string()))?
                     .parse::<f64>()
                     .map_err(|_| KappaError::InvalidType)?;
             }
             "--xlim-dhs" => {
-                let xlim_dhs = args
+                kpc.xlim_dhs = args
                     .next()
                     .ok_or_else(|| KappaError::InvalidArgument("--xlim-dhs".to_string()))?
                     .parse::<f64>()
@@ -207,7 +236,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--mmf" | "--mmf-ss" => {
                 kpc.method = KappaMethod::MMF;
                 if arg == "--mmf-ss" {
-                    let mmf_ss = args
+                    kpc.mmf_ss = args
                         .next()
                         .ok_or_else(|| KappaError::InvalidArgument("--mmf-ss".to_string()))?
                         .parse::<bool>()
@@ -251,6 +280,22 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "-v" | "--version" => {
                 todo!()
             }
+            // Unknown option
+            _ if arg.starts_with('-') => {
+                println!("Unknown option: {}", arg);
+                return Ok(kpc);
+            }
+            // Positional arguments
+            _ if MATERIAL_KEYS.contains(&arg.as_str()) || arg.ends_with(".lnk") => {
+                // Default is to use Core material type
+                process_material(
+                    &mut once(arg).chain(args).peekable(),
+                    &mut materials,
+                    &mut materials_mfrac,
+                    &mut material_types,
+                    MaterialType::Core,
+                )?;
+            }
             // Unknown argument
             _ => {
                 println!("Unknown argument: {}", arg);
@@ -258,10 +303,9 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             }
         }
     }
-    println!(
-        "args: {:?} {:?} {:?} {:?} {:?} {:?}",
-        kpc.amin, kpc.amax, kpc.apow, kpc.amean, kpc.asigma, kpc.na
-    );
+    println!("args: {:?}", materials);
+    println!("args: {:?}", materials_mfrac);
+    println!("args: {:?}", material_types);
     // todo!()
     Ok(kpc)
 }
@@ -349,11 +393,58 @@ where
     })
 }
 
-fn process_wavelength_args() {
+fn process_wavelength() {
     todo!()
 }
 
-// fn process
+fn process_material<I>(
+    args: &mut Peekable<I>,
+    materials: &mut Vec<String>,
+    materials_mfrac: &mut Vec<f64>,
+    material_types: &mut Vec<MaterialType>,
+    material_type: MaterialType,
+) -> Result<(), KappaError>
+where
+    I: Iterator<Item = String>,
+{
+    if let Some(material) = args.next() {
+        if MATERIAL_KEYS.contains(&material.as_str()) {
+            materials.push(material.to_string());
+            material_types.push(material_type);
+            // See if there is a next argument
+            // If there is, it should be a mass fraction
+            if let Some(next_arg) = args.peek() {
+                // If it is a number, it is a mass fraction
+                if let Ok(mfrac) = next_arg.parse::<f64>() {
+                    materials_mfrac.push(mfrac);
+                    args.next();
+                    Ok(())
+                } else {
+                    // Next argument is not a number, so it is a material type
+                    materials_mfrac.push(1.0); // Default is to use 100% of the mass
+                    Ok(())
+                }
+            } else {
+                // This material has a default mass fraction of 100%
+                materials_mfrac.push(1.0);
+                // Move on to the next material
+                Ok(())
+            }
+        } else if material.ends_with(".lnk") {
+            // Positional argument is a file path
+            // Placeholder for now
+            let rho_in = Option::<f64>::None;
+            let _ = read_lnk_file(&material, rho_in);
+            Ok(())
+        } else {
+            eprintln!("{} is not a valid material key", material);
+            Err(KappaError::InvalidArgument("-c/-m".to_string()))
+        }
+    } else {
+        eprintln!("Missing material key/file path after -c/-m");
+        Err(KappaError::MissingArgument("-c/-m".to_string()))
+    }
+}
 
 fn print_short_help() {
     // Description
@@ -373,7 +464,7 @@ fn print_short_help() {
     print!("{}", "Arguments".bold().underline().color(Color::Cyan));
     println!(":");
     print!("{:<25}", "  <MATERIAL> [MFRAC]...");
-    println!("Specify materials. Example: c-gra 0.5 c-sil 0.3");
+    println!("Specify materials. Example: c-gra 0.5 c-z 0.3");
     println!();
 
     // Options
