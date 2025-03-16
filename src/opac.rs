@@ -35,8 +35,11 @@ pub struct KappaConfig {
     pub mmf_struct: f64,
     pub mmf_a0: f64,
     pub mmf_kf: f64,
+    pub mmf_ss: bool,
     pub split: bool,
     pub blend_only: bool,
+    pub xlim: f64,
+    pub xlim_dhs: f64,
 }
 
 impl Default for KappaConfig {
@@ -67,8 +70,11 @@ impl Default for KappaConfig {
             mmf_struct: 0.0,
             mmf_a0: 0.0,
             mmf_kf: 0.0,
+            mmf_ss: false,
             split: true,
             blend_only: false,
+            xlim: 1.0,
+            xlim_dhs: 1.0,
         }
     }
 }
