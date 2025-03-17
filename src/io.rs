@@ -94,7 +94,7 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     Ok(component)
 }
 
-pub fn read_size_dis_file(file: &str) -> Result<()> {
+pub fn read_sizedis_file(file: &str) -> Result<()> {
     todo!()
 }
 
