@@ -517,8 +517,7 @@ fn print_short_help() {
     // General options (grain composition)
     print!("{}", "GRAIN COMPOSITION".color(Color::BrightMagenta));
     println!(":");
-    println!("{}", "  -L, --list".bold());
-    println!("      List built-in materials");
+
     println!("{}", "  -m".bold().to_string() + " <MATERIAL> [MFRAC]...");
     println!(
         "      Specify a material to include in the mantle, with its mass fraction (default: 0.0)"
@@ -624,6 +623,8 @@ fn print_short_help() {
     // Miscellaneous options
     print!("{}", "MISCELLANEOUS".color(Color::BrightMagenta));
     println!(":");
+    println!("{}", "  -L, --list".bold());
+    println!("      List built-in materials");
     println!("{}", "  -h, --help".bold());
     println!("      Print this help message");
     println!("{}", "  -q, --quiet".bold());
