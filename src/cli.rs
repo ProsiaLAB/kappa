@@ -11,6 +11,31 @@ use crate::components::MATERIAL_KEYS;
 use crate::io::{read_lnk_file, read_sizedis_file};
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 
+#[derive(Debug)]
+struct Material {
+    key: String,
+    kind: MaterialKind,
+    cmd: bool,
+    n: f64,
+    k: f64,
+    rho: f64,
+    mfrac: f64,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Material {
+            key: String::new(),
+            kind: MaterialKind::Core,
+            cmd: false,
+            n: 0.0,
+            k: 0.0,
+            rho: 0.0,
+            mfrac: 0.0,
+        }
+    }
+}
+
 enum SizeArg {
     PowerLaw {
         amin: f64,
@@ -29,7 +54,14 @@ enum SizeArg {
 }
 
 #[derive(Debug)]
-pub enum MaterialType {
+enum MaterialArg {
+    Key(String),
+    RefractiveIndex(String),
+    File(String),
+}
+
+#[derive(Debug)]
+pub enum MaterialKind {
     Core,
     Mantle,
 }
@@ -42,57 +74,31 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         return Ok(kpc);
     }
 
-    let mut materials: Vec<String> = Vec::with_capacity(20);
-    let mut materials_mfrac: Vec<f64> = Vec::with_capacity(20);
-    let mut material_types: Vec<MaterialType> = Vec::with_capacity(20);
-    let mut materials_n: Vec<f64> = Vec::with_capacity(20);
-    let mut materials_k: Vec<f64> = Vec::with_capacity(20);
-    let mut materials_rho: Vec<f64> = Vec::with_capacity(20);
+    let mut materials: Vec<Material> = Vec::with_capacity(20);
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-c" => {
-                if let Some(material) = args.next() {
-                    if let Some((n, k, rho)) = process_material(
-                        &material.to_string(),
-                        &mut args,
-                        &mut materials,
-                        &mut materials_mfrac,
-                        &mut material_types,
-                        MaterialType::Core,
-                    )? {
-                        materials_n.push(n);
-                        materials_k.push(k);
-                        materials_rho.push(rho);
-                    } else {
-                        eprintln!("Missing material key/file path after -c/-m");
-                        return Err(KappaError::MissingArgument("-c/-m".to_string()));
-                    };
+                if let Some(material_arg) = args.next() {
+                    let material =
+                        process_material(&material_arg.to_string(), &mut args, MaterialKind::Core)?;
+                    materials.push(material);
                 } else {
-                    eprintln!("Missing material key/file path after -c/-m");
+                    eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
                 }
             }
             "-m" => {
                 // Same as "-c"
-                if let Some(material) = args.next() {
-                    if let Some((n, k, rho)) = process_material(
-                        &material.to_string(),
+                if let Some(material_arg) = args.next() {
+                    let material = process_material(
+                        &material_arg.to_string(),
                         &mut args,
-                        &mut materials,
-                        &mut materials_mfrac,
-                        &mut material_types,
-                        MaterialType::Mantle,
-                    )? {
-                        materials_n.push(n);
-                        materials_k.push(k);
-                        materials_rho.push(rho);
-                    } else {
-                        eprintln!("Missing material key/file path after -c/-m");
-                        return Err(KappaError::MissingArgument("-c/-m".to_string()));
-                    };
+                        MaterialKind::Mantle,
+                    )?;
+                    materials.push(material);
                 } else {
-                    eprintln!("Missing material key/file path after -c/-m");
+                    eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
                 }
             }
@@ -311,27 +317,12 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             }
             // Positional arguments
             _ => {
-                if let Some((n, k, rho)) = process_material(
-                    arg.as_str(),
-                    &mut args,
-                    &mut materials,
-                    &mut materials_mfrac,
-                    &mut material_types,
-                    MaterialType::Core,
-                )? {
-                    materials_n.push(n);
-                    materials_k.push(k);
-                    materials_rho.push(rho);
-                } else {
-                    eprintln!("Missing material key/file path after -c/-m");
-                    return Err(KappaError::MissingArgument("-c/-m".to_string()));
-                }
+                let material = process_material(arg.as_str(), &mut args, MaterialKind::Core)?;
+                materials.push(material);
             }
         }
     }
     println!("args: {:?}", materials);
-    println!("args: {:?}", materials_mfrac);
-    println!("args: {:?}", material_types);
     // todo!()
     Ok(kpc)
 }
@@ -424,67 +415,63 @@ fn process_wavelength() {
 }
 
 fn process_material<I>(
-    material: &str,
+    material_arg: &str,
     args: &mut Peekable<I>,
-    materials: &mut Vec<String>,
-    materials_mfrac: &mut Vec<f64>,
-    material_types: &mut Vec<MaterialType>,
-    material_type: MaterialType,
-) -> Result<Option<(f64, f64, f64)>, KappaError>
+    material_type: MaterialKind,
+) -> Result<Material, KappaError>
 where
     I: Iterator<Item = String>,
 {
-    if MATERIAL_KEYS.contains(&material) {
-        materials.push(material.to_string());
-        material_types.push(material_type);
+    let mut material = Material::default();
+    if MATERIAL_KEYS.contains(&material_arg) {
+        material.key = material_arg.to_string();
+        material.kind = material_type;
         // See if there is a next argument
         // If there is, it should be a mass fraction
         if let Some(next_arg) = args.peek() {
             // If it is a number, it is a mass fraction
             if let Ok(mfrac) = next_arg.parse::<f64>() {
-                materials_mfrac.push(mfrac);
+                material.mfrac = mfrac;
                 args.next();
-                Ok(None)
+                Ok(material)
             } else {
                 // Next argument is not a number, so it is a material type
-                materials_mfrac.push(1.0); // Default is to use 100% of the mass
-                Ok(None)
+                material.mfrac = 1.0; // Default is to use 100% of the mass
+                Ok(material)
             }
         } else {
             // This material has a default mass fraction of 100%
-            materials_mfrac.push(1.0);
+            material.mfrac = 1.0;
             // Move on to the next material
-            Ok(None)
+            Ok(material)
         }
-    } else if material.ends_with(".lnk") {
+    } else if material_arg.ends_with(".lnk") {
         // Positional argument is a file path
         // Placeholder for now
         let rho_in = Option::<f64>::None;
-        let _ = read_lnk_file(material, rho_in);
-        Ok(None)
-    } else if material.contains(':') {
+        let _ = read_lnk_file(material_arg, rho_in);
+        Ok(material)
+    } else if material_arg.contains(':') {
         // This is n:k:rho format
-        let parts: Vec<&str> = material.split(':').collect();
+        let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
             eprintln!("Invalid material format");
             return Err(KappaError::InvalidArgument("-c/-m".to_string()));
         } else {
-            let n = parts[0]
+            material.n = parts[0]
                 .parse::<f64>()
                 .map_err(|_| KappaError::InvalidType)?;
-            let k = parts[1]
+            material.k = parts[1]
                 .parse::<f64>()
                 .map_err(|_| KappaError::InvalidType)?;
-            let rho = parts[2]
+            material.rho = parts[2]
                 .parse::<f64>()
                 .map_err(|_| KappaError::InvalidType)?;
-            materials.push(material.to_string());
-            material_types.push(MaterialType::Core);
-            materials_mfrac.push(1.0);
-            Ok(Some((n, k, rho)))
+            material.kind = material_type;
+            Ok(material)
         }
     } else {
-        eprintln!("{} is not a valid material key", material);
+        eprintln!("{} is not a valid material key", material_arg);
         Err(KappaError::InvalidArgument("-c/-m".to_string()))
     }
 }
