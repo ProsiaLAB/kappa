@@ -1,4 +1,5 @@
 //! Command line interface for the `kappa`.
+use std::cmp::Ordering;
 use std::env;
 use std::iter::Peekable;
 use std::path::Path;
@@ -10,31 +11,7 @@ use colored::{Color, Colorize};
 use crate::components::MATERIAL_KEYS;
 use crate::io::{read_lnk_file, read_sizedis_file};
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
-
-#[derive(Debug)]
-struct Material {
-    key: String,
-    kind: MaterialKind,
-    cmd: bool,
-    n: f64,
-    k: f64,
-    rho: f64,
-    mfrac: f64,
-}
-
-impl Default for Material {
-    fn default() -> Self {
-        Material {
-            key: String::new(),
-            kind: MaterialKind::Core,
-            cmd: false,
-            n: 0.0,
-            k: 0.0,
-            rho: 0.0,
-            mfrac: 0.0,
-        }
-    }
-}
+use crate::opac::{Material, MaterialKind};
 
 enum SizeArg {
     PowerLaw {
@@ -53,19 +30,6 @@ enum SizeArg {
     File(String),
 }
 
-#[derive(Debug)]
-enum MaterialArg {
-    Key(String),
-    RefractiveIndex(String),
-    File(String),
-}
-
-#[derive(Debug)]
-pub enum MaterialKind {
-    Core,
-    Mantle,
-}
-
 pub fn launch() -> Result<KappaConfig, KappaError> {
     let mut kpc = KappaConfig::default();
 
@@ -74,15 +38,13 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         return Ok(kpc);
     }
 
-    let mut materials: Vec<Material> = Vec::with_capacity(20);
-
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-c" => {
                 if let Some(material_arg) = args.next() {
                     let material =
                         process_material(&material_arg.to_string(), &mut args, MaterialKind::Core)?;
-                    materials.push(material);
+                    kpc.materials.push(material);
                 } else {
                     eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
@@ -96,7 +58,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         &mut args,
                         MaterialKind::Mantle,
                     )?;
-                    materials.push(material);
+                    kpc.materials.push(material);
                 } else {
                     eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
@@ -318,12 +280,27 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             // Positional arguments
             _ => {
                 let material = process_material(arg.as_str(), &mut args, MaterialKind::Core)?;
-                materials.push(material);
+                kpc.materials.push(material);
             }
         }
     }
-    println!("args: {:?}", materials);
-    // todo!()
+    // Sort by `kind = MaterialKind::Core`
+    kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
+        (MaterialKind::Core, MaterialKind::Core) => Ordering::Equal,
+        (MaterialKind::Core, _) => Ordering::Less,
+        (_, MaterialKind::Core) => Ordering::Greater,
+        _ => Ordering::Equal,
+    });
+    (kpc.ncore, kpc.nmant) = kpc
+        .materials
+        .iter()
+        .fold((0, 0), |(core, mantle), material| match material.kind {
+            MaterialKind::Core => (core + 1, mantle),
+            MaterialKind::Mantle => (core, mantle + 1),
+        });
+    kpc.nmat = kpc.ncore + kpc.nmant;
+    println!("materials: {:?}", kpc);
+
     Ok(kpc)
 }
 
@@ -410,7 +387,7 @@ where
     })
 }
 
-fn process_wavelength() {
+pub fn process_wavelength() {
     todo!()
 }
 
@@ -453,6 +430,7 @@ where
         Ok(material)
     } else if material_arg.contains(':') {
         // This is n:k:rho format
+        material.cmd = true;
         let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
             eprintln!("Invalid material format");

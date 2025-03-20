@@ -1,10 +1,12 @@
 use anyhow::Result;
 
-use kappa::{cli, opac::KappaError};
+use kappa::cli;
+use kappa::opac::run;
+use kappa::opac::KappaError;
 
 fn main() -> Result<(), KappaError> {
-    cli::launch()?;
-    println!("No arguments provided. Running in default mode.");
+    let mut kpc = cli::launch()?;
+    run(&mut kpc)?;
 
     Ok(())
 }

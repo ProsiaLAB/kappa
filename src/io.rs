@@ -94,7 +94,7 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     Ok(component)
 }
 
-pub fn read_sizedis_file(file: &str) -> Result<()> {
+pub fn read_sizedis_file(_file: &str) -> Result<()> {
     todo!()
 }
 
@@ -119,6 +119,6 @@ fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     let x0 = l0[0];
     let y01 = n0[0];
     let y02 = k0[0];
-    let wp = (1.0 - y01) / x0.powi(2);
-    let gamma = y02 / x0.powi(3);
+    let _wp = (1.0 - y01) / x0.powi(2);
+    let _gamma = y02 / x0.powi(3);
 }

@@ -9,6 +9,38 @@ use anyhow::Result;
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 
+#[derive(Debug)]
+pub struct Material {
+    pub key: String,
+    pub kind: MaterialKind,
+    pub cmd: bool,
+    pub n: f64,
+    pub k: f64,
+    pub rho: f64,
+    pub mfrac: f64,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Material {
+            key: String::new(),
+            kind: MaterialKind::Core,
+            cmd: false,
+            n: 0.0,
+            k: 0.0,
+            rho: 0.0,
+            mfrac: 1.0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum MaterialKind {
+    Core,
+    Mantle,
+}
+
+#[derive(Debug)]
 pub struct KappaConfig {
     pub amin: f64,
     pub amax: f64,
@@ -25,6 +57,7 @@ pub struct KappaConfig {
     pub pcore: f64,
     pub pmantle: f64,
     pub nmat: usize,
+    pub ncore: usize,
     pub nmant: usize,
     pub method: KappaMethod,
     pub fmax: f64,
@@ -40,6 +73,7 @@ pub struct KappaConfig {
     pub blend_only: bool,
     pub xlim: f64,
     pub xlim_dhs: f64,
+    pub materials: Vec<Material>,
 }
 
 impl Default for KappaConfig {
@@ -60,6 +94,7 @@ impl Default for KappaConfig {
             pcore: 0.0,
             pmantle: 0.0,
             nmat: 0,
+            ncore: 0,
             nmant: 0,
             method: KappaMethod::DHS,
             fmax: 0.8,
@@ -75,6 +110,7 @@ impl Default for KappaConfig {
             blend_only: false,
             xlim: 1.0,
             xlim_dhs: 1.0,
+            materials: Vec::with_capacity(20),
         }
     }
 }
@@ -99,7 +135,7 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
     Apow,
     File,
@@ -132,6 +168,7 @@ impl SizeDistribution {
     }
 }
 
+#[derive(Debug)]
 pub enum KappaMethod {
     DHS,
     MMF,
@@ -141,7 +178,7 @@ pub enum KappaMethod {
 #[derive(Debug)]
 pub enum KappaError {
     TooManyMaterials,
-    NotEnoughMaterials,
+    NoCoreMaterial,
     ZeroDensity,
     MissingDensity,
     InvalidMaterialKey,
@@ -279,7 +316,7 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
         return Err(KappaError::TooManyMaterials);
     }
     if kpc.nmat == kpc.nmant && kpc.nmant > 0 {
-        return Err(KappaError::NotEnoughMaterials);
+        return Err(KappaError::NoCoreMaterial);
     }
 
     // Porosity
