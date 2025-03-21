@@ -123,15 +123,65 @@ pub trait SpecialConfigs {
 
 impl SpecialConfigs for KappaConfig {
     fn diana() -> Self {
-        KappaConfig::default()
-    }
-
-    fn dsharp() -> Self {
-        KappaConfig::default()
+        let mut kpc = KappaConfig {
+            nmat: 2,
+            ncore: 2,
+            pcore: 0.25,
+            ..Default::default()
+        };
+        kpc.materials.push(Material {
+            key: "pyr-mg70".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.87,
+            ..Default::default()
+        });
+        kpc.materials.push(Material {
+            key: "c-z".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.13,
+            ..Default::default()
+        });
+        kpc
     }
 
     fn dsharp_no_ice() -> Self {
-        KappaConfig::default()
+        let mut kpc = KappaConfig {
+            nmat: 3,
+            ncore: 3,
+            ..Default::default()
+        };
+        kpc.materials.push(Material {
+            key: "astrosil".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.3291,
+            ..Default::default()
+        });
+        kpc.materials.push(Material {
+            key: "c-org".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.3966,
+            ..Default::default()
+        });
+        kpc.materials.push(Material {
+            key: "fes".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.0743,
+            ..Default::default()
+        });
+        kpc
+    }
+
+    fn dsharp() -> Self {
+        let mut kpc = KappaConfig::dsharp_no_ice();
+        kpc.nmat += 1;
+        kpc.ncore += 1;
+        kpc.materials.push(Material {
+            key: "h2o-w".to_string(),
+            kind: MaterialKind::Core,
+            mfrac: 0.2000,
+            ..Default::default()
+        });
+        kpc
     }
 }
 
@@ -180,6 +230,7 @@ pub enum KappaError {
     TooManyMaterials,
     NoCoreMaterial,
     ZeroDensity,
+    ZeroMassFraction,
     MissingDensity,
     InvalidMaterialKey,
     InvalidLNKFile,
@@ -266,6 +317,7 @@ pub struct Component {
 
 pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
+    println!("materials: {:?}", kpc);
 
     compute_kappa(kpc)?;
     Ok(())
