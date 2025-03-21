@@ -5,6 +5,7 @@
 use std::f64::consts::PI;
 use std::mem::swap;
 
+use anyhow::anyhow;
 use anyhow::Result;
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
@@ -196,17 +197,17 @@ pub enum SizeDistribution {
 impl SizeDistribution {
     fn validate(&self, kpc: &KappaConfig) -> Result<(), KappaError> {
         match self {
-            SizeDistribution::Apow if kpc.apow < 0.0 => Err(KappaError::UnexpectedApow),
+            SizeDistribution::Apow if kpc.apow < 0.0 => Err(anyhow!("UnexpectedApow").into()),
             SizeDistribution::Norm => {
                 if kpc.amean <= 0.0 {
-                    return Err(KappaError::InvalidSizeParam(
-                        "`amean` must be positive for (log-)normal distribution".to_string(),
-                    ));
+                    return Err(
+                        anyhow!("`amean` must be positive for (log-)normal distribution").into(),
+                    );
                 }
                 if kpc.asigma == 0.0 {
-                    return Err(KappaError::InvalidSizeParam(
-                        "`asigma` cannot be zero for (log-)normal distribution".to_string(),
-                    ));
+                    return Err(
+                        anyhow!("`asigma` cannot be zero for (log-)normal distribution").into(),
+                    );
                 }
                 if kpc.asigma > 0.0 {
                     return Err(KappaError::ForceLogNormal);
@@ -227,41 +228,15 @@ pub enum KappaMethod {
 
 #[derive(Debug)]
 pub enum KappaError {
-    TooManyMaterials,
-    NoCoreMaterial,
-    ZeroDensity,
     ZeroMassFraction,
-    MissingDensity,
-    InvalidMaterialKey,
-    InvalidLNKFile,
-    DuplicateDensity,
-    MaterialBeforeStandard,
-    InvalidSizeInput,
-    InvalidSizeParam(String),
-    SizeDistFileNotFound,
-    DeltaExceedsSize,
-    InvalidArgument(String),
-    MissingArgument(String),
-    InvalidWavelengthInput,
-    MissingSizeParamLimit,
-    MissingSizeParamDHSLimit,
-    TooManySparseFileRanges,
-    NotEnoughWavelengthsForSparse,
-    MissingFeatureValue,
-    InvalidFeature,
-    InvalidPorosity,
-    IncompatibleArguments(String),
-    UnnormalizedAbundance,
-    SetSampling,
-    SamplingRequired,
-    SizeReorderRange,
-    SizeForceUnitSampling,
-    WavelengthReorderRange,
-    WavelengthForceUnitSampling,
-    UnexpectedApow,
     ForceLogNormal,
-    DisableSplit,
-    InvalidType,
+    Other(String),
+}
+
+impl From<anyhow::Error> for KappaError {
+    fn from(err: anyhow::Error) -> Self {
+        KappaError::Other(err.to_string())
+    }
 }
 
 /// Mueller matrix structure
@@ -315,7 +290,7 @@ pub struct Component {
     pub k0: Vec<f64>,
 }
 
-pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
+pub fn run(kpc: &mut KappaConfig) -> Result<()> {
     prepare_inputs(kpc)?;
     println!("materials: {:?}", kpc);
 
@@ -323,88 +298,53 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     Ok(())
 }
 
-fn prepare_inputs(kpc: &mut KappaConfig) -> Result<(), KappaError> {
-    if let Err(e) = check_inputs(kpc) {
-        match e {
-            KappaError::SizeReorderRange => {
-                eprintln!("Reordering size distribution range");
-                swap(&mut kpc.amin, &mut kpc.amax);
-            }
-            KappaError::WavelengthReorderRange => {
-                eprintln!("Reordering wavelength range");
-                swap(&mut kpc.lmin, &mut kpc.lmax);
-            }
-            KappaError::SizeForceUnitSampling => {
-                eprintln!("Setting na = 1 as amin = amax");
-                kpc.na = 1;
-            }
-            KappaError::WavelengthForceUnitSampling => {
-                eprintln!("Setting nlam = 1 as lmin = lmax");
-                kpc.nlam = 1;
-            }
-            KappaError::SetSampling => {
-                eprintln!("Setting sampling for size distribution");
-                kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
-            }
-            KappaError::InvalidSizeParam(msg) => {
-                return Err(KappaError::InvalidSizeParam(msg));
-            }
-            KappaError::ForceLogNormal => {
-                eprintln!("Forcing log-normal distribution");
-                kpc.sizedis = SizeDistribution::Lognorm;
-            }
-            KappaError::DisableSplit => {
-                kpc.split = false;
-            }
-            e => return Err(e),
-        }
-    }
-    Ok(())
-}
-
-fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
+fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     // Materials
     if kpc.nmat >= 20 {
-        return Err(KappaError::TooManyMaterials);
+        return Err(anyhow!("TooManyMaterials"));
     }
     if kpc.nmat == kpc.nmant && kpc.nmant > 0 {
-        return Err(KappaError::NoCoreMaterial);
+        return Err(anyhow!("NoCoreMaterial"));
     }
 
     // Porosity
     if kpc.pcore < 0.0 || kpc.pcore >= 1.0 || kpc.pmantle < 0.0 || kpc.pmantle >= 1.0 {
-        return Err(KappaError::InvalidPorosity);
+        return Err(anyhow!("InvalidPorosity"));
     }
 
     // Grain size distribution
     if kpc.amin <= 0.0 || kpc.amax <= 0.0 {
-        return Err(KappaError::InvalidSizeInput);
+        return Err(anyhow!("InvalidSizeInput"));
     }
     if kpc.amin >= kpc.amax {
-        // This error will actually be dealt with later
-        return Err(KappaError::SizeReorderRange);
+        swap(&mut kpc.amin, &mut kpc.amax);
     }
     if kpc.na == 0 {
-        // This error will actually be dealt with later
-        return Err(KappaError::SamplingRequired);
+        kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
     }
     if kpc.amin == kpc.amax && kpc.na != 1 {
-        return Err(KappaError::SizeForceUnitSampling);
+        kpc.na = 1;
     }
-    kpc.sizedis.validate(kpc)?;
+    match kpc.sizedis.validate(kpc) {
+        Ok(()) => {}
+        Err(KappaError::ForceLogNormal) => {
+            kpc.sizedis = SizeDistribution::Lognorm;
+        }
+        Err(_) => return Err(anyhow!("InvalidSizeParam")),
+    }
 
     // Wavelength grid
     if kpc.lmin <= 0.0 || kpc.lmax <= 0.0 {
-        return Err(KappaError::InvalidWavelengthInput);
+        return Err(anyhow!("InvalidWavelengthInput"));
     }
     if kpc.lmin > kpc.lmax {
-        return Err(KappaError::WavelengthReorderRange);
+        swap(&mut kpc.lmin, &mut kpc.lmax);
     }
     if kpc.nlam <= 1 && kpc.lmin != kpc.lmax {
-        return Err(KappaError::SamplingRequired);
+        return Err(anyhow!("SamplingRequired"));
     }
     if kpc.lmin == kpc.lmax && kpc.nlam != 1 {
-        return Err(KappaError::WavelengthForceUnitSampling);
+        kpc.nlam = 1
     }
     if kpc.nsparse > 0 {
         println!("Creating sparse scattering matrix file");
@@ -414,18 +354,18 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
     match kpc.method {
         KappaMethod::DHS => {
             if kpc.fmax < 0.0 || kpc.fmax >= 1.0 {
-                return Err(KappaError::InvalidArgument("fmax".to_string()));
+                return Err(anyhow!("InvalidArgument: fmax"));
             }
         }
         KappaMethod::MMF => {
             if kpc.mmf_struct > 3.0 {
-                return Err(KappaError::InvalidArgument("mmf_struct".to_string()));
+                return Err(anyhow!("`mmf_struct` must be between 1 and 3"));
             }
             if kpc.mmf_struct <= 0.0 {
-                return Err(KappaError::InvalidArgument("mmf_struct".to_string()));
+                return Err(anyhow!("`mmf_struct` must be positive"));
             }
             if kpc.mmf_a0 >= kpc.amin {
-                return Err(KappaError::InvalidArgument("mmf_a0".to_string()));
+                return Err(anyhow!("`mmf_a0` must be smaller than `amin`"));
             }
         }
         KappaMethod::CDE => {
@@ -437,22 +377,24 @@ fn check_inputs(kpc: &KappaConfig) -> Result<(), KappaError> {
 
     // Angular grid
     if kpc.nang % 2 == 1 {
-        return Err(KappaError::InvalidArgument("nang".to_string()));
+        return Err(anyhow!("`nang` must be even"));
     }
 
     // Other
     if kpc.split && kpc.blend_only {
         eprintln!("WARNING: Turning off `-s` for `-blend_only`");
-        return Err(KappaError::DisableSplit);
+        kpc.split = false;
     }
     if kpc.split && kpc.sizedis != SizeDistribution::Apow {
-        return Err(KappaError::InvalidArgument("split".to_string()));
+        return Err(anyhow!(
+            "`split` is only supported for powerlaw size distribution"
+        ));
     }
 
     Ok(())
 }
 
-fn compute_kappa(kpc: &KappaConfig) -> Result<(), KappaError> {
+fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
     let _ = kpc.na;
     // let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
@@ -468,14 +410,14 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<(), KappaError> {
     todo!()
 }
 
-pub fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64, KappaError> {
+pub fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
     let mut abunvac = 1.0 - abun.iter().sum::<f64>();
     let mvac = Complex::new(1.0, 0.0);
     if abunvac < 0.0 {
         if abunvac.abs() < 1e-5 {
             abunvac = 0.0;
         } else {
-            return Err(KappaError::UnnormalizedAbundance);
+            return Err(anyhow!("UnnormalizedAbundance"));
         }
     }
 

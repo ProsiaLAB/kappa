@@ -1,9 +1,9 @@
 use std::f64::consts::PI;
 
+use anyhow::anyhow;
 use anyhow::Result;
-use statrs::function::gamma::{gamma, gamma_ur};
 
-use crate::fractal::FractalError;
+use crate::utils::gamma::{gamma, gamma_ur};
 
 /// Computing geometrical cross-section of randomly oriented
 /// fractal dust aggregates based on a statistical distribution
@@ -31,23 +31,23 @@ pub fn get_geometric_cross_section_tazaki(
     pn: f64,
     k0: f64,
     df: f64,
-) -> Result<f64, FractalError> {
+) -> Result<f64> {
     let g: f64;
 
     if pn <= 0.9999 {
-        return Err(FractalError::NotEnoughMonomers);
+        return Err(anyhow!("NotEnoughMonomers"));
     }
 
     if !(0.9999..=3.0001).contains(&df) {
-        return Err(FractalError::ExceedsMaxFractalDimension);
+        return Err(anyhow!("ExceedsMaxFractalDimension"));
     }
 
     if iqcon != 1 && iqcon != 2 {
-        return Err(FractalError::UnknownRegimeFactor);
+        return Err(anyhow!("UnknownRegimeFactor"));
     }
 
     if iqapp != 1 && iqapp != 2 {
-        return Err(FractalError::UnknownIntegrationMethod);
+        return Err(anyhow!("UnknownIntegrationMethod"));
     }
 
     let mut a = 1.0;

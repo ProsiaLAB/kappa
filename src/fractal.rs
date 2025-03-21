@@ -9,17 +9,18 @@
 
 use std::f64::consts::PI;
 
-use anyhow::Result;
+use anyhow::anyhow;
+use anyhow::{Context, Result};
 use ndarray::s;
 use ndarray::Array;
 use ndarray::Array2;
 use ndarray::Array3;
 use num_complex::Complex;
 use num_complex::Complex64;
-use statrs::function::gamma::gamma;
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
 use crate::utils::bessel;
+use crate::utils::gamma::gamma;
 use crate::utils::legendre;
 use crate::utils::linalg;
 use crate::utils::special;
@@ -76,19 +77,6 @@ pub struct FractalResult {
     pub ang: Vec<f64>,
     pub smat: Array2<f64>,
     pub pf: Vec<f64>,
-}
-
-pub enum FractalError {
-    LowScatteringAngleResolution,
-    NotEnoughMonomers,
-    ExceedsMaxFractalDimension,
-    MieOverflow,
-    SingularMatrix,
-    IllegalMatrixElement,
-    UnnormalizedPhaseFunction,
-    UnknownRegimeFactor,
-    UnknownIntegrationMethod,
-    IntegrationFailure(String),
 }
 
 pub enum FractalSolver {
@@ -167,7 +155,7 @@ pub enum FractalGeometry {
 /// - `iqcor = 3`: [Botet et al. (1995), JPhA, 28, 297](https://iopscience.iop.org/article/10.1088/0305-4470/28/2/008)
 /// - `iqgeo = 2`: [Okuzumi et al. (2009), ApJ, 707, 1247](https://iopscience.iop.org/article/10.1088/0004-637X/698/2/1122/meta)
 /// - `iqgeo = 3`: [Tazaki (2021), MNRAS, 504, 2811](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract)
-pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult, FractalError> {
+pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
     let k = 2.0 * PI / fracc.lmd; // Wavenumber
     let r_g = fracc.r0 * (fracc.pn / fracc.k0).powf(1.0 / fracc.df); // Radius of gyration of the aggregate
     let r_c = (5.0f64 / 3.0f64).powf(r_g); // Characteristic radius of the aggregate
@@ -182,15 +170,15 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult, FractalEr
     let nmax = xmax as usize;
 
     if fracc.nang <= 1 {
-        return Err(FractalError::LowScatteringAngleResolution);
+        return Err(anyhow!("LowScatteringAngleResolution"));
     }
 
     if fracc.pn < 1.0 {
-        return Err(FractalError::NotEnoughMonomers);
+        return Err(anyhow!("NotEnoughMonomers"));
     }
 
     if fracc.df > 3.0 {
-        return Err(FractalError::ExceedsMaxFractalDimension);
+        return Err(anyhow!("ExceedsMaxFractalDimension"));
     }
 
     if (2 * nmax) >= 500 {
@@ -292,7 +280,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult, FractalEr
         smat[[j, 3]] = fracc.pn * s34 * (1.0 + (fracc.pn - 1.0) * sq);
 
         if smat[[j, 0]] < 0.0 {
-            return Err(FractalError::IllegalMatrixElement);
+            return Err(anyhow!("IllegalMatrixElement"));
         }
     }
 
@@ -332,7 +320,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult, FractalEr
 
     // Check normalization of phase function
     if (nrm - 1.0).abs() > 1e-3 {
-        return Err(FractalError::UnnormalizedPhaseFunction);
+        return Err(anyhow!("UnnormalizedPhaseFunction"));
     }
     let c_abs: f64;
     let c_ext: f64;
@@ -583,11 +571,7 @@ fn structure_factor_fn(x: f64, c: f64, d: f64, q: f64, r_g: f64) -> f64 {
 /// The original BHMIE code is taken from Bruce Draine's homepage:
 /// <https://www.astro.princeton.edu/~draine/scattering.html>, with
 /// slight modifications.
-fn lorenz_mie(
-    x: f64,
-    refrel: Complex64,
-    nstop: usize,
-) -> Result<(VecComplex64, VecComplex64), FractalError> {
+fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(VecComplex64, VecComplex64)> {
     let nmxx = 150_000;
 
     let y = refrel * x;
@@ -595,7 +579,7 @@ fn lorenz_mie(
     let xstop = x + 4.0 * x.powf(1.0 / 3.0) + 2.0;
     let nmx = xstop.max(ymod) as usize + 15;
     if nmx > nmxx {
-        return Err(FractalError::MieOverflow);
+        return Err(anyhow!("MieOverflow"));
     }
 
     let mut d: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nmx];
@@ -743,7 +727,7 @@ fn mean_field(
     ad: &Array2<Complex64>,
     x_g: f64,
     nmax: usize,
-) -> Result<VecComplex64, FractalError> {
+) -> Result<VecComplex64> {
     let jm = 400; // Number of grid points for Gauss-Legendre quadrature
 
     // Integration limits
@@ -762,8 +746,8 @@ fn mean_field(
     let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
 
     for (j, xj) in x.iter().enumerate() {
-        let (pmn, _) = legendre::lpmns(order, nmax, *xj)
-            .map_err(|_| FractalError::IntegrationFailure("In Legendre".to_string()))?;
+        let (pmn, _) =
+            legendre::lpmns(order, nmax, *xj).context("IntegrationFailure: In Legendre")?;
         let (lp, dlp) = legendre::lpn(pmax, *xj);
         al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
         ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
@@ -774,8 +758,7 @@ fn mean_field(
     let mut s_p = vec![Complex::new(0.0, 0.0); pmax];
 
     for (p, val) in s_p.iter_mut().enumerate() {
-        *val = bessel::int_sph_bessel(fracc, x_g, p)
-            .map_err(|_| FractalError::IntegrationFailure("In Bessel".to_string()))?;
+        *val = bessel::int_sph_bessel(fracc, x_g, p).context("IntegrationFailure: In Bessel")?;
     }
 
     let mut t: Array3<Complex<f64>> = Array3::zeros((2, nmax, nmax));
@@ -836,8 +819,7 @@ fn mean_field(
 
     // Invert the T-matrix elements S
     // and find mean-field vector r
-    let r = linalg::complex_matrix_inverse(pmax, 2 * pmax, &y, &s)
-        .map_err(|_| FractalError::SingularMatrix)?;
+    let r = linalg::complex_matrix_inverse(pmax, 2 * pmax, &y, &s).context("SingularMatrix")?;
 
     Ok(r)
 }

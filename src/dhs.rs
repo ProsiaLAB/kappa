@@ -11,6 +11,7 @@
 
 use std::f64::consts::PI;
 
+use anyhow::anyhow;
 use anyhow::Result;
 use ndarray::Array2;
 use num_complex::ComplexFloat;
@@ -38,16 +39,16 @@ pub struct DHSResult {
     d10: Array2<f64>,
 }
 
-pub enum DHSError {
-    InvalidWaveNumber,
-    InvalidShellRadius,
-    InvalidCoreRadius,
-    InvalidRefractiveIndex,
-    NotEnoughAngles,
-    TooManyAngles,
-    InvalidAngle,
-    InsufficentDimensions,
-}
+// pub enum DHSError {
+//     InvalidWaveNumber,
+//     InvalidShellRadius,
+//     InvalidCoreRadius,
+//     InvalidRefractiveIndex,
+//     NotEnoughAngles,
+//     TooManyAngles,
+//     InvalidAngle,
+//     InsufficentDimensions,
+// }
 
 /// This function computes electromagnetic scattering by a
 /// stratified sphere, i.e., a particle consisting of a
@@ -62,7 +63,7 @@ pub enum DHSError {
 /// The refractive index entering into this routine use
 /// a convention where the imaginary part has a different singn than
 /// what is used in modern books.
-pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
+pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let ll = 300000;
     let mxang = 1440;
 
@@ -87,37 +88,34 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
     }
 
     if dhsc.wave_number <= 0.0 {
-        return Err(DHSError::InvalidWaveNumber);
+        return Err(anyhow!("InvalidWaveNumber"));
     }
 
     if dhsc.r_shell <= 0.0 {
-        return Err(DHSError::InvalidShellRadius);
+        return Err(anyhow!("InvalidShellRadius"));
     }
 
     if dhsc.r_core <= 0.0 || dhsc.r_core > dhsc.r_shell {
-        return Err(DHSError::InvalidCoreRadius);
+        return Err(anyhow!("InvalidCoreRadius"));
     }
 
     if dhsc.r_indsh.re <= 0.0 || dhsc.r_indsh.im > 0.0 {
-        return Err(DHSError::InvalidRefractiveIndex);
+        return Err(anyhow!("InvalidRefractiveIndex"));
     }
     if dhsc.r_indco.re <= 0.0 || dhsc.r_indco.im > 0.0 {
-        return Err(DHSError::InvalidRefractiveIndex);
+        return Err(anyhow!("InvalidRefractiveIndex"));
     }
 
     if dhsc.numang > mxang || dhsc.numang > dhsc.max_angle {
-        eprintln!("ERROR: `numang` is too large.");
-        return Err(DHSError::TooManyAngles);
+        return Err(anyhow!("`numang` is too large."));
     }
     if nmx_1 + 1 > ll {
-        eprintln!("ERROR: `nmx_1` is too large.");
-        return Err(DHSError::TooManyAngles);
+        return Err(anyhow!("`nmx_1` is too large."));
     }
 
     for j in 0..dhsc.numang {
         if dhsc.mu[j] < -tol || dhsc.mu[j] > 1.0 + tol {
-            eprintln!("ERROR: `mu` is out of bounds.");
-            return Err(DHSError::InvalidAngle);
+            return Err(anyhow!("`mu` is out of bounds."));
         }
     }
 
@@ -362,7 +360,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult, DHSError> {
 
         n += 1;
         if n > nmx_2 {
-            return Err(DHSError::InsufficentDimensions);
+            return Err(anyhow!("InsufficentDimensions"));
         }
 
         for j in 0..dhsc.numang {

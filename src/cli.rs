@@ -4,6 +4,7 @@ use std::env;
 use std::iter::Peekable;
 use std::path::Path;
 
+use anyhow::anyhow;
 use anyhow::Result;
 use colored::{Color, Colorize};
 
@@ -56,8 +57,10 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         Err(e) => return Err(e),
                     }
                 } else {
-                    eprintln!("Missing material key/file/refractive index path after -c/-m");
-                    return Err(KappaError::MissingArgument("-c/-m".to_string()));
+                    return Err(anyhow!(
+                        "Missing material key/file/refractive index path after -c/-m"
+                    )
+                    .into());
                 }
             }
             "-m" => {
@@ -79,8 +82,10 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         Err(e) => return Err(e),
                     }
                 } else {
-                    eprintln!("Missing material key/file/refractive index path after -c/-m");
-                    return Err(KappaError::MissingArgument("-c/-m".to_string()));
+                    return Err(anyhow!(
+                        "Missing material key/file/refractive index path after -c/-m"
+                    )
+                    .into());
                 }
             }
             "--diana" => {
@@ -135,44 +140,44 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--amin" => {
                 kpc.amin = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--amin".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --amin"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --amin"))?;
             }
             "--amax" => {
                 kpc.amax = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--amax".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --amax"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --amax"))?;
             }
             "--amean" => {
                 kpc.amean = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--amean".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --amean"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --amean"))?;
             }
             "--asig" | "--asigma" => {
                 kpc.asigma = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--asig".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --asig"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --asig"))?;
             }
             "--apow" => {
                 kpc.apow = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--apow".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --apow"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --apow"))?;
             }
             "--na" => {
                 kpc.na = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--na".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --na"))?
                     .parse::<usize>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --na"))?;
             }
             // Wavelength options
             "-l" => {
@@ -181,33 +186,35 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--lmin" => {
                 kpc.lmin = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--lmin".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --lmin"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --lmin"))?;
             }
             "--lmax" => {
                 kpc.lmax = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--lmax".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --lmax"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --lmax"))?;
             }
             "--nlam" => {
                 kpc.nlam = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--nlam".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --nlam"))?
                     .parse::<usize>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --nlam"))?;
             }
             // Grain geometry and computational method options
             "-p" | "--porosity" => {
                 kpc.pcore = args
                     .next()
-                    .ok_or_else(|| KappaError::MissingArgument("--porosity".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --porosity"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --porosity"))?;
                 kpc.pmantle = match args.next() {
-                    Some(arg) => arg.parse::<f64>().map_err(|_| KappaError::InvalidType)?,
+                    Some(arg) => arg.parse::<f64>().map_err(|_| {
+                        anyhow!("Invalid value type for argument for mantle porosity")
+                    })?,
                     None => kpc.pcore, // Default is to use the same porosity
                 };
             }
@@ -234,41 +241,41 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "--xlim" => {
                 kpc.xlim = args
                     .next()
-                    .ok_or_else(|| KappaError::InvalidArgument("--xlim".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --xlim"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --xlim"))?;
             }
             "--xlim-dhs" => {
                 kpc.xlim_dhs = args
                     .next()
-                    .ok_or_else(|| KappaError::InvalidArgument("--xlim-dhs".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --xlim-dhs"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --xlim-dhs"))?;
             }
             "--mmf" | "--mmf-ss" => {
                 kpc.method = KappaMethod::MMF;
                 if arg == "--mmf-ss" {
                     kpc.mmf_ss = args
                         .next()
-                        .ok_or_else(|| KappaError::InvalidArgument("--mmf-ss".to_string()))?
+                        .ok_or_else(|| anyhow!("Missing argument: --mmf-ss"))?
                         .parse::<bool>()
-                        .map_err(|_| KappaError::InvalidType)?;
+                        .map_err(|_| anyhow!("Invalid value type for argument: --mmf-ss"))?;
                 }
                 kpc.mmf_a0 = args
                     .next()
-                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-a0".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --mmf-a0"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --mmf-a0"))?;
                 kpc.mmf_struct = args
                     .next()
-                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-struct".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --mmf-struct"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --mmf-struct"))?;
                 kpc.mmf_kf = args
                     .next()
-                    .ok_or_else(|| KappaError::InvalidArgument("--mmf-kf".to_string()))?
+                    .ok_or_else(|| anyhow!("Missing argument: --mmf-kf"))?
                     .parse::<f64>()
-                    .map_err(|_| KappaError::InvalidType)?;
+                    .map_err(|_| anyhow!("Invalid value type for argument: --mmf-kf"))?;
             }
             "--cde" => {
                 kpc.method = KappaMethod::CDE;
@@ -326,7 +333,7 @@ where
 {
     let amin_str = args
         .next()
-        .ok_or_else(|| KappaError::MissingArgument("--amin".to_string()))?;
+        .ok_or_else(|| anyhow!("Missing argument: --amin"))?;
 
     if amin_str.parse::<f64>().is_err() && Path::new(&amin_str).exists() {
         return Ok(SizeArg::File(amin_str));
@@ -334,16 +341,14 @@ where
 
     let mut amin = amin_str
         .parse::<f64>()
-        .map_err(|_| KappaError::InvalidType)?;
+        .map_err(|_| anyhow!("Invalid value type for argument: --amin"))?;
 
     let amax_str = args.next();
     if let Some(amax_str) = amax_str {
         if let Ok(mut amax) = amax_str.parse::<f64>() {
             if amax < 0.0 {
                 if amin + amax <= 0.0 {
-                    return Err(KappaError::InvalidArgument(
-                        "Invalid size range: amin + amax <= 0".to_string(),
-                    ));
+                    return Err(anyhow!("Invalid size range: amin + amax <= 0").into());
                 }
                 amin += amax;
                 amax = amin - 2.0 * amax;
@@ -361,21 +366,22 @@ where
                 if next_arg.contains(':') {
                     let parts: Vec<&str> = next_arg.split(':').collect();
                     if parts.len() != 2 {
-                        return Err(KappaError::InvalidArgument(
-                            "
-                        Could not parse centroid size and logarithmic width"
-                                .to_string(),
-                        ));
+                        return Err(
+                            anyhow!("Could not parse centroid size and logarithmic width").into(),
+                        );
                     }
                     let amean = parts[0]
                         .parse::<f64>()
-                        .map_err(|_| KappaError::InvalidType)?;
+                        .map_err(|_| anyhow!("Invalid value type for argument `amean`"))?;
                     let asigma = parts[1]
                         .parse::<f64>()
-                        .map_err(|_| KappaError::InvalidType)?;
+                        .map_err(|_| anyhow!("Invalid value type for argument `asigma`"))?;
                     let na = args
                         .next()
-                        .map(|s| s.parse::<usize>().map_err(|_| KappaError::InvalidType))
+                        .map(|s| {
+                            s.parse::<usize>()
+                                .map_err(|_| anyhow!("Invalid value type for argument `na`"))
+                        })
                         .transpose()?;
                     return Ok(SizeArg::LogNormal {
                         amin,
@@ -387,7 +393,10 @@ where
                 } else if let Ok(apow) = next_arg.parse::<f64>() {
                     let na = args
                         .next()
-                        .map(|s| s.parse::<usize>().map_err(|_| KappaError::InvalidType))
+                        .map(|s| {
+                            s.parse::<usize>()
+                                .map_err(|_| anyhow!("Invalid value type for argument `na`"))
+                        })
                         .transpose()?;
                     return Ok(SizeArg::PowerLaw {
                         amin,
@@ -396,9 +405,7 @@ where
                         na,
                     });
                 } else {
-                    return Err(KappaError::InvalidArgument(
-                        "Could not parse powerlaw or lognormal arguments".to_string(),
-                    ));
+                    return Err(anyhow!("Could not parse powerlaw or lognormal arguments").into());
                 }
             }
             Ok(SizeArg::PowerLaw {
@@ -408,7 +415,7 @@ where
                 na: None,
             })
         } else {
-            Err(KappaError::InvalidType)
+            Err(anyhow!("Error in parsing size argument").into())
         }
     } else {
         let amax = amin;
@@ -472,28 +479,26 @@ where
         material.cmd = true;
         let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
-            eprintln!("Invalid material format");
-            return Err(KappaError::InvalidArgument("-c/-m".to_string()));
+            return Err(anyhow!("Invalid material format").into());
         } else {
             material.n = parts[0]
                 .parse::<f64>()
-                .map_err(|_| KappaError::InvalidType)?;
+                .map_err(|_| anyhow!("Invalid value type for argument `n`"))?;
             material.k = parts[1]
                 .parse::<f64>()
-                .map_err(|_| KappaError::InvalidType)?;
+                .map_err(|_| anyhow!("Invalid value type for argument `k`"))?;
             material.rho = parts[2]
                 .parse::<f64>()
-                .map_err(|_| KappaError::InvalidType)?;
+                .map_err(|_| anyhow!("Invalid value type for argument `rho`"))?;
             if material.rho <= 0.0 {
                 eprintln!("Density must be positive");
-                return Err(KappaError::InvalidType);
+                return Err(anyhow!("Density must be positive").into());
             }
             material.kind = material_type;
             Ok(material)
         }
     } else {
-        eprintln!("{} is not a valid material key", material_arg);
-        Err(KappaError::InvalidArgument("-c/-m".to_string()))
+        Err(anyhow!("Invalid material key").into())
     }
 }
 

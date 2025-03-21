@@ -8,6 +8,7 @@
 
 use std::f64::consts::PI;
 
+use anyhow::anyhow;
 use anyhow::Result;
 use ndarray::Array2;
 use num_complex::ComplexFloat;
@@ -40,11 +41,11 @@ pub struct MieResult {
     f_0: Array2<f64>,
 }
 
-pub enum MieError {
-    ScatteringAnglesOverflow,
-}
+// pub enum MieError {
+//     ScatteringAnglesOverflow,
+// }
 
-pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
+pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult> {
     // miec.delta = 1e-8;
     // miec.cutoff = 1e-8;
 
@@ -78,7 +79,7 @@ pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult, MieError> {
     Ok(mier)
 }
 
-fn mie(miec: &MieConfig) -> Result<MieResult, MieError> {
+fn mie(miec: &MieConfig) -> Result<MieResult> {
     let m = miec.cmm.conj();
 
     let mier = get_scattering_matrix(miec, m)?;
@@ -86,7 +87,7 @@ fn mie(miec: &MieConfig) -> Result<MieResult, MieError> {
     Ok(mier)
 }
 
-fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult, MieError> {
+fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     let mut mier = MieResult {
         u: vec![],
         wth: vec![],
@@ -184,7 +185,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult, Mi
 
     let nangle = ((miec.thmax - miec.thmin) / miec.step) as usize + 1;
     if nangle > 6000 {
-        return Err(MieError::ScatteringAnglesOverflow);
+        return Err(anyhow!("ScatteringAnglesOverflow"));
     }
     mier.u = vec![0.0; nangle];
     mier.wth = vec![0.0; nangle];
