@@ -10,6 +10,7 @@ use colored::{Color, Colorize};
 // use crate::io::read_lnk_file;
 use crate::components::MATERIAL_KEYS;
 use crate::io::{read_lnk_file, read_sizedis_file};
+use crate::opac::SizeDistribution;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 use crate::opac::{Material, MaterialKind};
 
@@ -42,9 +43,18 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         match arg.as_str() {
             "-c" => {
                 if let Some(material_arg) = args.next() {
-                    let material =
-                        process_material(&material_arg.to_string(), &mut args, MaterialKind::Core)?;
-                    kpc.materials.push(material);
+                    match process_material(&material_arg.to_string(), &mut args, MaterialKind::Core)
+                    {
+                        Ok(material) => {
+                            kpc.nmat += 1;
+                            kpc.ncore += 1;
+                            kpc.materials.push(material);
+                        }
+                        Err(KappaError::ZeroMassFraction) => {
+                            args.next();
+                        }
+                        Err(e) => return Err(e),
+                    }
                 } else {
                     eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
@@ -53,12 +63,21 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             "-m" => {
                 // Same as "-c"
                 if let Some(material_arg) = args.next() {
-                    let material = process_material(
+                    match process_material(
                         &material_arg.to_string(),
                         &mut args,
                         MaterialKind::Mantle,
-                    )?;
-                    kpc.materials.push(material);
+                    ) {
+                        Ok(material) => {
+                            kpc.nmat += 1;
+                            kpc.nmant += 1;
+                            kpc.materials.push(material);
+                        }
+                        Err(KappaError::ZeroMassFraction) => {
+                            args.next();
+                        }
+                        Err(e) => return Err(e),
+                    }
                 } else {
                     eprintln!("Missing material key/file/refractive index path after -c/-m");
                     return Err(KappaError::MissingArgument("-c/-m".to_string()));
@@ -110,6 +129,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 SizeArg::File(file) => {
                     // Read file
                     let _ = read_sizedis_file(&file);
+                    kpc.sizedis = SizeDistribution::File;
                 }
             },
             "--amin" => {
@@ -278,10 +298,13 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 return Ok(kpc);
             }
             // Positional arguments
-            _ => {
-                let material = process_material(arg.as_str(), &mut args, MaterialKind::Core)?;
-                kpc.materials.push(material);
-            }
+            _ => match process_material(arg.as_str(), &mut args, MaterialKind::Core) {
+                Ok(material) => kpc.materials.push(material),
+                Err(KappaError::ZeroMassFraction) => {
+                    args.next();
+                }
+                Err(e) => return Err(e),
+            },
         }
     }
     // Sort by `kind = MaterialKind::Core`
@@ -291,15 +314,8 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         (_, MaterialKind::Core) => Ordering::Greater,
         _ => Ordering::Equal,
     });
-    (kpc.ncore, kpc.nmant) = kpc
-        .materials
-        .iter()
-        .fold((0, 0), |(core, mantle), material| match material.kind {
-            MaterialKind::Core => (core + 1, mantle),
-            MaterialKind::Mantle => (core, mantle + 1),
-        });
+
     kpc.nmat = kpc.ncore + kpc.nmant;
-    println!("materials: {:?}", kpc);
 
     Ok(kpc)
 }
@@ -316,13 +332,30 @@ where
         return Ok(SizeArg::File(amin_str));
     }
 
-    let amin = amin_str
+    let mut amin = amin_str
         .parse::<f64>()
         .map_err(|_| KappaError::InvalidType)?;
 
     let amax_str = args.next();
     if let Some(amax_str) = amax_str {
-        if let Ok(amax) = amax_str.parse::<f64>() {
+        if let Ok(mut amax) = amax_str.parse::<f64>() {
+            if amax < 0.0 {
+                if amin + amax <= 0.0 {
+                    return Err(KappaError::InvalidArgument(
+                        "Invalid size range: amin + amax <= 0".to_string(),
+                    ));
+                }
+                amin += amax;
+                amax = amin - 2.0 * amax;
+                let apow = 0.0;
+                let na: Option<usize> = None;
+                return Ok(SizeArg::PowerLaw {
+                    amin,
+                    amax: Some(amax),
+                    apow: Some(apow),
+                    na,
+                });
+            }
             let next_arg = args.next();
             if let Some(next_arg) = next_arg {
                 if next_arg.contains(':') {
@@ -368,23 +401,25 @@ where
                     ));
                 }
             }
-            return Ok(SizeArg::PowerLaw {
+            Ok(SizeArg::PowerLaw {
                 amin,
                 amax: Some(amax),
                 apow: None,
                 na: None,
-            });
+            })
         } else {
-            return Err(KappaError::InvalidType);
+            Err(KappaError::InvalidType)
         }
+    } else {
+        let amax = amin;
+        let na = 1;
+        Ok(SizeArg::PowerLaw {
+            amin,
+            amax: Some(amax),
+            apow: None,
+            na: Some(na),
+        })
     }
-
-    Ok(SizeArg::PowerLaw {
-        amin,
-        amax: None,
-        apow: None,
-        na: None,
-    })
 }
 
 pub fn process_wavelength() {
@@ -408,7 +443,11 @@ where
         if let Some(next_arg) = args.peek() {
             // If it is a number, it is a mass fraction
             if let Ok(mfrac) = next_arg.parse::<f64>() {
-                material.mfrac = mfrac;
+                material.mfrac = if mfrac == 0.0 {
+                    return Err(KappaError::ZeroMassFraction);
+                } else {
+                    mfrac
+                };
                 args.next();
                 Ok(material)
             } else {
@@ -445,6 +484,10 @@ where
             material.rho = parts[2]
                 .parse::<f64>()
                 .map_err(|_| KappaError::InvalidType)?;
+            if material.rho <= 0.0 {
+                eprintln!("Density must be positive");
+                return Err(KappaError::InvalidType);
+            }
             material.kind = material_type;
             Ok(material)
         }

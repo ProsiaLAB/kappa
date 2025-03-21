@@ -95,7 +95,24 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
 }
 
 pub fn read_sizedis_file(_file: &str) -> Result<()> {
+    // let file = std::fs::File::open(file)?;
+    // let reader = std::io::BufReader::new(file);
+
+    // // Skip comments
+    // let mut lines_iter = reader.lines().map_while(Result::ok);
+    // for line in lines_iter.by_ref() {
+    //     if !line.starts_with('#') || !line.starts_with("!") || !line.starts_with("*") {
+    //         let na = line
+    //             .trim()
+    //             .parse::<usize>()
+    //             .expect("Invalid number of size bins");
+
+    //     }
+    // }
+
     todo!()
+
+    // Ok(())
 }
 
 fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
