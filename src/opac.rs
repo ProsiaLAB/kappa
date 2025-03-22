@@ -7,8 +7,11 @@ use std::mem::swap;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use ndarray::Array1;
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
+
+use crate::types::RVector;
 
 #[derive(Debug)]
 pub struct Material {
@@ -35,7 +38,7 @@ impl Default for Material {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MaterialKind {
     Core,
     Mantle,
@@ -64,6 +67,7 @@ pub struct KappaConfig {
     pub fmax: f64,
     pub write_fits: bool,
     pub write_scatter: bool,
+    pub write_grid: bool,
     pub for_radmc: bool,
     pub nsparse: usize,
     pub nsubgrains: usize,
@@ -77,7 +81,6 @@ pub struct KappaConfig {
     pub xlim_dhs: f64,
     pub materials: Vec<Material>,
     pub outdir: Option<String>,
-    pub write_grid: bool,
 }
 
 impl Default for KappaConfig {
@@ -104,8 +107,10 @@ impl Default for KappaConfig {
             fmax: 0.8,
             write_fits: false,
             write_scatter: false,
+            write_grid: false,
             for_radmc: false,
             nsparse: 0,
+            nsubgrains: 0,
             mmf_struct: 0.0,
             mmf_a0: 0.0,
             mmf_kf: 0.0,
@@ -115,6 +120,7 @@ impl Default for KappaConfig {
             xlim: 1.0,
             xlim_dhs: 1.0,
             materials: Vec::with_capacity(20),
+            outdir: Option::Some(String::from("output")),
         }
     }
 }
@@ -244,12 +250,12 @@ impl From<anyhow::Error> for KappaError {
 
 /// Mueller matrix structure
 pub struct Mueller {
-    pub f11: Vec<f64>,
-    pub f12: Vec<f64>,
-    pub f22: Vec<f64>,
-    pub f33: Vec<f64>,
-    pub f44: Vec<f64>,
-    pub f34: Vec<f64>,
+    pub f11: RVector,
+    pub f12: RVector,
+    pub f22: RVector,
+    pub f33: RVector,
+    pub f44: RVector,
+    pub f34: RVector,
 }
 
 /// Particle
@@ -258,10 +264,10 @@ pub struct Particle {
     pub rvmin: f64,
     pub rvmax: f64,
     pub rho: f64,
-    pub k_abs: Vec<f64>,
-    pub k_sca: Vec<f64>,
-    pub k_ext: Vec<f64>,
-    pub g: Vec<f64>,
+    pub k_abs: RVector,
+    pub k_sca: RVector,
+    pub k_ext: RVector,
+    pub g: RVector,
     pub f: Vec<Mueller>,
     pub trust: Vec<bool>,
     pub is_ok: bool,
@@ -286,11 +292,11 @@ pub struct Component {
     /// size
     pub size: usize,
     /// Wavelengths.
-    pub l0: Vec<f64>,
+    pub l0: RVector,
     /// Refractive index.
-    pub n0: Vec<f64>,
+    pub n0: RVector,
     /// Extinction coefficient.
-    pub k0: Vec<f64>,
+    pub k0: RVector,
 }
 
 pub fn run(kpc: &mut KappaConfig) -> Result<()> {
@@ -397,15 +403,46 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
 }
 
 fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
-    // let _ = kpc.na;
-    // let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
+    let ns = kpc.na;
+    let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
-    // let r = vec![0.0; ns];
-    // let nr = vec![0.0; ns];
-    // let f = vec![0.0; nf];
-    // let wf = vec![0.0; nf];
-    // let e1mantle = vec![0.0; kpc.nlam];
-    // let e2mantle = vec![0.0; kpc.nlam];
+    let mut r: RVector = Array1::zeros(ns);
+    let mut nr: RVector = Array1::zeros(ns);
+    let mut f: RVector = Array1::zeros(nf);
+    let mut wf: RVector = Array1::zeros(nf);
+    let mut e1mantle: RVector = Array1::zeros(kpc.nlam);
+    let mut e2mantle: RVector = Array1::zeros(kpc.nlam);
+
+    // Normalize the mass fractions
+    let (tot, tot_mantle) = kpc
+        .materials
+        .iter()
+        .fold((0.0, 0.0), |(sum, sum_mantle), m| {
+            let sum_mantle = if m.kind == MaterialKind::Mantle {
+                sum_mantle + m.mfrac
+            } else {
+                sum_mantle
+            };
+            (sum + m.mfrac, sum_mantle)
+        });
+
+    let mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
+    let mfrac_mantle: RVector = kpc
+        .materials
+        .iter()
+        .filter(|m| m.kind == MaterialKind::Mantle)
+        .map(|m| m.mfrac / tot_mantle)
+        .collect();
+
+    let aminlog = kpc.amin.log10();
+    let amaxlog = kpc.amax.log10();
+    let pow = -kpc.apow;
+
+    if ns == 1 {
+        // Just one size
+        r[0] = 10.0_f64.powf((aminlog + amaxlog) / 2.0);
+        nr[0] = r[0].powf(pow + 1.0); // should be 1/r[0]^3 ???  Not important.
+    }
 
     // bruggeman_blend();
     // maxwell_garnet_blend();

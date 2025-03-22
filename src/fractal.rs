@@ -12,21 +12,17 @@ use std::f64::consts::PI;
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 use ndarray::s;
-use ndarray::Array;
-use ndarray::Array2;
-use ndarray::Array3;
+use ndarray::{Array1, Array2, Array3};
 use num_complex::Complex;
 use num_complex::Complex64;
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
+use crate::types::{CMatrix, CVector, RMatrix, RVector};
 use crate::utils::bessel;
 use crate::utils::gamma::gamma;
 use crate::utils::legendre;
 use crate::utils::linalg;
 use crate::utils::special;
-
-/// Complex vector type.
-type VecComplex64 = Vec<Complex64>;
 
 pub struct FractalConfig {
     pub solver: FractalSolver,
@@ -74,9 +70,9 @@ pub struct FractalResult {
     pub c_abs: f64,
     pub g: f64,
     pub dphi: f64,
-    pub ang: Vec<f64>,
-    pub smat: Array2<f64>,
-    pub pf: Vec<f64>,
+    pub ang: RVector,
+    pub smat: RMatrix,
+    pub pf: RVector,
 }
 
 pub enum FractalSolver {
@@ -204,11 +200,11 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
 
     let (an, bn) = lorenz_mie(x0, fracc.refrel, nmax)?;
 
-    let mut ad: Array2<Complex64> = Array2::zeros((nmax, 2));
-    let mut dd: Array2<Complex64> = Array2::zeros((nmax, 2));
+    let mut ad: CMatrix = Array2::zeros((nmax, 2));
+    let mut dd: CMatrix = Array2::zeros((nmax, 2));
 
-    ad.slice_mut(s![.., 0]).assign(&Array::from_vec(an));
-    ad.slice_mut(s![.., 1]).assign(&Array::from_vec(bn));
+    ad.slice_mut(s![.., 0]).assign(&an);
+    ad.slice_mut(s![.., 1]).assign(&bn);
 
     // Solve multiple scattering?
     match fracc.solver {
@@ -228,10 +224,10 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
     let dang = PI / 2.0 / (fracc.nang - 1) as f64;
     let (s1, s2) = renormalize(fracc, &dd, dang, nmax);
 
-    let mut smat: Array2<f64> = Array2::zeros((2 * fracc.nang, 4));
+    let mut smat: RMatrix = Array2::zeros((2 * fracc.nang, 4));
     let ang = (0..(2 * fracc.nang))
         .map(|j| j as f64 * dang)
-        .collect::<Vec<f64>>();
+        .collect::<RVector>();
 
     for j in 0..(2 * fracc.nang) {
         let q = 2.0 * k * (0.5 * ang[j]).sin();
@@ -296,7 +292,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
         * PI
         / (k * k);
 
-    let pf = (smat.slice(s![.., 0]).to_owned() / c_sca / (k * k)).to_vec();
+    let pf = smat.slice(s![.., 0]).to_owned() / c_sca / (k * k);
     let g = (0..(fracc.nang - 1))
         .map(|j| {
             dang * (pf[j] * (ang[j].sin()) * (ang[j].cos())
@@ -571,7 +567,7 @@ fn structure_factor_fn(x: f64, c: f64, d: f64, q: f64, r_g: f64) -> f64 {
 /// The original BHMIE code is taken from Bruce Draine's homepage:
 /// <https://www.astro.princeton.edu/~draine/scattering.html>, with
 /// slight modifications.
-fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(VecComplex64, VecComplex64)> {
+fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(CVector, CVector)> {
     let nmxx = 150_000;
 
     let y = refrel * x;
@@ -582,7 +578,7 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(VecComplex64, 
         return Err(anyhow!("MieOverflow"));
     }
 
-    let mut d: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nmx];
+    let mut d: CVector = Array1::zeros(nmx);
 
     for n in 0..nmx - 1 {
         let en = nmx - 1 - n;
@@ -596,8 +592,8 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(VecComplex64, 
     let mut chi_1 = psi_0;
     let mut xi_1 = Complex::new(psi_1, -chi_1);
 
-    let mut a: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nstop];
-    let mut b: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nstop];
+    let mut a: CVector = Array1::zeros(nstop);
+    let mut b: CVector = Array1::zeros(nstop);
 
     for n in 0..nstop {
         let nf = n as f64;
@@ -623,26 +619,21 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(VecComplex64, 
 /// The original BHMIE code is taken from Bruce Draine's homepage:
 /// <https://www.astro.princeton.edu/~draine/scattering.html>, with
 /// slight modifications.
-fn renormalize(
-    fracc: &FractalConfig,
-    d: &Array2<Complex64>,
-    dang: f64,
-    nmax: usize,
-) -> (Vec<Complex64>, Vec<Complex64>) {
+fn renormalize(fracc: &FractalConfig, d: &CMatrix, dang: f64, nmax: usize) -> (CVector, CVector) {
     let amu = (0..fracc.nang)
         .map(|j| j as f64 * dang)
         .map(|theta| theta.cos())
-        .collect::<Vec<f64>>();
+        .collect::<RVector>();
 
-    let mut pi = vec![0.0; fracc.nang];
-    let mut pi0 = vec![0.0; fracc.nang];
-    let mut pi1 = vec![1.0; fracc.nang];
+    let mut pi: RVector = Array1::zeros(fracc.nang);
+    let mut pi0: RVector = Array1::zeros(fracc.nang);
+    let mut pi1: RVector = Array1::zeros(fracc.nang);
 
-    let mut tau = vec![0.0; fracc.nang];
+    let mut tau: RVector = Array1::zeros(fracc.nang);
 
     let nn = 2 * fracc.nang;
-    let mut s1: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
-    let mut s2: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
+    let mut s1: CVector = Array1::zeros(nn);
+    let mut s2: CVector = Array1::zeros(nn);
 
     let mut p = -1.0;
     // let mut an = Complex::new(0.0, 0.0);
@@ -722,12 +713,7 @@ fn renormalize(
 /// - b(nu,n,p) .ne. 0 and a(nu,n,p) = 0 when p has the opposite parity to n+nu
 ///
 ///--------------------------------------------------------------------------------
-fn mean_field(
-    fracc: &FractalConfig,
-    ad: &Array2<Complex64>,
-    x_g: f64,
-    nmax: usize,
-) -> Result<VecComplex64> {
+fn mean_field(fracc: &FractalConfig, ad: &CMatrix, x_g: f64, nmax: usize) -> Result<CVector> {
     let jm = 400; // Number of grid points for Gauss-Legendre quadrature
 
     // Integration limits
@@ -741,21 +727,21 @@ fn mean_field(
     let pmax = 2 * nmax;
 
     // Store values of Legendre polynomials (P_n^m) and their derivatives
-    let mut al1n: Array2<f64> = Array2::zeros((jm, nmax));
-    let mut ln: Array2<f64> = Array2::zeros((jm, pmax));
-    let mut dln: Array2<f64> = Array2::zeros((jm, pmax));
+    let mut al1n: RMatrix = Array2::zeros((jm, nmax));
+    let mut ln: RMatrix = Array2::zeros((jm, pmax));
+    let mut dln: RMatrix = Array2::zeros((jm, pmax));
 
     for (j, xj) in x.iter().enumerate() {
         let (pmn, _) =
             legendre::lpmns(order, nmax, *xj).context("IntegrationFailure: In Legendre")?;
         let (lp, dlp) = legendre::lpn(pmax, *xj);
-        al1n.slice_mut(s![j, ..]).assign(&Array::from_vec(pmn));
-        ln.slice_mut(s![j, ..]).assign(&Array::from_vec(lp));
-        dln.slice_mut(s![j, ..]).assign(&Array::from_vec(dlp));
+        al1n.slice_mut(s![j, ..]).assign(&pmn);
+        ln.slice_mut(s![j, ..]).assign(&lp);
+        dln.slice_mut(s![j, ..]).assign(&dlp);
     }
 
     // Pre-compute the spherical Bessel functions and the T-matrix
-    let mut s_p = vec![Complex::new(0.0, 0.0); pmax];
+    let mut s_p: CVector = Array1::zeros(pmax);
 
     for (p, val) in s_p.iter_mut().enumerate() {
         *val = bessel::int_sph_bessel(fracc, x_g, p).context("IntegrationFailure: In Bessel")?;
@@ -803,8 +789,8 @@ fn mean_field(
         }
     }
 
-    let mut s: Array2<Complex64> = Array2::ones((pmax, 2));
-    let mut y: Vec<Complex64> = vec![Complex::new(0.0, 0.0); pmax];
+    let mut s: CMatrix = Array2::ones((pmax, 2));
+    let mut y: CVector = Array1::zeros(pmax);
 
     for n in 0..nmax {
         for nu in 0..nmax {

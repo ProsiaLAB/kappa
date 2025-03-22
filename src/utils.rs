@@ -25,6 +25,9 @@ pub mod constants {
 pub mod spline {
     use anyhow::bail;
     use anyhow::Result;
+    use ndarray::Array1;
+
+    use crate::types::RVector;
     /// Given the arrays `xv` and `yv` of lengh `n` containing a tabulated
     /// function, i.e., `yv[i] = f(xv[i])`, with `xv[0] < xv[1] < ... < xv[n-1]`,
     /// and given the first derivative values `yp1` and `ypn` for the first
@@ -39,9 +42,9 @@ pub mod spline {
     /// # Reference
     /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
     ///   Press et al., 2007
-    pub fn spline(xv: &[f64], yv: &[f64], n: usize, yp1: f64, ypn: f64) -> Vec<f64> {
-        let mut y2: Vec<f64> = vec![0.0; n];
-        let mut u: Vec<f64> = vec![0.0; n - 1];
+    pub fn spline(xv: &[f64], yv: &[f64], n: usize, yp1: f64, ypn: f64) -> RVector {
+        let mut y2: RVector = Array1::zeros(n);
+        let mut u: RVector = Array1::zeros(n - 1);
 
         // The lower boundary condition is set either to be “natural”
         // or else to have a specified first derivative.
@@ -130,10 +133,13 @@ pub mod legendre {
 
     use anyhow::bail;
     use anyhow::Result;
+    use ndarray::Array1;
 
-    pub fn lpmns(m: usize, n: usize, x: f64) -> Result<(Vec<f64>, Vec<f64>)> {
-        let mut pm = vec![0.0; n];
-        let mut pd = vec![0.0; n];
+    use crate::types::RVector;
+
+    pub fn lpmns(m: usize, n: usize, x: f64) -> Result<(RVector, RVector)> {
+        let mut pm: RVector = Array1::zeros(n);
+        let mut pd: RVector = Array1::zeros(n);
 
         let mf = m as f64;
 
@@ -201,9 +207,9 @@ pub mod legendre {
         Ok((pm, pd))
     }
 
-    pub fn lpn(n: usize, x: f64) -> (Vec<f64>, Vec<f64>) {
-        let mut pn = vec![0.0; n];
-        let mut pd = vec![0.0; n];
+    pub fn lpn(n: usize, x: f64) -> (RVector, RVector) {
+        let mut pn: RVector = Array1::zeros(n);
+        let mut pd: RVector = Array1::zeros(n);
 
         pn[0] = 1.0;
         pn[1] = x;
@@ -228,7 +234,7 @@ pub mod legendre {
         (pn, pd)
     }
 
-    pub fn gauss_legendre(x1: f64, x2: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+    pub fn gauss_legendre(x1: f64, x2: f64, n: usize) -> (RVector, RVector) {
         let eps = 1.0e-14;
 
         let mut pp = 0.0;
@@ -236,8 +242,8 @@ pub mod legendre {
         let xm = 0.5 * (x2 + x1);
         let xl = 0.5 * (x2 - x1);
 
-        let mut x: Vec<f64> = vec![0.0; n];
-        let mut w: Vec<f64> = vec![0.0; n];
+        let mut x: RVector = Array1::zeros(n);
+        let mut w: RVector = Array1::zeros(n);
 
         let nf = n as f64;
 
@@ -270,10 +276,12 @@ pub mod legendre {
 pub mod bessel {
     use anyhow::bail;
     use anyhow::Result;
+    use ndarray::Array1;
     use num_complex::{Complex, Complex64};
 
     use crate::fractal::FractalGeometry;
     use crate::fractal::{FractalConfig, FractalCutoff};
+    use crate::types::{CVector, RVector};
 
     use super::special::two_point_correlation;
 
@@ -393,9 +401,9 @@ pub mod bessel {
         let umin = x_g * (-eta2 / fracc.df).exp();
         let du = (umax - umin).powf(1.0 / (nnf - 1.0));
 
-        let mut u = vec![0.0; nn];
-        let mut intg: Vec<Complex64> = vec![Complex::new(0.0, 0.0); nn];
-        let mut intg_unit = vec![0.0; nn];
+        let mut u: RVector = Array1::zeros(nn);
+        let mut intg: CVector = Array1::zeros(nn);
+        let mut intg_unit: RVector = Array1::zeros(nn);
 
         for (n, val) in u.iter_mut().enumerate().take(nn) {
             *val = umin * du.powi(n as i32);
@@ -432,6 +440,7 @@ pub mod bessel {
         // Use iterators to apply the trapezoidal rule
         let wa: Complex64 = intg
             .windows(2)
+            .into_iter()
             .zip(u.windows(2))
             .map(|(intg_pair, u_pair)| {
                 0.5 * (intg_pair[0] + intg_pair[1]) * (u_pair[1] - u_pair[0])
@@ -440,6 +449,7 @@ pub mod bessel {
 
         let mut unitary: f64 = intg_unit
             .windows(2)
+            .into_iter()
             .zip(u.windows(2))
             .map(|(intg_unit_pair, u_pair)| {
                 0.5 * (intg_unit_pair[0] + intg_unit_pair[1]) * (u_pair[1] - u_pair[0])
@@ -464,17 +474,17 @@ pub mod bessel {
         Ok(sp)
     }
 
-    fn sph_bessel(m: usize, x: f64, isol: usize) -> Result<(Vec<f64>, Vec<f64>)> {
+    fn sph_bessel(m: usize, x: f64, isol: usize) -> Result<(RVector, RVector)> {
         let imax = 100; // truncation order of the series expansion
         let nwarmup = 100; // number of warm-up iterations
 
         let floor_val = 1.0e-70;
         let ceiling_val = 1.0e+70;
 
-        let mut sj = vec![0.0; m + 1];
+        let mut sj: RVector = Array1::zeros(m + 1);
         sj[0] = x.sin() / x;
 
-        let mut sy = vec![0.0; m + 1];
+        let mut sy: RVector = Array1::zeros(m + 1);
         sy[0] = -x.cos() / x;
 
         if m == 0 {
@@ -508,7 +518,7 @@ pub mod bessel {
                 // Downward recursion
                 let mut k1 = 0.0;
                 let mut k0 = 1.0;
-                let mut k = vec![0.0; m + nwarmup + 1];
+                let mut k: RVector = Array1::zeros(m + nwarmup + 1);
                 for n in (m + nwarmup..0).rev() {
                     let nf = n as f64;
                     k[n] = -k1 + (2.0 * nf + 3.0) * k0 / x;
@@ -560,16 +570,18 @@ pub mod bessel {
 
 pub mod linalg {
     use anyhow::{bail, Result};
-    use ndarray::Array2;
+    use ndarray::{Array1, Array2};
     use num_complex::Complex64;
 
-    fn lu_decomposition(a: &mut Array2<f64>, n: usize) -> Result<Vec<usize>> {
+    use crate::types::{CMatrix, CVector, RMatrix, RVector, UVector};
+
+    fn lu_decomposition(a: &mut RMatrix, n: usize) -> Result<UVector> {
         let mut d = 1.0;
         let mut imax = 0;
         let eps = 1e-20;
 
-        let mut vv = vec![0.0; 1000];
-        let mut indx = vec![0; n];
+        let mut vv: RVector = Array1::zeros(1000);
+        let mut indx: UVector = Array1::zeros(n);
 
         let mut aamax;
 
@@ -631,7 +643,7 @@ pub mod linalg {
         Ok(indx)
     }
 
-    fn lu_backsubstitution(a: &Array2<f64>, b: &mut [f64], indx: &[usize], n: usize) {
+    fn lu_backsubstitution(a: &RMatrix, b: &mut RVector, indx: &UVector, n: usize) {
         let mut ii = 0;
         for i in 0..n {
             let ll = indx[i];
@@ -658,13 +670,13 @@ pub mod linalg {
     pub fn complex_matrix_inverse(
         n: usize,
         np: usize,
-        p: &[Complex64],
-        t: &Array2<Complex64>,
-    ) -> Result<Vec<Complex64>> {
-        let mut a: Array2<f64> = Array2::zeros((np, np));
-        let mut b = vec![0.0; np];
+        p: &CVector,
+        t: &CMatrix,
+    ) -> Result<CVector> {
+        let mut a: RMatrix = Array2::zeros((np, np));
+        let mut b: RVector = Array1::zeros(np);
 
-        let mut r: Vec<Complex64> = vec![Complex64::new(0.0, 0.0); np];
+        let mut r: CVector = Array1::zeros(np);
 
         for i in 0..n {
             for j in 0..n {

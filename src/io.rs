@@ -1,6 +1,7 @@
 //! Read the `lnk` files
 
 use anyhow::Result;
+use ndarray::Array1;
 
 use std::io::BufRead;
 
@@ -86,9 +87,9 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
         state,
         rho,
         size,
-        l0,
-        n0,
-        k0,
+        l0: Array1::from_vec(l0),
+        n0: Array1::from_vec(n0),
+        k0: Array1::from_vec(k0),
     };
 
     Ok(component)

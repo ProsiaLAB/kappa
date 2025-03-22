@@ -2,7 +2,9 @@ use std::f64::consts::PI;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use ndarray::Array1;
 
+use crate::types::RVector;
 use crate::utils::gamma::{gamma, gamma_ur};
 
 /// Computing geometrical cross-section of randomly oriented
@@ -150,8 +152,8 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
     } else {
         let nxf = nx as f64;
         let dlnx = (xmax - xmin).ln() / (nxf - 1.0);
-        let mut x: Vec<f64> = vec![0.0; nx];
-        let mut sang: Vec<f64> = vec![1.0; nx];
+        let mut x: RVector = Array1::zeros(nx);
+        let mut sang: RVector = Array1::zeros(nx);
         sigma = 0.0;
         for i in 0..nx {
             let ir = i as f64;
@@ -187,7 +189,7 @@ fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
         3 => (x / xmin).powf(1.0 / df),
         _ => unreachable!(),
     };
-    let mut u: Vec<f64> = vec![0.0; nmax_u];
+    let mut u: RVector = Array1::zeros(nmax_u);
 
     sang = 0.0;
     let umin = 0.0;
