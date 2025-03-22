@@ -94,27 +94,6 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     Ok(component)
 }
 
-pub fn read_sizedis_file(_file: &str) -> Result<()> {
-    // let file = std::fs::File::open(file)?;
-    // let reader = std::io::BufReader::new(file);
-
-    // // Skip comments
-    // let mut lines_iter = reader.lines().map_while(Result::ok);
-    // for line in lines_iter.by_ref() {
-    //     if !line.starts_with('#') || !line.starts_with("!") || !line.starts_with("*") {
-    //         let na = line
-    //             .trim()
-    //             .parse::<usize>()
-    //             .expect("Invalid number of size bins");
-
-    //     }
-    // }
-
-    todo!()
-
-    // Ok(())
-}
-
 fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     // Check if we need to reverse the arrays
     if l0[l0.len() - 1] < l0[0] {
@@ -138,4 +117,29 @@ fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     let y02 = k0[0];
     let _wp = (1.0 - y01) / x0.powi(2);
     let _gamma = y02 / x0.powi(3);
+}
+
+pub fn read_sizedis_file(_file: &str) -> Result<()> {
+    // let file = std::fs::File::open(file)?;
+    // let reader = std::io::BufReader::new(file);
+
+    // // Skip comments
+    // let mut lines_iter = reader.lines().map_while(Result::ok);
+    // for line in lines_iter.by_ref() {
+    //     if !line.starts_with('#') || !line.starts_with("!") || !line.starts_with("*") {
+    //         let na = line
+    //             .trim()
+    //             .parse::<usize>()
+    //             .expect("Invalid number of size bins");
+
+    //     }
+    // }
+
+    todo!()
+
+    // Ok(())
+}
+
+pub fn read_wavelength_grid(_file: &str) -> Result<()> {
+    todo!()
 }
