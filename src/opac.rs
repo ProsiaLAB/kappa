@@ -66,6 +66,7 @@ pub struct KappaConfig {
     pub write_scatter: bool,
     pub for_radmc: bool,
     pub nsparse: usize,
+    pub nsubgrains: usize,
     pub mmf_struct: f64,
     pub mmf_a0: f64,
     pub mmf_kf: f64,
@@ -75,6 +76,8 @@ pub struct KappaConfig {
     pub xlim: f64,
     pub xlim_dhs: f64,
     pub materials: Vec<Material>,
+    pub outdir: Option<String>,
+    pub write_grid: bool,
 }
 
 impl Default for KappaConfig {
@@ -190,15 +193,15 @@ impl SpecialConfigs for KappaConfig {
 pub enum SizeDistribution {
     Apow,
     File,
-    Norm,
-    Lognorm,
+    Normal,
+    LogNormal,
 }
 
 impl SizeDistribution {
     fn validate(&self, kpc: &KappaConfig) -> Result<(), KappaError> {
         match self {
             SizeDistribution::Apow if kpc.apow < 0.0 => Err(anyhow!("UnexpectedApow").into()),
-            SizeDistribution::Norm => {
+            SizeDistribution::Normal => {
                 if kpc.amean <= 0.0 {
                     return Err(
                         anyhow!("`amean` must be positive for (log-)normal distribution").into(),
@@ -292,8 +295,7 @@ pub struct Component {
 
 pub fn run(kpc: &mut KappaConfig) -> Result<()> {
     prepare_inputs(kpc)?;
-    println!("materials: {:?}", kpc);
-
+    // println!("{:?}", kpc);
     compute_kappa(kpc)?;
     Ok(())
 }
@@ -328,7 +330,7 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     match kpc.sizedis.validate(kpc) {
         Ok(()) => {}
         Err(KappaError::ForceLogNormal) => {
-            kpc.sizedis = SizeDistribution::Lognorm;
+            kpc.sizedis = SizeDistribution::LogNormal;
         }
         Err(_) => return Err(anyhow!("InvalidSizeParam")),
     }
@@ -395,7 +397,7 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
 }
 
 fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
-    let _ = kpc.na;
+    // let _ = kpc.na;
     // let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
     // let r = vec![0.0; ns];
