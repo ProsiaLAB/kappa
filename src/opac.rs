@@ -7,8 +7,8 @@ use std::mem::swap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use ndarray::azip;
 use ndarray::Array1;
+use ndarray::Zip;
 
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
@@ -450,32 +450,47 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         let mut tot = 0.0;
         // Size distribution
         let nsf = (ns - 1) as f64;
-        for is in 0..ns {
-            let isf = is as f64;
-            r[is] = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
-            match kpc.sizedis {
-                SizeDistribution::Normal | SizeDistribution::LogNormal => {
-                    if kpc.asigma < 0.0 {
-                        // Log-normal or normal size distribution
-                        let expo = if kpc.asigma < 0.0 {
-                            0.5 * ((r[is] - kpc.amean) / kpc.asigma).powf(2.0)
+        Zip::indexed(&mut r)
+            .and(&mut nr)
+            .for_each(|is, r_val, nr_val| {
+                // Calculate size distribution values
+                let isf = is as f64;
+                *r_val = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+
+                // Apply size distribution and exponential calculation
+                *nr_val = match kpc.sizedis {
+                    // Log-normal or normal size distribution
+                    SizeDistribution::Normal | SizeDistribution::LogNormal => {
+                        if kpc.asigma < 0.0 {
+                            let expo = 0.5 * ((*r_val - kpc.amean) / kpc.asigma).powf(2.0);
+                            if expo > 99.0 {
+                                0.0
+                            } else {
+                                (-expo).exp()
+                            }
                         } else {
-                            0.5 * ((r[is] / kpc.amean).ln() / kpc.asigma).powf(2.0)
-                        };
-                        nr[is] = if expo > 99.0 {
-                            0.0
-                        } else {
-                            (-1.0 * expo).exp()
+                            let expo = 0.5 * ((*r_val / kpc.amean).ln() / kpc.asigma).powf(2.0);
+                            if expo > 99.0 {
+                                0.0
+                            } else {
+                                (-expo).exp()
+                            }
                         }
                     }
+                    // Power law size distribution
+                    _ => r_val.powf(pow + 1.0),
+                };
+
+                // With the option `-d`m each computation is only a piece of the size grid
+                if *r_val < kpc.amin || *r_val > kpc.amax {
+                    *nr_val = 0.0;
                 }
-                _ => nr[is] = r[is].powf(pow + 1.0),
-            }
-            if r[is] < kpc.amin || r[is] > kpc.amax {
-                nr[is] = 0.0
-            }
-            tot += nr[is] * r[is].powf(3.0);
-        }
+
+                // Volume normalization
+                tot += *nr_val * r_val.powi(3);
+            });
+
+        // Normalize nr
         nr = 1.0 * nr / tot;
     }
 
