@@ -17,7 +17,7 @@ use num_complex::Complex;
 use num_complex::Complex64;
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
-use crate::types::{CMatrix, CVector, RMatrix, RVector};
+use crate::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
 use crate::utils::bessel;
 use crate::utils::gamma::gamma;
 use crate::utils::legendre;
@@ -747,7 +747,7 @@ fn mean_field(fracc: &FractalConfig, ad: &CMatrix, x_g: f64, nmax: usize) -> Res
         *val = bessel::int_sph_bessel(fracc, x_g, p).context("IntegrationFailure: In Bessel")?;
     }
 
-    let mut t: Array3<Complex<f64>> = Array3::zeros((2, nmax, nmax));
+    let mut t: CTensor = Array3::zeros((2, nmax, nmax));
     for nu in 0..nmax {
         let nuf = nu as f64;
         for n in 0..nmax {
