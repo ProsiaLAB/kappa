@@ -3,7 +3,7 @@
 use anyhow::Result;
 use ndarray::Array1;
 
-use std::io::BufRead;
+use std::{io::BufRead, usize};
 
 use crate::opac::Component;
 
@@ -17,21 +17,21 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     let mut class = String::new();
     let mut state = String::new();
 
-    let header = lines_iter
+    let header: String = lines_iter
         .find_map(|line| {
             let trimmed = line.trim();
             if trimmed.starts_with('#') {
                 if let Some((key, value)) = trimmed.trim_start_matches('#').trim().split_once(':') {
                     match key.trim() {
-                        "Name" => name = value.trim().to_string(),
-                        "Class" => class = value.trim().to_string(),
-                        "State" => state = value.trim().to_string(),
+                        "Name" => name = value.trim().into(),
+                        "Class" => class = value.trim().into(),
+                        "State" => state = value.trim().into(),
                         _ => {}
                     }
                 }
                 None
             } else if !trimmed.is_empty() {
-                Some(trimmed.to_string())
+                Some(trimmed.into())
             } else {
                 None
             }
@@ -120,25 +120,60 @@ fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     let _gamma = y02 / x0.powi(3);
 }
 
-pub fn read_sizedis_file(_file: &str) -> Result<()> {
-    // let file = std::fs::File::open(file)?;
-    // let reader = std::io::BufReader::new(file);
+pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
+    let file = std::fs::File::open(file)?;
+    let reader = std::io::BufReader::new(file);
 
-    // // Skip comments
-    // let mut lines_iter = reader.lines().map_while(Result::ok);
-    // for line in lines_iter.by_ref() {
-    //     if !line.starts_with('#') || !line.starts_with("!") || !line.starts_with("*") {
-    //         let na = line
-    //             .trim()
-    //             .parse::<usize>()
-    //             .expect("Invalid number of size bins");
+    let all_lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let mut lines_iter = all_lines.iter();
+    let na: usize = lines_iter
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') || trimmed.starts_with('!') || trimmed.starts_with('*') {
+                None
+            } else if !trimmed.is_empty() {
+                // Parse usize value
+                Some(
+                    trimmed
+                        .parse::<usize>()
+                        .expect("Invalid header in the size distribution file"),
+                )
+            } else {
+                None
+            }
+        })
+        .expect("Missing header in the size distribution file");
 
-    //     }
-    // }
+    let mut tot: [f64; 3] = [0.0; 3];
+    let mut totn = 0.0;
 
-    todo!()
+    for line in lines_iter {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with('#')
+            || trimmed.starts_with('!')
+            || trimmed.starts_with('*')
+        {
+            continue;
+        }
+        let mut parts = trimmed.split_whitespace();
+        if let (Some(a), Some(b)) = (parts.next(), parts.next()) {
+            if let (Ok(r), Ok(nr)) = (a.parse::<f64>(), b.parse::<f64>()) {
+                totn += nr;
+                tot[0] += nr * r;
+                tot[1] += nr * r.powi(2);
+                tot[2] += nr * r.powi(3);
+            }
+        }
+    }
 
-    // Ok(())
+    let sdmns: [f64; 3] = [
+        tot[0] / totn,
+        (tot[1] / totn).sqrt(),
+        (tot[2] / totn).powf(1.0 / 3.0),
+    ];
+
+    Ok((na, sdmns))
 }
 
 pub fn read_wavelength_grid(_file: &str) -> Result<()> {
