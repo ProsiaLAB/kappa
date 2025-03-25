@@ -7,7 +7,9 @@ use std::mem::swap;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use ndarray::azip;
 use ndarray::Array1;
+
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 
@@ -52,6 +54,7 @@ pub struct KappaConfig {
     pub amean: f64,
     pub asigma: f64,
     pub na: usize,
+    pub ameans_file: [f64; 3],
     pub sizedis: SizeDistribution,
     pub lmin: f64,
     pub lmax: f64,
@@ -92,6 +95,7 @@ impl Default for KappaConfig {
             amean: 0.0,
             asigma: 0.0,
             na: 0,
+            ameans_file: [0.0; 3],
             sizedis: SizeDistribution::Apow,
             lmin: 0.05,
             lmax: 1e4,
@@ -140,13 +144,13 @@ impl SpecialConfigs for KappaConfig {
             ..Default::default()
         };
         kpc.materials.push(Material {
-            key: "pyr-mg70".to_string(),
+            key: "pyr-mg70".into(),
             kind: MaterialKind::Core,
             mfrac: 0.87,
             ..Default::default()
         });
         kpc.materials.push(Material {
-            key: "c-z".to_string(),
+            key: "c-z".into(),
             kind: MaterialKind::Core,
             mfrac: 0.13,
             ..Default::default()
@@ -161,19 +165,19 @@ impl SpecialConfigs for KappaConfig {
             ..Default::default()
         };
         kpc.materials.push(Material {
-            key: "astrosil".to_string(),
+            key: "astrosil".into(),
             kind: MaterialKind::Core,
             mfrac: 0.3291,
             ..Default::default()
         });
         kpc.materials.push(Material {
-            key: "c-org".to_string(),
+            key: "c-org".into(),
             kind: MaterialKind::Core,
             mfrac: 0.3966,
             ..Default::default()
         });
         kpc.materials.push(Material {
-            key: "fes".to_string(),
+            key: "fes".into(),
             kind: MaterialKind::Core,
             mfrac: 0.0743,
             ..Default::default()
@@ -186,7 +190,7 @@ impl SpecialConfigs for KappaConfig {
         kpc.nmat += 1;
         kpc.ncore += 1;
         kpc.materials.push(Material {
-            key: "h2o-w".to_string(),
+            key: "h2o-w".into(),
             kind: MaterialKind::Core,
             mfrac: 0.2000,
             ..Default::default()
@@ -442,6 +446,37 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         // Just one size
         r[0] = 10.0_f64.powf((aminlog + amaxlog) / 2.0);
         nr[0] = r[0].powf(pow + 1.0); // should be 1/r[0]^3 ???  Not important.
+    } else {
+        let mut tot = 0.0;
+        // Size distribution
+        let nsf = (ns - 1) as f64;
+        for is in 0..ns {
+            let isf = is as f64;
+            r[is] = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+            match kpc.sizedis {
+                SizeDistribution::Normal | SizeDistribution::LogNormal => {
+                    if kpc.asigma < 0.0 {
+                        // Log-normal or normal size distribution
+                        let expo = if kpc.asigma < 0.0 {
+                            0.5 * ((r[is] - kpc.amean) / kpc.asigma).powf(2.0)
+                        } else {
+                            0.5 * ((r[is] / kpc.amean).ln() / kpc.asigma).powf(2.0)
+                        };
+                        nr[is] = if expo > 99.0 {
+                            0.0
+                        } else {
+                            (-1.0 * expo).exp()
+                        }
+                    }
+                }
+                _ => nr[is] = r[is].powf(pow + 1.0),
+            }
+            if r[is] < kpc.amin || r[is] > kpc.amax {
+                nr[is] = 0.0
+            }
+            tot += nr[is] * r[is].powf(3.0);
+        }
+        nr = 1.0 * nr / tot;
     }
 
     // bruggeman_blend();
