@@ -418,12 +418,12 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
     let ns = kpc.na;
     let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
-    let mut r: RVector = Array1::zeros(ns);
-    let mut nr: RVector = Array1::zeros(ns);
-    let mut f: RVector = Array1::zeros(nf);
-    let mut wf: RVector = Array1::zeros(nf);
-    let mut e1mantle: RVector = Array1::zeros(kpc.nlam);
-    let mut e2mantle: RVector = Array1::zeros(kpc.nlam);
+    let mut r = RVector::zeros(ns);
+    let mut nr = RVector::zeros(ns);
+    let mut f = RVector::zeros(nf);
+    let mut wf = RVector::zeros(nf);
+    let mut e1mantle = RVector::zeros(kpc.nlam);
+    let mut e2mantle = RVector::zeros(kpc.nlam);
 
     // Normalize the mass fractions
     let (tot, tot_mantle) = kpc

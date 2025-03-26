@@ -1,11 +1,12 @@
 //! Read the `lnk` files
 
+use anyhow::anyhow;
 use anyhow::Result;
-use ndarray::Array1;
 
-use std::{io::BufRead, usize};
+use std::io::BufRead;
 
 use crate::opac::Component;
+use crate::types::RVector;
 
 pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     let file = std::fs::File::open(file)?;
@@ -79,23 +80,6 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
         *k = k_val;
     }
 
-    regrid_data(&mut l0, &mut n0, &mut k0);
-
-    let component = Component {
-        name,
-        class,
-        state,
-        rho,
-        size,
-        l0: Array1::from_vec(l0),
-        n0: Array1::from_vec(n0),
-        k0: Array1::from_vec(k0),
-    };
-
-    Ok(component)
-}
-
-fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
     // Check if we need to reverse the arrays
     if l0[l0.len() - 1] < l0[0] {
         l0.reverse();
@@ -113,11 +97,18 @@ fn regrid_data(l0: &mut [f64], n0: &mut [f64], k0: &mut [f64]) {
         }
     }
 
-    let x0 = l0[0];
-    let y01 = n0[0];
-    let y02 = k0[0];
-    let _wp = (1.0 - y01) / x0.powi(2);
-    let _gamma = y02 / x0.powi(3);
+    let component = Component {
+        name,
+        class,
+        state,
+        rho,
+        size,
+        l0: RVector::from_vec(l0),
+        n0: RVector::from_vec(n0),
+        k0: RVector::from_vec(k0),
+    };
+
+    Ok(component)
 }
 
 pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
