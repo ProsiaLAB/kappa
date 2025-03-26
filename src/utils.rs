@@ -1,3 +1,7 @@
+use ndarray::Array1;
+
+use crate::types::RVector;
+
 pub mod constants {
     //! Defines mathematical expressions commonly used when computing distribution
     //! values as constants
@@ -1284,4 +1288,81 @@ pub mod special {
     pub fn optic_limit() {
         todo!()
     }
+}
+
+pub fn regrid_lnk_data(
+    l0: &[f64],
+    n0: &[f64],
+    k0: &[f64],
+    lam: &RVector,
+    loglog: bool,
+) -> (RVector, RVector) {
+    let n = lam.len();
+    let mut x0 = l0[0];
+    let mut y01 = n0[0];
+    let mut y02 = k0[0];
+    // let wp = (1.0 - y01) / x0.powi(2);
+    // let gamma = y02 / x0.powi(3);
+
+    // The first block is space in grid that is before the first specified
+    // wavelength. Simple extrapolation: keep same value
+    let mut e1: RVector = Array1::zeros(n);
+    let mut e2: RVector = Array1::zeros(n);
+    let mut i = 0;
+    let mut i0 = 0;
+    while i0 < n {
+        let x1 = l0[i0];
+        let y11 = n0[i0];
+        let y12 = k0[i0];
+
+        while i < n && lam[i] <= x1 && lam[i] > x0 {
+            let lgy11 = y11.log10();
+            let lgy12 = y12.log10();
+            let lgy01 = y01.log10();
+            let lgy02 = y02.log10();
+            let lgx0 = x0.log10();
+            let lgx1 = x1.log10();
+            let lggr = lam[i].log10();
+
+            e1[i] = 10f64.powf(lgy11 + (lggr - lgx1) * (lgy01 - lgy11) / (lgx0 - lgx1));
+            e2[i] = 10f64.powf(lgy12 + (lggr - lgx1) * (lgy02 - lgy12) / (lgx0 - lgx1));
+
+            i += 1;
+        }
+        x0 = x1;
+        y01 = y11;
+        y02 = y12;
+        i0 += 1;
+    }
+
+    // Extrapolation
+    if loglog {
+        let m0 = (e1[i - 1], e2[i - 1]);
+        if m0.0.abs() > 2.0 {
+            for j in i..n {
+                let factor = (lam[j] / lam[i - 1]).sqrt();
+                e1[j] = m0.0 * factor;
+                e2[j] = m0.1 * factor;
+            }
+        } else {
+            let slope1 =
+                (n0[n - 1].log10() - n0[n - 2].log10()) / (l0[n - 1].log10() - l0[n - 2].log10());
+            let sect1 = n0[n - 2].log10();
+            let slope2 =
+                (k0[n - 1].log10() - k0[n - 2].log10()) / (l0[n - 1].log10() - l0[n - 2].log10());
+            let sect2 = k0[n - 2].log10();
+            for j in i..n {
+                let dist = (lam[j] / l0[n - 2]).log10();
+                e1[j] = 10f64.powf(slope1 * dist + sect1);
+                e2[j] = 10f64.powf(slope2 * dist + sect2);
+            }
+        }
+    } else {
+        for j in i..n {
+            e1[j] = e1[i - 1];
+            e2[j] = e2[i - 1] * lam[i - 1] / lam[j];
+        }
+    }
+
+    (e1, e2)
 }
