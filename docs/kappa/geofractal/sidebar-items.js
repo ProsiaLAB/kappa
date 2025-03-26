@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_geometric_cross_section_tazaki"]};

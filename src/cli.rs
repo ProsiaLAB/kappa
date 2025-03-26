@@ -614,7 +614,7 @@ where
         material.key = material_arg.to_string();
         material.kind = material_type;
         let component = get_lnk_data(&material.key);
-        (material.e1, material.e2) =
+        (material.re, material.im) =
             regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
         // See if there is a next argument
         // If there is, it should be a mass fraction
@@ -647,7 +647,7 @@ where
         let l0_slice: &[f64] = &component.l0.to_vec();
         let n0_slice: &[f64] = &component.n0.to_vec();
         let k0_slice: &[f64] = &component.k0.to_vec();
-        (material.e1, material.e2) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
+        (material.re, material.im) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
         material.rho = component.rho;
         Ok(material)
     } else if material_arg.contains(':') {
@@ -670,8 +670,8 @@ where
                 return Err(anyhow!("Density must be positive").into());
             }
             material.kind = material_type;
-            material.e1 = material.n * RVector::ones(kpc.nlam);
-            material.e2 = material.k * RVector::ones(kpc.nlam);
+            material.re = material.n * RVector::ones(kpc.nlam);
+            material.im = material.k * RVector::ones(kpc.nlam);
             Ok(material)
         }
     } else {

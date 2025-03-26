@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["de_rooij_1984"],"struct":["MieConfig","MieResult"]};

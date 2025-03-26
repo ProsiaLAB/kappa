@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"type":["CMatrix","CTensor","CVector","RMatrix","RTensor","RVector","UVector"]};

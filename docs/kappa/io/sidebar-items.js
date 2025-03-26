@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["read_lnk_file","read_sizedis_file","read_wavelength_grid","write_sizedis_file"]};

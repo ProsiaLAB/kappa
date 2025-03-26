@@ -3,17 +3,18 @@
 //!
 
 use std::f64::consts::PI;
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::mem::swap;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use ndarray::s;
 use ndarray::Zip;
 
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 
+use crate::io::write_sizedis_file;
+use crate::types::RMatrix;
 use crate::types::{RVector, UVector};
 
 #[derive(Debug)]
@@ -24,8 +25,8 @@ pub struct Material {
     pub k: f64,
     pub rho: f64,
     pub mfrac: f64,
-    pub e1: RVector,
-    pub e2: RVector,
+    pub re: RVector,
+    pub im: RVector,
 }
 
 impl Default for Material {
@@ -38,8 +39,8 @@ impl Default for Material {
             k: 0.0,
             rho: 0.0,
             mfrac: 1.0,
-            e1: RVector::zeros(nlam),
-            e2: RVector::zeros(nlam),
+            re: RVector::zeros(nlam),
+            im: RVector::zeros(nlam),
         }
     }
 }
@@ -504,49 +505,41 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
     }
 
     if kpc.write_grid {
-        let default_dir = "output".to_string();
-        let sdoutfile = kpc.outdir.as_ref().unwrap_or(&default_dir).to_owned() + "/optool_sd.dat";
-        let file = File::create(sdoutfile).expect("Failed to open file");
-        let mut writer = BufWriter::new(file);
-
-        writeln!(
-            writer,
-            "# Size distribution written by optool, can be read in with -a optool_sd.dat"
-        )?;
-        if kpc.split {
-            writeln!(
-                writer,
-                "# This is only the first subparticle because of the -d switch"
-            )?;
-        }
-        writeln!(writer, "# First line: Number of grain size bins NA")?;
-        writeln!(writer, "# Then NA lines with:  agrain[um]  n(a)")?;
-        writeln!(writer, "#   n(a) is the number of grains in the bin.")?;
-        writeln!(
-            writer,
-            "#   In a linear grid      (da   =const), this would be n(a) = f(a)*da"
-        )?;
-        writeln!(
-            writer,
-            "#   In a logarithmic grid (dloga=const), this would be n(a) = f(a)*a*dloga."
-        )?;
-        writeln!(
-            writer,
-            "#   In an arbitrary grid,  just give the number of grains in the bin."
-        )?;
-        writeln!(
-            writer,
-            "# No normalization is necessary, it is done automatically."
-        )?;
-        writeln!(writer, "{}", ns)?;
-
-        for i in 0..ns {
-            nr[i] /= tot;
-            writeln!(writer, "{:18.5e} {:18.5e}", r[i], nr[i])?;
-        }
+        write_sizedis_file(kpc, ns, &r, &mut nr, tot)?;
     }
 
     // Copy the refractory index data for all materials into local arrays
+    let mut e1 = RMatrix::zeros((kpc.nlam, kpc.nmat + 1));
+    let mut e2 = RMatrix::zeros((kpc.nlam, kpc.nmat + 1));
+    for im in 0..kpc.nmat {
+        e1.slice_mut(s![.., im]).assign(&kpc.materials[im].re);
+        e2.slice_mut(s![.., im]).assign(&kpc.materials[im].im);
+    }
+
+    // Core: Turn mass fractions into volume fractions, compute rho_core
+    let mtot_core = kpc
+        .materials
+        .iter()
+        .filter(|m| m.kind == MaterialKind::Core)
+        .fold(0.0, |sum, m| sum + m.mfrac);
+    let mut vfrac_core = kpc
+        .materials
+        .iter()
+        .filter(|m| m.kind == MaterialKind::Core)
+        .map(|m| m.mfrac / m.rho)
+        .collect::<RVector>();
+    let vtot_core = vfrac_core.iter().sum::<f64>();
+    let mut rho_core = mtot_core / vtot_core;
+    vfrac_core = vfrac_core / vtot_core;
+    if kpc.pcore > 0.0 {
+        vfrac_core = vfrac_core * (1.0 - kpc.pcore);
+        rho_core = rho_core * (1.0 - kpc.pcore);
+    }
+
+    // Mantle: Turn mass fractions to volume fractions, compute rho_mantle
+    if kpc.nmant > 0 {
+        let mtot_mantle = mfrac_mantle.iter().sum::<f64>();
+    }
 
     // bruggeman_blend();
     // maxwell_garnet_blend();
