@@ -176,6 +176,25 @@ pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
     Ok((na, sdmns))
 }
 
-pub fn read_wavelength_grid(_file: &str) -> Result<()> {
-    todo!()
+pub fn read_wavelength_grid(file: &str) -> Result<(usize, RVector)> {
+    let file = std::fs::File::open(file)?;
+    let reader = std::io::BufReader::new(file);
+
+    let all_lines: Vec<String> = reader.lines().map_while(Result::ok).collect();
+    let mut lines_iter = all_lines.iter().skip_while(|line| line.starts_with('#'));
+
+    let nlam = lines_iter
+        .next()
+        .ok_or_else(|| anyhow!("Missing header in the size distribution file"))?
+        .trim()
+        .parse::<usize>()?;
+
+    let lam = RVector::from_vec(
+        lines_iter
+            .map(|line| line.trim().parse::<f64>())
+            .collect::<Result<Vec<f64>, _>>()
+            .map_err(|e| anyhow!(e))?,
+    );
+
+    Ok((nlam, lam))
 }

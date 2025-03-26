@@ -211,7 +211,19 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 }
                 WavelengthArg::File(file) => {
                     // Read file
-                    let _ = read_wavelength_grid(&file);
+                    let (nlam, lam) = read_wavelength_grid(&file)?;
+                    kpc.nlam = nlam;
+                    let min_lam = lam.iter().reduce(|a, b| if a < b { a } else { b });
+                    let max_lam = lam.iter().reduce(|a, b| if a > b { a } else { b });
+                    match (min_lam, max_lam) {
+                        (Some(min), Some(max)) => {
+                            kpc.lmin = *min;
+                            kpc.lmax = *max;
+                        }
+                        _ => {
+                            return Err(anyhow!("Could not read wavelength grid from file").into());
+                        }
+                    }
                 }
             },
             "--lmin" => {
