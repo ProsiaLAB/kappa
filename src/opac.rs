@@ -19,23 +19,26 @@ use crate::types::RVector;
 pub struct Material {
     pub key: String,
     pub kind: MaterialKind,
-    pub cmd: bool,
     pub n: f64,
     pub k: f64,
     pub rho: f64,
     pub mfrac: f64,
+    pub e1: RVector,
+    pub e2: RVector,
 }
 
 impl Default for Material {
     fn default() -> Self {
+        let nlam = 300;
         Material {
             key: String::new(),
             kind: MaterialKind::Core,
-            cmd: false,
             n: 0.0,
             k: 0.0,
             rho: 0.0,
             mfrac: 1.0,
+            e1: RVector::zeros(nlam),
+            e2: RVector::zeros(nlam),
         }
     }
 }
@@ -59,6 +62,8 @@ pub struct KappaConfig {
     pub lmin: f64,
     pub lmax: f64,
     pub nlam: usize,
+    pub lam: RVector,
+    pub iscatlam: UVector,
     pub nang: usize,
     pub chop_angle: f64,
     pub pcore: f64,
@@ -88,6 +93,7 @@ pub struct KappaConfig {
 
 impl Default for KappaConfig {
     fn default() -> Self {
+        let nlam = 300;
         KappaConfig {
             amin: 0.05,
             amax: 3000.0,
@@ -99,7 +105,9 @@ impl Default for KappaConfig {
             sizedis: SizeDistribution::Apow,
             lmin: 0.05,
             lmax: 1e4,
-            nlam: 300,
+            nlam,
+            lam: RVector::zeros(nlam),
+            iscatlam: UVector::zeros(nlam),
             nang: 180,
             chop_angle: 0.0,
             pcore: 0.0,

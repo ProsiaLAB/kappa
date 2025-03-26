@@ -54,8 +54,12 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
         match arg.as_str() {
             "-c" => {
                 if let Some(material_arg) = args.next() {
-                    match process_material(&material_arg.to_string(), &mut args, MaterialKind::Core)
-                    {
+                    match process_material(
+                        &kpc,
+                        &material_arg.to_string(),
+                        &mut args,
+                        MaterialKind::Core,
+                    ) {
                         Ok(material) => {
                             kpc.nmat += 1;
                             kpc.ncore += 1;
@@ -77,6 +81,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 // Same as "-c"
                 if let Some(material_arg) = args.next() {
                     match process_material(
+                        &kpc,
                         &material_arg.to_string(),
                         &mut args,
                         MaterialKind::Mantle,
@@ -389,7 +394,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 return Ok(kpc);
             }
             // Positional arguments
-            _ => match process_material(arg.as_str(), &mut args, MaterialKind::Core) {
+            _ => match process_material(&kpc, arg.as_str(), &mut args, MaterialKind::Core) {
                 Ok(material) => kpc.materials.push(material),
                 Err(KappaError::ZeroMassFraction) => {
                     args.next();
@@ -566,6 +571,7 @@ where
 }
 
 fn process_material<I>(
+    kpc: &KappaConfig,
     material_arg: &str,
     args: &mut Peekable<I>,
     material_type: MaterialKind,
@@ -577,6 +583,9 @@ where
     if MATERIAL_KEYS.contains(&material_arg) {
         material.key = material_arg.to_string();
         material.kind = material_type;
+        let component = get_lnk_data(&material.key);
+        (material.e1, material.e2) =
+            regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
         // See if there is a next argument
         // If there is, it should be a mass fraction
         if let Some(next_arg) = args.peek() {
@@ -604,11 +613,15 @@ where
         // Positional argument is a file path
         // Placeholder for now
         let rho_in = Option::<f64>::None;
-        let _ = read_lnk_file(material_arg, rho_in);
+        let component = read_lnk_file(material_arg, rho_in)?;
+        let l0_slice: &[f64] = &component.l0.to_vec();
+        let n0_slice: &[f64] = &component.n0.to_vec();
+        let k0_slice: &[f64] = &component.k0.to_vec();
+        (material.e1, material.e2) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
+        material.rho = component.rho;
         Ok(material)
     } else if material_arg.contains(':') {
         // This is n:k:rho format
-        material.cmd = true;
         let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
             return Err(anyhow!("Invalid material format").into());
@@ -627,6 +640,8 @@ where
                 return Err(anyhow!("Density must be positive").into());
             }
             material.kind = material_type;
+            material.e1 = material.n * RVector::ones(kpc.nlam);
+            material.e2 = material.k * RVector::ones(kpc.nlam);
             Ok(material)
         }
     } else {
