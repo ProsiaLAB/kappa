@@ -502,6 +502,51 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         nr = 1.0 * nr / tot;
     }
 
+    if kpc.write_grid {
+        let default_dir = "output".to_string();
+        let sdoutfile = kpc.outdir.as_ref().unwrap_or(&default_dir).to_owned() + "/optool_sd.dat";
+        let file = File::create(sdoutfile).expect("Failed to open file");
+        let mut writer = BufWriter::new(file);
+
+        writeln!(
+            writer,
+            "# Size distribution written by optool, can be read in with -a optool_sd.dat"
+        )?;
+        if kpc.split {
+            writeln!(
+                writer,
+                "# This is only the first subparticle because of the -d switch"
+            )?;
+        }
+        writeln!(writer, "# First line: Number of grain size bins NA")?;
+        writeln!(writer, "# Then NA lines with:  agrain[um]  n(a)")?;
+        writeln!(writer, "#   n(a) is the number of grains in the bin.")?;
+        writeln!(
+            writer,
+            "#   In a linear grid      (da   =const), this would be n(a) = f(a)*da"
+        )?;
+        writeln!(
+            writer,
+            "#   In a logarithmic grid (dloga=const), this would be n(a) = f(a)*a*dloga."
+        )?;
+        writeln!(
+            writer,
+            "#   In an arbitrary grid,  just give the number of grains in the bin."
+        )?;
+        writeln!(
+            writer,
+            "# No normalization is necessary, it is done automatically."
+        )?;
+        writeln!(writer, "{}", ns)?;
+
+        for i in 0..ns {
+            nr[i] /= tot;
+            writeln!(writer, "{:18.5e} {:18.5e}", r[i], nr[i])?;
+        }
+    }
+
+    // Copy the refractory index data for all materials into local arrays
+
     // bruggeman_blend();
     // maxwell_garnet_blend();
     todo!()
