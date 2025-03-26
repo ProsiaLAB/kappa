@@ -12,17 +12,12 @@ use std::f64::consts::PI;
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 use ndarray::s;
-use ndarray::{Array1, Array2, Array3};
-use num_complex::Complex;
-use num_complex::Complex64;
+use num_complex::{Complex, Complex64};
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
 use crate::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
-use crate::utils::bessel;
 use crate::utils::gamma::gamma;
-use crate::utils::legendre;
-use crate::utils::linalg;
-use crate::utils::special;
+use crate::utils::{bessel, legendre, linalg, special};
 
 pub struct FractalConfig {
     pub solver: FractalSolver,
@@ -200,8 +195,8 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
 
     let (an, bn) = lorenz_mie(x0, fracc.refrel, nmax)?;
 
-    let mut ad: CMatrix = Array2::zeros((nmax, 2));
-    let mut dd: CMatrix = Array2::zeros((nmax, 2));
+    let mut ad = CMatrix::zeros((nmax, 2));
+    let mut dd = CMatrix::zeros((nmax, 2));
 
     ad.slice_mut(s![.., 0]).assign(&an);
     ad.slice_mut(s![.., 1]).assign(&bn);
@@ -224,7 +219,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
     let dang = PI / 2.0 / (fracc.nang - 1) as f64;
     let (s1, s2) = renormalize(fracc, &dd, dang, nmax);
 
-    let mut smat: RMatrix = Array2::zeros((2 * fracc.nang, 4));
+    let mut smat = RMatrix::zeros((2 * fracc.nang, 4));
     let ang = (0..(2 * fracc.nang))
         .map(|j| j as f64 * dang)
         .collect::<RVector>();
@@ -578,7 +573,7 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(CVector, CVect
         return Err(anyhow!("MieOverflow"));
     }
 
-    let mut d: CVector = Array1::zeros(nmx);
+    let mut d = CVector::zeros(nmx);
 
     for n in 0..nmx - 1 {
         let en = nmx - 1 - n;
@@ -592,8 +587,8 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(CVector, CVect
     let mut chi_1 = psi_0;
     let mut xi_1 = Complex::new(psi_1, -chi_1);
 
-    let mut a: CVector = Array1::zeros(nstop);
-    let mut b: CVector = Array1::zeros(nstop);
+    let mut a = CVector::zeros(nstop);
+    let mut b = CVector::zeros(nstop);
 
     for n in 0..nstop {
         let nf = n as f64;
@@ -625,15 +620,15 @@ fn renormalize(fracc: &FractalConfig, d: &CMatrix, dang: f64, nmax: usize) -> (C
         .map(|theta| theta.cos())
         .collect::<RVector>();
 
-    let mut pi: RVector = Array1::zeros(fracc.nang);
-    let mut pi0: RVector = Array1::zeros(fracc.nang);
-    let mut pi1: RVector = Array1::zeros(fracc.nang);
+    let mut pi = RVector::zeros(fracc.nang);
+    let mut pi0 = RVector::zeros(fracc.nang);
+    let mut pi1 = RVector::zeros(fracc.nang);
 
-    let mut tau: RVector = Array1::zeros(fracc.nang);
+    let mut tau = RVector::zeros(fracc.nang);
 
     let nn = 2 * fracc.nang;
-    let mut s1: CVector = Array1::zeros(nn);
-    let mut s2: CVector = Array1::zeros(nn);
+    let mut s1 = CVector::zeros(nn);
+    let mut s2 = CVector::zeros(nn);
 
     let mut p = -1.0;
     // let mut an = Complex::new(0.0, 0.0);
@@ -727,9 +722,9 @@ fn mean_field(fracc: &FractalConfig, ad: &CMatrix, x_g: f64, nmax: usize) -> Res
     let pmax = 2 * nmax;
 
     // Store values of Legendre polynomials (P_n^m) and their derivatives
-    let mut al1n: RMatrix = Array2::zeros((jm, nmax));
-    let mut ln: RMatrix = Array2::zeros((jm, pmax));
-    let mut dln: RMatrix = Array2::zeros((jm, pmax));
+    let mut al1n = RMatrix::zeros((jm, nmax));
+    let mut ln = RMatrix::zeros((jm, pmax));
+    let mut dln = RMatrix::zeros((jm, pmax));
 
     for (j, xj) in x.iter().enumerate() {
         let (pmn, _) =
@@ -741,13 +736,13 @@ fn mean_field(fracc: &FractalConfig, ad: &CMatrix, x_g: f64, nmax: usize) -> Res
     }
 
     // Pre-compute the spherical Bessel functions and the T-matrix
-    let mut s_p: CVector = Array1::zeros(pmax);
+    let mut s_p = CVector::zeros(pmax);
 
     for (p, val) in s_p.iter_mut().enumerate() {
         *val = bessel::int_sph_bessel(fracc, x_g, p).context("IntegrationFailure: In Bessel")?;
     }
 
-    let mut t: CTensor = Array3::zeros((2, nmax, nmax));
+    let mut t = CTensor::zeros((2, nmax, nmax));
     for nu in 0..nmax {
         let nuf = nu as f64;
         for n in 0..nmax {
@@ -789,8 +784,8 @@ fn mean_field(fracc: &FractalConfig, ad: &CMatrix, x_g: f64, nmax: usize) -> Res
         }
     }
 
-    let mut s: CMatrix = Array2::ones((pmax, 2));
-    let mut y: CVector = Array1::zeros(pmax);
+    let mut s = CMatrix::ones((pmax, 2));
+    let mut y = CVector::zeros(pmax);
 
     for n in 0..nmax {
         for nu in 0..nmax {

@@ -8,13 +8,17 @@ use std::process::exit;
 use anyhow::anyhow;
 use anyhow::Result;
 use colored::{Color, Colorize};
+use ndarray::Array;
 
+use crate::components::get_lnk_data;
 use crate::components::MATERIAL_KEYS;
 use crate::io::read_wavelength_grid;
 use crate::io::{read_lnk_file, read_sizedis_file};
 use crate::opac::SizeDistribution;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 use crate::opac::{Material, MaterialKind};
+use crate::types::RVector;
+use crate::utils::regrid_lnk_data;
 
 enum SizeArg {
     PowerLaw {
@@ -424,6 +428,20 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
     });
 
     kpc.nmat = kpc.ncore + kpc.nmant;
+
+    // Make logarithmic wavelength grid
+    if !kpc.lam.is_empty() {
+        kpc.lam = Array::logspace(10.0, kpc.lmin, kpc.lmax, kpc.nlam);
+    }
+    kpc.iscatlam = Array::zeros(kpc.nlam);
+    // Prepare sparse scattering file
+    if kpc.nsparse > 0 {
+        todo!()
+    }
+    // Writing wavelength grid file
+    if kpc.write_grid {
+        todo!()
+    }
 
     Ok(kpc)
 }

@@ -3,17 +3,18 @@
 //!
 
 use std::f64::consts::PI;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::mem::swap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use ndarray::Array1;
 use ndarray::Zip;
 
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 
-use crate::types::RVector;
+use crate::types::{RVector, UVector};
 
 #[derive(Debug)]
 pub struct Material {

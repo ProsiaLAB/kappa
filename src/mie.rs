@@ -10,10 +10,7 @@ use std::f64::consts::PI;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use ndarray::Array1;
-use ndarray::Array2;
-use num_complex::ComplexFloat;
-use num_complex::{Complex, Complex64};
+use num_complex::{Complex, Complex64, ComplexFloat};
 
 use crate::types::{CVector, RMatrix, RVector};
 
@@ -48,8 +45,6 @@ pub struct MieResult {
 //     ScatteringAnglesOverflow,
 // }
 
-type Array1Complex64 = CVector;
-
 pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult> {
     // miec.delta = 1e-8;
     // miec.cutoff = 1e-8;
@@ -67,10 +62,10 @@ pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult> {
     // let mut nwrdis: RMatrix = Array2::zeros((miec.nparts, miec.ndis));
     // nwrdis[[0, 0]] = 1.0;
 
-    let mut f_11: RVector = Array1::zeros(miec.nangle);
-    let mut f_12: RVector = Array1::zeros(miec.nangle);
-    let mut f_33: RVector = Array1::zeros(miec.nangle);
-    let mut f_34: RVector = Array1::zeros(miec.nangle);
+    let mut f_11 = RVector::zeros(miec.nangle);
+    let mut f_12 = RVector::zeros(miec.nangle);
+    let mut f_33 = RVector::zeros(miec.nangle);
+    let mut f_34 = RVector::zeros(miec.nangle);
 
     let mier = mie(miec)?;
 
@@ -94,8 +89,8 @@ fn mie(miec: &MieConfig) -> Result<MieResult> {
 
 fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     let mut mier = MieResult {
-        u: Array1::zeros(miec.nangle),
-        wth: Array1::zeros(miec.nangle),
+        u: RVector::zeros(miec.nangle),
+        wth: RVector::zeros(miec.nangle),
         c_sca: 0.0,
         c_ext: 0.0,
         q_sca: 0.0,
@@ -106,7 +101,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         xeff: 0.0,
         numpar: 0.0,
         volume: 0.0,
-        f_0: Array2::zeros((3, 3)),
+        f_0: RMatrix::zeros((3, 3)),
     };
 
     let mut fac_90 = 0.0;
@@ -136,8 +131,8 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
 
     let size = nd.max(nfi).max(nmax);
 
-    let mut facf: RVector = Array1::zeros(size);
-    let mut facb: RVector = Array1::zeros(size);
+    let mut facf = RVector::zeros(size);
+    let mut facb = RVector::zeros(size);
 
     let (fi, chi, d) = fichid(m, x, nfi, nmax, nd);
     let (an, bn) = anbn(m, x, fi, chi, d, nmax);
@@ -192,8 +187,8 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     if nangle > 6000 {
         return Err(anyhow!("ScatteringAnglesOverflow"));
     }
-    mier.u = Array1::zeros(nangle);
-    mier.wth = Array1::zeros(nangle);
+    mier.u = RVector::zeros(nangle);
+    mier.wth = RVector::zeros(nangle);
     let wfac = 2.0 / nangle as f64;
     for iang in 0..nangle {
         let iangf = iang as f64;
@@ -316,9 +311,9 @@ fn fichid(
     let sinx = x.sin();
     let cosx = x.cos();
 
-    let mut psi: RVector = Array1::zeros(nchi + 1);
-    let mut chi: RVector = Array1::zeros(nmax + 2);
-    let mut d: CVector = Array1::zeros(nd);
+    let mut psi = RVector::zeros(nchi + 1);
+    let mut chi = RVector::zeros(nmax + 2);
+    let mut d = CVector::zeros(nd);
 
     for n in (0..nchi).rev() {
         let nf = n as f64;
@@ -361,12 +356,12 @@ fn anbn(
     chi: RVector,
     d: CVector,
     nmax: usize,
-) -> (Array1Complex64, Array1Complex64) {
+) -> (CVector, CVector) {
     let perm = 1.0 / m;
     let perx = 1.0 / x;
 
-    let mut an: CVector = Array1::zeros(nmax);
-    let mut bn: CVector = Array1::zeros(nmax);
+    let mut an = CVector::zeros(nmax);
+    let mut bn = CVector::zeros(nmax);
 
     for n in 0..nmax {
         let nf = n as f64;
@@ -383,8 +378,8 @@ fn anbn(
 }
 
 fn pitau(u: f64, nmax: usize) -> (RVector, RVector) {
-    let mut pi: RVector = Array1::zeros(nmax);
-    let mut tau: RVector = Array1::zeros(nmax);
+    let mut pi = RVector::zeros(nmax);
+    let mut tau = RVector::zeros(nmax);
 
     pi[0] = 1.0;
     pi[1] = 3.0 * u;
