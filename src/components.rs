@@ -64,6 +64,22 @@ pub const MATERIAL_KEYS: &[&str] = &[
     "ch3oh-c",
 ];
 
+pub fn get_lnk_data(key: &str) -> &StaticComponent {
+    match key {
+        "astrosil" => &ASTROSIL,
+        "c" | "c-z" => &C_Z,
+        "c-p" => &C_P,
+        "gra" | "c-gra" => &C_GRA,
+        "org" | "c-org" => &C_ORG,
+        "nano" | "c-nano" => &C_NANO,
+        // "pyr-mg70" => &PYR_MG70,
+        // "pyr-mg60" => &PYR_MG60,
+        // "pyr-mg50" => &PYR_MG50,
+        // "pyr-mg40" => &PYR_MG40,
+        _ => panic!("No data for key {}", key),
+    }
+}
+
 /// Defines a material component which is statically defined.
 ///
 /// These are defined by consuming the LNK files and can be instantiated
