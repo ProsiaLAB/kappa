@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"type":["CMatrix","CTensor","CVector","RMatrix","RTensor","RVector","UVector"]};
+window.SIDEBAR_ITEMS = {"type":["CMatrix","CTensor","CVector","RMatrix","RTensor","RVecView","RVector","UVector"]};
