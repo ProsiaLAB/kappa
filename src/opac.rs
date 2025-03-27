@@ -4,18 +4,20 @@
 
 use std::f64::consts::PI;
 use std::mem::swap;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
 use ndarray::s;
 use ndarray::Zip;
-
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::io::write_sizedis_file;
-use crate::types::RMatrix;
-use crate::types::{RVector, UVector};
+use crate::types::RVecView;
+use crate::types::{CVector, RMatrix, RVector, UVector};
+use crate::utils::legendre::gauss_legendre;
 
 #[derive(Debug)]
 pub struct Material {
@@ -209,6 +211,77 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
+struct KappaState<'a> {
+    r: RVector,
+    lam: RVecView<'a>,
+    nlam: usize,
+    mu: RVecView<'a>,
+    e1_blend: RVecView<'a>,
+    e2_blend: RVecView<'a>,
+    p: Particle,
+    nr: RVecView<'a>,
+    method: KappaMethod,
+    nf: usize,
+    ifmn: usize,
+    ns: usize,
+    pcore: f64,
+    rho_av: f64,
+    wf: RVector,
+    f: RVector,
+    split: bool,
+    nang: usize,
+    chopangle: f64,
+    qabsdqext_min: f64,
+    xlim: f64,
+    xlim_dhs: f64,
+    mmf_a0: f64,
+    mmf_struct: f64,
+    mmf_kf: f64,
+    mmfss: bool,
+}
+
+impl<'a> KappaState<'a> {
+    pub fn new(
+        kpc: &'a KappaConfig,
+        ns: usize,
+        nf: usize,
+        r: RVector,
+        nr: &'a RVector,
+        mu: &'a RVector,
+        e1_blend: &'a RVector,
+        e2_blend: &'a RVector,
+    ) -> Self {
+        KappaState {
+            r,
+            lam: kpc.lam.view(),
+            nlam: kpc.nlam,
+            mu: mu.view(),
+            e1_blend: e1_blend.view(),
+            e2_blend: e2_blend.view(),
+            p: Particle::default(),
+            nr: nr.view(),
+            method: KappaMethod::DHS,
+            nf,
+            ifmn: 0,
+            ns,
+            pcore: 0.0,
+            rho_av: 0.0,
+            wf: RVector::zeros(nf),
+            f: RVector::zeros(nf),
+            split: true,
+            nang: kpc.nang,
+            chopangle: 0.0,
+            qabsdqext_min: 0.0,
+            xlim: 1.0,
+            xlim_dhs: 1.0,
+            mmf_a0: 0.0,
+            mmf_struct: 0.0,
+            mmf_kf: 0.0,
+            mmfss: false,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
     Apow,
@@ -272,6 +345,7 @@ pub struct Mueller {
     pub f34: RVector,
 }
 
+#[derive(Default)]
 /// Particle
 pub struct Particle {
     pub rv: f64,
@@ -441,12 +515,7 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         });
 
     let mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
-    let mfrac_mantle: RVector = kpc
-        .materials
-        .iter()
-        .filter(|m| m.kind == MaterialKind::Mantle)
-        .map(|m| m.mfrac / tot_mantle)
-        .collect();
+    let mfrac_mantle = tot_mantle / tot;
 
     let aminlog = kpc.amin.log10();
     let amaxlog = kpc.amax.log10();
@@ -516,6 +585,9 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         e2.slice_mut(s![.., im]).assign(&kpc.materials[im].im);
     }
 
+    let mut rho_mantle: f64 = 0.0;
+    let mut vfrac_mantle = RVector::zeros(kpc.nmant);
+
     // Core: Turn mass fractions into volume fractions, compute rho_core
     let mtot_core = kpc
         .materials
@@ -530,23 +602,165 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
         .collect::<RVector>();
     let vtot_core = vfrac_core.iter().sum::<f64>();
     let mut rho_core = mtot_core / vtot_core;
-    vfrac_core = vfrac_core / vtot_core;
+    vfrac_core /= vtot_core;
     if kpc.pcore > 0.0 {
-        vfrac_core = vfrac_core * (1.0 - kpc.pcore);
-        rho_core = rho_core * (1.0 - kpc.pcore);
+        vfrac_core *= 1.0 - kpc.pcore;
+        rho_core *= 1.0 - kpc.pcore;
     }
 
     // Mantle: Turn mass fractions to volume fractions, compute rho_mantle
     if kpc.nmant > 0 {
-        let mtot_mantle = mfrac_mantle.iter().sum::<f64>();
+        let mtot_mantle = kpc
+            .materials
+            .iter()
+            .filter(|m| m.kind == MaterialKind::Mantle)
+            .fold(0.0, |sum, m| sum + m.mfrac);
+        vfrac_mantle = kpc
+            .materials
+            .iter()
+            .filter(|m| m.kind == MaterialKind::Mantle)
+            .map(|m| m.mfrac / m.rho)
+            .collect::<RVector>();
+        let vtot_mantle = vfrac_mantle.iter().sum::<f64>();
+        rho_mantle = mtot_mantle / vtot_mantle;
+        vfrac_mantle /= vtot_mantle;
+        if kpc.pmantle > 0.0 {
+            vfrac_mantle *= 1.0 - kpc.pmantle;
+            rho_mantle *= 1.0 - kpc.pmantle;
+        }
     }
 
-    // bruggeman_blend();
-    // maxwell_garnet_blend();
-    todo!()
+    let rho_av = if kpc.nmant == 0 {
+        rho_core
+    } else {
+        rho_core / (1.0 + mfrac_mantle * (rho_core / rho_mantle - 1.0))
+    };
+    let vfrac_mantle_f = mfrac_mantle * rho_av / rho_mantle;
+
+    let mut e1_blend = RVector::zeros(kpc.nlam);
+    let mut e2_blend = RVector::zeros(kpc.nlam);
+    let mut e_in = CVector::zeros(kpc.ncore);
+
+    // Mixing, for all wavelengths
+    for il in 0..kpc.nlam {
+        // Core
+        if kpc.nmat == 1 && kpc.pcore == 0.0 {
+            // Solid core, single material, nothing to blend for the core
+            e1_blend[il] = e1[[0, il]];
+            e2_blend[il] = e2[[0, il]];
+        } else {
+            // Blend the core materials
+            for im in 0..kpc.ncore {
+                e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
+            }
+            let e_out = bruggeman_blend(&mfrac.to_vec(), &e_in.to_vec())?;
+            e1_blend[il] = e_out.re;
+            e2_blend[il] = e_out.im;
+        }
+
+        // Mantle
+        if kpc.nmant > 0 {
+            // We do have a mantle to add
+            if (kpc.nmant == 1) && (kpc.pmantle == 0.0) {
+                // No Blending needed inside the mantle - just copy e1 and e2
+                // Since it is onyl one material, we know it is index nm
+                e1_blend[il] = e1[[kpc.nmat, il]];
+                e2_blend[il] = e2[[kpc.nmat, il]];
+            } else {
+                // Blend the mantle materials
+                for im in 0..kpc.nmant {
+                    e_in[im] = Complex::new(e1[[il, im + kpc.ncore]], e2[[il, im + kpc.ncore]]);
+                }
+                let e_out = bruggeman_blend(&vfrac_mantle.to_vec(), &e_in.to_vec())?;
+                e1mantle[il] = e_out.re;
+                e1mantle[il] = e_out.im;
+            }
+            let (e1mg, e2mg) = maxwell_garnet_blend(
+                Complex::new(e1_blend[il], e2_blend[il]),
+                Complex::new(e1mantle[il], e2mantle[il]),
+                vfrac_mantle_f,
+            );
+            e1_blend[il] = e1mg;
+            e2_blend[il] = e2mg;
+        }
+    }
+
+    if kpc.blend_only {
+        // Write .lnk file
+        todo!()
+    }
+    // TODO: Now there is some `--print` command logic
+    // TODO: that we will implement later
+
+    if kpc.write_grid || kpc.blend_only {
+        println!("Exiting after writing requested files");
+        return Ok(());
+    }
+
+    // Check how we are going to average over hollow sphere components
+    let (f, wf) = if nf > 1 && kpc.fmax > 0.01 {
+        // Get the weights for Gauss-Legendre integration
+        gauss_legendre(0.01f64, kpc.fmax, nf)
+    } else if kpc.fmax == 0.0 {
+        (RVector::zeros(nf), RVector::ones(nf))
+    } else {
+        // Just a compact sphere, weight is 1
+        (RVector::ones(nf) * kpc.fmax, RVector::ones(nf))
+    };
+
+    // Initialize mu
+    let mut mu = RVector::zeros(kpc.nang);
+    let nangby2f = (kpc.nang / 2) as f64;
+    for (j, val) in mu.iter_mut().enumerate() {
+        let jf = j as f64;
+        let theta = (jf - 0.5) / nangby2f * PI / 2.0;
+        *val = theta.cos();
+    }
+
+    // Create shared memory for the variables
+    let kps = Arc::new(KappaState::new(
+        kpc, ns, nf, r, &nr, &mu, &e1_blend, &e2_blend,
+    ));
+
+    if kpc.split {
+        let num_threads = rayon::current_num_threads();
+        println!("Rayon thread pool size: {}", num_threads);
+        (0..kpc.nlam).into_par_iter().for_each(|ilam| {
+            let wvno = 2.0 * PI / kps.lam[ilam];
+            let f11 = RVector::zeros(kpc.nang);
+            let f12 = RVector::zeros(kpc.nang);
+            let f22 = RVector::zeros(kpc.nang);
+            let f33 = RVector::zeros(kpc.nang);
+            let f34 = RVector::zeros(kpc.nang);
+            let f44 = RVector::zeros(kpc.nang);
+            let mut csca = 0.0;
+            let mut cabs = 0.0;
+            let mut cext = 0.0;
+            let mut smat_nbad = 0;
+            let mut mass = 0.0;
+            let mut vol = 0.0;
+            for is in 0..ns {
+                let r1 = kps.r[is];
+                let err = 0;
+                let spheres = 0;
+                let toolarge = 0;
+                match kpc.method {
+                    KappaMethod::DHS => {
+                        let m_in = Complex::new(1.0, 0.0);
+                        for ifmn in 0..nf {}
+                    }
+                    KappaMethod::MMF => {}
+                    KappaMethod::CDE => {}
+                }
+            }
+        });
+    }
+
+    // todo!()
+    Ok(())
 }
 
-pub fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
+fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
     let mut abunvac = 1.0 - abun.iter().sum::<f64>();
     let mvac = Complex::new(1.0, 0.0);
     if abunvac < 0.0 {
@@ -580,7 +794,7 @@ pub fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
     Ok(me)
 }
 
-pub fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
+fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
     let vf_c = 1.0 - vf_m;
     let me = m2.powi(2)
         * ((2.0 * m2.powi(2) + m1.powi(2) - 2.0 * vf_c * (m2.powi(2) - m1.powi(2)))
