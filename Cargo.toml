@@ -9,6 +9,7 @@ approx = "0.5.1"
 colored = "3.0.0"
 ndarray = "0.16.1"
 num-complex = "0.4.6"
+rayon = "1.10.0"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", ".katex-header.html"]
