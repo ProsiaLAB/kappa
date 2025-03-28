@@ -352,7 +352,39 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             }
             "--sp" | "--sparse" => {
                 kpc.write_scatter = true;
-                todo!()
+                if let Some(l1) = args.next() {
+                    if let Ok(l1) = l1.parse::<f64>() {
+                        if let Some(l2) = args.next() {
+                            if let Ok(l2) = l2.parse::<f64>() {
+                                kpc.nsparse += 1;
+                                if kpc.nsparse > 10 {
+                                    return Err(anyhow!("Too many sparse files").into());
+                                }
+                                if l1 < l2 {
+                                    kpc.scatlammin[kpc.nsparse - 1] = l1;
+                                    kpc.scatlammax[kpc.nsparse - 1] = l2;
+                                } else {
+                                    kpc.scatlammin[kpc.nsparse - 1] = l2;
+                                    kpc.scatlammax[kpc.nsparse - 1] = l1;
+                                }
+                            } else {
+                                return Err(anyhow!(
+                                    "Parsing error in second argument of --sparse"
+                                )
+                                .into());
+                            }
+                        } else {
+                            // One specific wavelength
+                            kpc.nsparse += 1;
+                            kpc.scatlammin[kpc.nsparse - 1] = l1;
+                        }
+                    } else {
+                        return Err(anyhow!("Parsing error in first argument of --sparse").into());
+                    }
+                } else {
+                    // No arguments
+                    return Err(anyhow!("Missing arguments to --sparse").into());
+                }
             }
             "--chop" => {
                 if let Some(chop_angle) = args.next() {
