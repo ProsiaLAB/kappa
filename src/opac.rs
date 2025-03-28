@@ -6,6 +6,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::f64::consts::PI;
 use std::mem::swap;
+use std::process::exit;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -15,9 +16,12 @@ use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::dhs::toon_ackerman_1981;
+use crate::dhs::DHSConfig;
 use crate::io::{write_sizedis_file, write_wavelength_grid};
-use crate::types::RVecView;
-use crate::types::{CVector, RMatrix, RVector};
+use crate::mie::de_rooij_1984;
+use crate::mie::MieConfig;
+use crate::types::{BVector, CVector, RMatrix, RVector};
 use crate::utils::legendre::gauss_legendre;
 use crate::utils::prepare_sparse;
 
@@ -345,10 +349,8 @@ pub struct Component {
 }
 
 /// Run the simulation.
-pub fn run(kpc: &mut KappaConfig) -> Result<()> {
+pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
-
-    let mut p = Particle::default();
 
     // Loop for splitting the output into files by grain size
     if kpc.split {
@@ -359,16 +361,19 @@ pub fn run(kpc: &mut KappaConfig) -> Result<()> {
         let afact = (kpc.amax / kpc.amin).powf(1.0 / kpc.na as f64);
         let afsub = afact.powf(1.0 / (nsub - 1) as f64);
 
-        (0..kpc.na).into_par_iter().for_each(|ia| {
+        (0..kpc.na).into_par_iter().try_for_each(|ia| {
             let iaf = ia as f64;
             let mut p = Particle::default();
             let asplit = kpc.amin * afact.powf(iaf + 0.5);
             let nsubf = nsub as f64;
             let aminsplit = asplit * afsub.powf(-nsubf / 2.0);
             let amaxsplit = asplit * afsub.powf(nsubf / 2.0);
-            compute_kappa(ia, &mut p, aminsplit, amaxsplit, kpc);
-        });
+            compute_kappa(ia, &mut p, aminsplit, amaxsplit, kpc)?;
+            Ok::<(), KappaError>(())
+        })?;
+        exit(0);
     } else {
+        let mut p = Particle::default();
         let _ = compute_kappa(0, &mut p, kpc.amin, kpc.amax, kpc);
     }
 
@@ -507,16 +512,15 @@ fn compute_kappa(
     amin: f64,
     amax: f64,
     kpc: &KappaConfig,
-) -> Result<()> {
+) -> Result<(), KappaError> {
     let ns = kpc.na;
     let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
     let mut r = RVector::zeros(ns);
     let mut nr = RVector::zeros(ns);
-    let mut f = RVector::zeros(nf);
-    let mut wf = RVector::zeros(nf);
+
     let mut e1mantle = RVector::zeros(kpc.nlam);
-    let mut e2mantle = RVector::zeros(kpc.nlam);
+    let e2mantle = RVector::zeros(kpc.nlam);
 
     // Normalize the mass fractions
     let (tot, tot_mantle) = kpc
@@ -590,7 +594,7 @@ fn compute_kappa(
         nr = 1.0 * nr / tot;
     }
 
-    if kpc.write_grid {
+    if kpc.write_grid && ia == 0 {
         write_sizedis_file(kpc, ns, &r, &mut nr, tot)?;
     }
 
@@ -735,18 +739,30 @@ fn compute_kappa(
     }
 
     // Create shared memory for the variables
-    // let kps = Arc::new(KappaState::new(
-    //     kpc, ns, nf, r, &nr, &mu, &e1_blend, &e2_blend,
-    // ));
+    let kps = KappaState {
+        ns,
+        nf,
+        ifmn,
+        r: &r,
+        nr: &nr,
+        f: &f,
+        wf: &wf,
+        e1_blend: &e1_blend,
+        e2_blend: &e2_blend,
+        mu: &mu,
+        rho_av,
+    };
 
     if !kpc.split {
-        (0..kpc.nlam).into_par_iter().for_each(|ilam| {
-            over_wavelengths(ilam, ns, nf, &r, kpc);
-        });
+        (0..kpc.nlam).into_par_iter().try_for_each(|ilam| {
+            over_wavelengths(ilam, &kps, kpc)?;
+            Ok::<(), KappaError>(())
+        })?;
     } else {
-        (0..kpc.nlam).for_each(|ilam| {
-            over_wavelengths(ilam, ns, nf, &r, kpc);
-        });
+        (0..kpc.nlam).try_for_each(|ilam| {
+            over_wavelengths(ilam, &kps, kpc)?;
+            Ok::<(), KappaError>(())
+        })?;
     }
 
     // todo!()
@@ -797,32 +813,174 @@ fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
 }
 
 /// Calculate the opacities for a wavelength value.
-fn over_wavelengths(ilam: usize, ns: usize, nf: usize, r: &RVector, kpc: &KappaConfig) {
+fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<()> {
+    let qabsdqext_min = 1e-4;
     let wvno = 2.0 * PI / kpc.lam[ilam];
-    let f11 = RVector::zeros(kpc.nang);
-    let f12 = RVector::zeros(kpc.nang);
-    let f22 = RVector::zeros(kpc.nang);
-    let f33 = RVector::zeros(kpc.nang);
-    let f34 = RVector::zeros(kpc.nang);
-    let f44 = RVector::zeros(kpc.nang);
+    let mut f11 = RVector::zeros(kpc.nang);
+    let mut f12 = RVector::zeros(kpc.nang);
+    let mut f22 = RVector::zeros(kpc.nang);
+    let mut f33 = RVector::zeros(kpc.nang);
+    let mut f34 = RVector::zeros(kpc.nang);
+    let mut f44 = RVector::zeros(kpc.nang);
     let mut csca = 0.0;
     let mut cabs = 0.0;
     let mut cext = 0.0;
     let mut smat_nbad = 0;
     let mut mass = 0.0;
     let mut vol = 0.0;
-    for is in 0..ns {
-        let r1 = r[is];
-        let err = 0;
-        let spheres = 0;
-        let toolarge = 0;
+    for is in 0..kps.ns {
+        let r1 = kps.r[is];
+        let mut spheres = false;
+        let mut too_large = false;
         match kpc.method {
             KappaMethod::DHS => {
                 let m_in = Complex::new(1.0, 0.0);
-                for ifmn in 0..nf {}
+                let nangf = kpc.nang as f64;
+                for ifn in 0..kps.nf {
+                    let mut rad: f64;
+                    if kps.f[ifn] == 0.0 {
+                        spheres = true;
+                    } else if r1 * wvno > kpc.xlim {
+                        too_large = true;
+                    } else {
+                        rad = r1 / (1.0 - kps.f[ifn]).powf(1.0 / 3.0);
+                        let rcore = rad * kps.f[ifn].powf(1.0 / 3.0);
+                        let mconj = Complex::new(kps.e1_blend[ilam], -kps.e2_blend[ilam]);
+                        let wvno_1 = wvno.min(kpc.xlim_dhs / rad);
+                        let dhsc = DHSConfig {
+                            r_core: rcore,
+                            r_shell: rad,
+                            wave_number: wvno_1,
+                            r_indsh: mconj,
+                            r_indco: m_in,
+                            mu: kps.mu,
+                            numang: kpc.nang / 2,
+                            max_angle: kpc.nang,
+                        };
+                        let (
+                            csmie,
+                            mut cemie,
+                            mut mie_f11,
+                            mie_f12,
+                            mie_f22,
+                            mie_f33,
+                            mie_f34,
+                            mie_f44,
+                        ) = match toon_ackerman_1981(&dhsc) {
+                            Ok(dhsr) => {
+                                if spheres {
+                                    rad = r1;
+                                } else if too_large {
+                                    rad = r1 / (1.0 - kps.f[kps.ifmn]).powf(1.0 / 3.0);
+                                };
+                                let cemie = dhsr.q_ext * PI * rad.powi(2);
+                                let csmie = dhsr.q_sca * PI * rad.powi(2);
+                                let factor = 2.0 * PI / csmie / wvno.powi(2);
+                                let mut mie_f11 = RVector::zeros(kpc.nang);
+                                let mut mie_f12 = RVector::zeros(kpc.nang);
+                                let mut mie_f22 = RVector::zeros(kpc.nang);
+                                let mut mie_f33 = RVector::zeros(kpc.nang);
+                                let mut mie_f34 = RVector::zeros(kpc.nang);
+                                let mut mie_f44 = RVector::zeros(kpc.nang);
+                                for j in 0..(kpc.nang / 2) {
+                                    mie_f11[j] = (dhsr.m1[[j, 0]] + dhsr.m0[[j, 0]]) * factor;
+                                    mie_f12[j] = (dhsr.m1[[j, 0]] - dhsr.m0[[j, 0]]) * factor;
+                                    mie_f22[j] = (dhsr.m1[[j, 0]] + dhsr.m0[[j, 0]]) * factor;
+                                    mie_f33[j] = (dhsr.s10[[j, 0]]) * factor;
+                                    mie_f34[j] = (-dhsr.d10[[j, 0]]) * factor;
+                                    mie_f44[j] = (dhsr.s10[[j, 0]]) * factor;
+                                    // Here we use the assumption that the grid is regular.  An adapted
+                                    // grid is not possible if it is not symmetric around pi/2.
+                                    mie_f11[kpc.nang - j - 1] =
+                                        (dhsr.m1[[j, 1]] + dhsr.m0[[j, 1]]) * factor;
+                                    mie_f12[kpc.nang - j - 1] =
+                                        (dhsr.m1[[j, 1]] - dhsr.m0[[j, 1]]) * factor;
+                                    mie_f22[kpc.nang - j - 1] =
+                                        (dhsr.m1[[j, 1]] + dhsr.m0[[j, 1]]) * factor;
+                                    mie_f33[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
+                                    mie_f34[kpc.nang - j - 1] = (-dhsr.d10[[j, 1]]) * factor;
+                                    mie_f44[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
+                                }
+                                (
+                                    csmie, cemie, mie_f11, mie_f12, mie_f22, mie_f33, mie_f34,
+                                    mie_f44,
+                                )
+                            }
+                            Err(_) => {
+                                rad = r1;
+                                let rmie = rad;
+                                let lmie = kpc.lam[ilam];
+                                let e1_mie = kps.e1_blend[ilam];
+                                let e2_mie = kps.e2_blend[ilam];
+
+                                let thmin = 180.0 * (1.0 - 0.5) / nangf;
+                                let thmax = 180.0 * (nangf - 0.5) / nangf;
+                                let radius = if rmie / lmie < 5000.0 {
+                                    rmie
+                                } else {
+                                    rmie / 5000.0
+                                };
+                                let miec = MieConfig {
+                                    nangle: kpc.nang,
+                                    delta: 1e-8,
+                                    thmin,
+                                    thmax,
+                                    step: (thmax - thmin) / (nangf - 1.0),
+                                    lam: lmie,
+                                    cmm: Complex::new(e1_mie, e2_mie),
+                                    rad: radius,
+                                };
+                                let mier = de_rooij_1984(&miec)?;
+                                let cemie = mier.c_ext;
+                                let csmie = mier.c_sca;
+                                let mie_f22 = mier.f_11.clone();
+                                let mie_f44 = mier.f_33.clone();
+                                (
+                                    csmie, cemie, mier.f_11, mier.f_12, mie_f22, mier.f_33,
+                                    mier.f_34, mie_f44,
+                                )
+                            }
+                        };
+
+                        let mut tot = 0.0;
+                        let mut tot2 = 0.0;
+                        for j in 0..kpc.nang {
+                            let jf = j as f64;
+                            tot += mie_f11[j] * (PI * (jf + 0.5) / nangf).sin();
+                            tot2 += (PI * (jf + 0.5) / nangf).sin();
+                        }
+                        mie_f11[0] += (tot2 - tot) / (PI * 0.5 / nangf).sin();
+                        if mie_f11[0] < 0.0 {
+                            mie_f11[0] = 0.0;
+                        }
+                        for j in 0..kpc.nang {
+                            f11[j] += kps.wf[ifn] * kps.nr[is] * mie_f11[j] * csmie;
+                            f12[j] += kps.wf[ifn] * kps.nr[is] * mie_f12[j] * csmie;
+                            f22[j] += kps.wf[ifn] * kps.nr[is] * mie_f22[j] * csmie;
+                            f33[j] += kps.wf[ifn] * kps.nr[is] * mie_f33[j] * csmie;
+                            f34[j] += kps.wf[ifn] * kps.nr[is] * mie_f34[j] * csmie;
+                            f44[j] += kps.wf[ifn] * kps.nr[is] * mie_f44[j] * csmie;
+                        }
+                        let mut camie = cemie - csmie;
+                        if camie < cemie * qabsdqext_min {
+                            camie *= 1e-4;
+                            cemie = camie + csmie;
+                        }
+                        cext += kps.wf[ifn] * kps.nr[is] * cemie;
+                        csca += kps.wf[ifn] * kps.nr[is] * csmie;
+                        cabs += kps.wf[ifn] * kps.nr[is] * camie;
+                        mass += kps.wf[ifn] * kps.nr[is] * kps.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
+                        vol += kps.wf[ifn] * kps.nr[is] * 4.0 * PI * r1.powi(3) / 3.0;
+                    }
+                }
             }
-            KappaMethod::MMF => {}
-            KappaMethod::CDE => {}
+            KappaMethod::MMF => {
+                todo!()
+            }
+            KappaMethod::CDE => {
+                todo!()
+            }
         }
     }
+    Ok(())
 }
