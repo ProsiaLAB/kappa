@@ -429,26 +429,26 @@
 
 <span class="kw">use </span><span class="kw">crate</span>::types::{CMatrix, CVector, RMatrix, RVector};
 
-<span class="kw">pub struct </span>DHSConfig {
-    r_core: f64,
-    r_shell: f64,
-    wave_number: f64,
-    r_indsh: Complex64,
-    r_indco: Complex64,
-    mu: RVector,
-    numang: usize,
-    max_angle: usize,
+<span class="kw">pub struct </span>DHSConfig&lt;<span class="lifetime">'a</span>&gt; {
+    <span class="kw">pub </span>r_core: f64,
+    <span class="kw">pub </span>r_shell: f64,
+    <span class="kw">pub </span>wave_number: f64,
+    <span class="kw">pub </span>r_indsh: Complex64,
+    <span class="kw">pub </span>r_indco: Complex64,
+    <span class="kw">pub </span>mu: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
+    <span class="kw">pub </span>numang: usize,
+    <span class="kw">pub </span>max_angle: usize,
 }
 
 <span class="kw">pub struct </span>DHSResult {
-    q_ext: f64,
-    q_sca: f64,
-    q_bs: f64,
-    g_qsc: f64,
-    m0: RMatrix,
-    m1: RMatrix,
-    s10: RMatrix,
-    d10: RMatrix,
+    <span class="kw">pub </span>q_ext: f64,
+    <span class="kw">pub </span>q_sca: f64,
+    <span class="kw">pub </span>q_bs: f64,
+    <span class="kw">pub </span>g_qsc: f64,
+    <span class="kw">pub </span>m0: RMatrix,
+    <span class="kw">pub </span>m1: RMatrix,
+    <span class="kw">pub </span>s10: RMatrix,
+    <span class="kw">pub </span>d10: RMatrix,
 }
 
 <span class="comment">// pub enum DHSError {

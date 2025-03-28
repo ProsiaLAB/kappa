@@ -392,28 +392,7 @@
 <a href="#375" id="375">375</a>
 <a href="#376" id="376">376</a>
 <a href="#377" id="377">377</a>
-<a href="#378" id="378">378</a>
-<a href="#379" id="379">379</a>
-<a href="#380" id="380">380</a>
-<a href="#381" id="381">381</a>
-<a href="#382" id="382">382</a>
-<a href="#383" id="383">383</a>
-<a href="#384" id="384">384</a>
-<a href="#385" id="385">385</a>
-<a href="#386" id="386">386</a>
-<a href="#387" id="387">387</a>
-<a href="#388" id="388">388</a>
-<a href="#389" id="389">389</a>
-<a href="#390" id="390">390</a>
-<a href="#391" id="391">391</a>
-<a href="#392" id="392">392</a>
-<a href="#393" id="393">393</a>
-<a href="#394" id="394">394</a>
-<a href="#395" id="395">395</a>
-<a href="#396" id="396">396</a>
-<a href="#397" id="397">397</a>
-<a href="#398" id="398">398</a>
-<a href="#399" id="399">399</a></pre></div><pre class="rust"><code><span class="doccomment">//! Mie scattering calculation
+<a href="#378" id="378">378</a></pre></div><pre class="rust"><code><span class="doccomment">//! Mie scattering calculation
 //!
 //! This module contains functions to calculate Mie scattering
 //! coefficients for a given set of parameters.
@@ -430,30 +409,34 @@
 <span class="kw">use </span><span class="kw">crate</span>::types::{CVector, RMatrix, RVector};
 
 <span class="kw">pub struct </span>MieConfig {
-    nangle: usize,
-    delta: f64,
-    thmin: f64,
-    thmax: f64,
-    step: f64,
-    lam: f64,
-    cmm: Complex64,
-    rad: f64,
+    <span class="kw">pub </span>nangle: usize,
+    <span class="kw">pub </span>delta: f64,
+    <span class="kw">pub </span>thmin: f64,
+    <span class="kw">pub </span>thmax: f64,
+    <span class="kw">pub </span>step: f64,
+    <span class="kw">pub </span>lam: f64,
+    <span class="kw">pub </span>cmm: Complex64,
+    <span class="kw">pub </span>rad: f64,
 }
 
 <span class="kw">pub struct </span>MieResult {
-    u: RVector,
-    wth: RVector,
-    c_sca: f64,
-    c_ext: f64,
-    q_sca: f64,
-    q_ext: f64,
-    albedo: f64,
-    g: f64,
-    reff: f64,
-    xeff: f64,
-    numpar: f64,
-    volume: f64,
-    f_0: RMatrix,
+    <span class="kw">pub </span>u: RVector,
+    <span class="kw">pub </span>wth: RVector,
+    <span class="kw">pub </span>c_sca: f64,
+    <span class="kw">pub </span>c_ext: f64,
+    <span class="kw">pub </span>q_sca: f64,
+    <span class="kw">pub </span>q_ext: f64,
+    <span class="kw">pub </span>albedo: f64,
+    <span class="kw">pub </span>g: f64,
+    <span class="kw">pub </span>reff: f64,
+    <span class="kw">pub </span>xeff: f64,
+    <span class="kw">pub </span>numpar: f64,
+    <span class="kw">pub </span>volume: f64,
+    <span class="kw">pub </span>f_0: RMatrix,
+    <span class="kw">pub </span>f_11: RVector,
+    <span class="kw">pub </span>f_12: RVector,
+    <span class="kw">pub </span>f_33: RVector,
+    <span class="kw">pub </span>f_34: RVector,
 }
 
 <span class="comment">// pub enum MieError {
@@ -461,44 +444,8 @@
 // }
 
 </span><span class="kw">pub fn </span>de_rooij_1984(miec: <span class="kw-2">&amp;</span>MieConfig) -&gt; <span class="prelude-ty">Result</span>&lt;MieResult&gt; {
-    <span class="comment">// miec.delta = 1e-8;
-    // miec.cutoff = 1e-8;
-
-    // miec.thmin = 180.0 * (1.0 - 0.5) / miec.nangle as f64;
-    // miec.thmax = 180.0 * (miec.nangle as f64 - 0.5) / miec.nangle as f64;
-    // miec.step = (miec.thmax - miec.thmin) / (miec.nangle as f64 - 1.0);
-
-    // miec.cmm = vec![Complex::new(0.0, 0.0); miec.nparts];
-    // miec.cmm[0] = Complex::new(1.0, 0.0);
-
-    // let mut rdis: RMatrix = Array2::zeros((miec.nparts, miec.ndis));
-    // rdis[[0, 0]] = miec.rad;
-
-    // let mut nwrdis: RMatrix = Array2::zeros((miec.nparts, miec.ndis));
-    // nwrdis[[0, 0]] = 1.0;
-
-    </span><span class="kw">let </span><span class="kw-2">mut </span>f_11 = RVector::zeros(miec.nangle);
-    <span class="kw">let </span><span class="kw-2">mut </span>f_12 = RVector::zeros(miec.nangle);
-    <span class="kw">let </span><span class="kw-2">mut </span>f_33 = RVector::zeros(miec.nangle);
-    <span class="kw">let </span><span class="kw-2">mut </span>f_34 = RVector::zeros(miec.nangle);
-
-    <span class="kw">let </span>mier = mie(miec)<span class="question-mark">?</span>;
-
-    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..miec.nangle {
-        f_11[i] = mier.f_0[[<span class="number">0</span>, miec.nangle - <span class="number">1</span>]];
-        f_12[i] = mier.f_0[[<span class="number">1</span>, miec.nangle - <span class="number">1</span>]];
-        f_33[i] = mier.f_0[[<span class="number">2</span>, miec.nangle - <span class="number">1</span>]];
-        f_34[i] = mier.f_0[[<span class="number">3</span>, miec.nangle - <span class="number">1</span>]];
-    }
-
-    <span class="prelude-val">Ok</span>(mier)
-}
-
-<span class="kw">fn </span>mie(miec: <span class="kw-2">&amp;</span>MieConfig) -&gt; <span class="prelude-ty">Result</span>&lt;MieResult&gt; {
     <span class="kw">let </span>m = miec.cmm.conj();
-
     <span class="kw">let </span>mier = get_scattering_matrix(miec, m)<span class="question-mark">?</span>;
-
     <span class="prelude-val">Ok</span>(mier)
 }
 
@@ -517,6 +464,10 @@
         numpar: <span class="number">0.0</span>,
         volume: <span class="number">0.0</span>,
         f_0: RMatrix::zeros((<span class="number">3</span>, <span class="number">3</span>)),
+        f_11: RVector::zeros(miec.nangle),
+        f_12: RVector::zeros(miec.nangle),
+        f_33: RVector::zeros(miec.nangle),
+        f_34: RVector::zeros(miec.nangle),
     };
 
     <span class="kw">let </span><span class="kw-2">mut </span>fac_90 = <span class="number">0.0</span>;
@@ -701,6 +652,13 @@
     mier.volume = (<span class="number">4.0 </span>/ <span class="number">3.0</span>) * PI * mier.reff;
     mier.reff = PI * mier.reff / mier.g;
     mier.xeff = rtox * mier.reff;
+
+    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..miec.nangle {
+        mier.f_11[i] = mier.f_0[[<span class="number">0</span>, miec.nangle - <span class="number">1</span>]];
+        mier.f_12[i] = mier.f_0[[<span class="number">1</span>, miec.nangle - <span class="number">1</span>]];
+        mier.f_33[i] = mier.f_0[[<span class="number">2</span>, miec.nangle - <span class="number">1</span>]];
+        mier.f_34[i] = mier.f_0[[<span class="number">3</span>, miec.nangle - <span class="number">1</span>]];
+    }
 
     <span class="prelude-val">Ok</span>(mier)
 }
