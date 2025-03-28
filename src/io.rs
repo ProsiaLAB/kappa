@@ -198,14 +198,13 @@ pub fn write_sizedis_file(
     nr: &mut RVector,
     tot: f64,
 ) -> Result<()> {
-    let default_dir = "output".to_string();
-    let sdoutfile = kpc.outdir.as_ref().unwrap_or(&default_dir).to_owned() + "/optool_sd.dat";
+    let sdoutfile = kpc.outdir.to_owned() + "/kappa_sd.dat";
     let file = File::create(sdoutfile).expect("Failed to open file");
     let mut writer = BufWriter::new(file);
 
     writeln!(
         writer,
-        "# Size distribution written by optool, can be read in with -a optool_sd.dat"
+        "# Size distribution written by kappa, can be read in with -a kappa_sd.dat"
     )?;
     if kpc.split {
         writeln!(
@@ -237,6 +236,24 @@ pub fn write_sizedis_file(
     for i in 0..ns {
         nr[i] /= tot;
         writeln!(writer, "{:18.5e} {:18.5e}", r[i], nr[i])?;
+    }
+    Ok(())
+}
+
+pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
+    let lamoutfile = kpc.outdir.to_owned() + "/kappa_lam.dat";
+    let file = File::create(lamoutfile).expect("Failed to open file");
+    let mut writer = BufWriter::new(file);
+
+    writeln!(
+        writer,
+        "# Wavelength grid written by kappa, can be read back in with -l kappa_lam.dat"
+    )?;
+    writeln!(writer, "# First line: number of wavelengths")?;
+    writeln!(writer, "# Then one lambda per line, in micrometer")?;
+    writeln!(writer, "{}", kpc.nlam)?;
+    for i in 0..kpc.nlam {
+        writeln!(writer, "{:18.5e}", kpc.lam[i])?;
     }
     Ok(())
 }
