@@ -314,7 +314,7 @@ pub struct Particle {
     pub k_ext: RVector,
     pub g: RVector,
     pub f: Vec<Mueller>,
-    pub trust: Vec<bool>,
+    pub trust: BVector,
     pub is_ok: bool,
     pub is_ok_lmin: f64,
 }
