@@ -1,10 +1,11 @@
 //! The heart of `kappa`.
-//!
-//!
+//! This module contains the main routines to compute opacities
+//! and scattering matrices.
 
+use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::f64::consts::PI;
 use std::mem::swap;
-use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -14,10 +15,11 @@ use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::io::write_sizedis_file;
+use crate::io::{write_sizedis_file, write_wavelength_grid};
 use crate::types::RVecView;
-use crate::types::{CVector, RMatrix, RVector, UVector};
+use crate::types::{CVector, RMatrix, RVector};
 use crate::utils::legendre::gauss_legendre;
+use crate::utils::prepare_sparse;
 
 #[derive(Debug)]
 pub struct Material {
@@ -83,6 +85,8 @@ pub struct KappaConfig {
     pub write_grid: bool,
     pub for_radmc: bool,
     pub nsparse: usize,
+    pub scatlammin: RVector,
+    pub scatlammax: RVector,
     pub nsubgrains: usize,
     pub mmf_struct: f64,
     pub mmf_a0: f64,
@@ -128,6 +132,8 @@ impl Default for KappaConfig {
             write_grid: false,
             for_radmc: false,
             nsparse: 0,
+            scatlammin: RVector::zeros(30),
+            scatlammax: RVector::zeros(30),
             nsubgrains: 0,
             mmf_struct: 0.0,
             mmf_a0: 0.0,
@@ -213,83 +219,18 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
-struct KappaState<'a> {
-    r: RVector,
-    lam: RVecView<'a>,
-    nlam: usize,
-    mu: RVecView<'a>,
-    e1_blend: RVecView<'a>,
-    e2_blend: RVecView<'a>,
-    p: Particle,
-    nr: RVecView<'a>,
-    method: KappaMethod,
-    nf: usize,
-    ifmn: usize,
-    ns: usize,
-    pcore: f64,
-    rho_av: f64,
-    wf: RVector,
-    f: RVector,
-    split: bool,
-    nang: usize,
-    chopangle: f64,
-    qabsdqext_min: f64,
-    xlim: f64,
-    xlim_dhs: f64,
-    mmf_a0: f64,
-    mmf_struct: f64,
-    mmf_kf: f64,
-    mmfss: bool,
-}
-
-impl<'a> KappaState<'a> {
-    pub fn new(
-        kpc: &'a KappaConfig,
-        ns: usize,
-        nf: usize,
-        r: RVector,
-        nr: &'a RVector,
-        mu: &'a RVector,
-        e1_blend: &'a RVector,
-        e2_blend: &'a RVector,
-    ) -> Self {
-        KappaState {
-            r,
-            lam: kpc.lam.view(),
-            nlam: kpc.nlam,
-            mu: mu.view(),
-            e1_blend: e1_blend.view(),
-            e2_blend: e2_blend.view(),
-            p: Particle::default(),
-            nr: nr.view(),
-            method: KappaMethod::DHS,
-            nf,
-            ifmn: 0,
-            ns,
-            pcore: 0.0,
-            rho_av: 0.0,
-            wf: RVector::zeros(nf),
-            f: RVector::zeros(nf),
-            split: true,
-            nang: kpc.nang,
-            chopangle: 0.0,
-            qabsdqext_min: 0.0,
-            xlim: 1.0,
-            xlim_dhs: 1.0,
-            mmf_a0: 0.0,
-            mmf_struct: 0.0,
-            mmf_kf: 0.0,
-            mmfss: false,
-        }
-    }
-}
-
 #[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
     Apow,
     File,
     Normal,
     LogNormal,
+}
+
+#[derive(Debug)]
+pub enum WavelengthKind {
+    CmdLine,
+    File,
 }
 
 impl SizeDistribution {
@@ -379,7 +320,7 @@ pub struct Component {
     pub state: String,
     /// Density of the component.
     pub rho: f64,
-    /// size
+    /// Number of wavelengths.
     pub size: usize,
     /// Wavelengths.
     pub l0: RVector,
@@ -389,13 +330,38 @@ pub struct Component {
     pub k0: RVector,
 }
 
+/// Run the simulation.
 pub fn run(kpc: &mut KappaConfig) -> Result<()> {
     prepare_inputs(kpc)?;
-    // println!("{:?}", kpc);
-    compute_kappa(kpc)?;
+
+    let mut p = Particle::default();
+
+    // Loop for splitting the output into files by grain size
+    if kpc.split {
+        let mut nsub = kpc.nsubgrains;
+        if nsub % 2 == 0 {
+            nsub += 1;
+        }
+        let afact = (kpc.amax / kpc.amin).powf(1.0 / kpc.na as f64);
+        let afsub = afact.powf(1.0 / (nsub - 1) as f64);
+
+        (0..kpc.na).into_par_iter().for_each(|ia| {
+            let iaf = ia as f64;
+            let mut p = Particle::default();
+            let asplit = kpc.amin * afact.powf(iaf + 0.5);
+            let nsubf = nsub as f64;
+            let aminsplit = asplit * afsub.powf(-nsubf / 2.0);
+            let amaxsplit = asplit * afsub.powf(nsubf / 2.0);
+            compute_kappa(ia, &mut p, aminsplit, amaxsplit, kpc);
+        });
+    } else {
+        let _ = compute_kappa(0, &mut p, kpc.amin, kpc.amax, kpc);
+    }
+
     Ok(())
 }
 
+/// Pre-process the inputs collected from the command-line
 fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     // Sort by `kind = MaterialKind::Core`
     kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
@@ -520,7 +486,14 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     Ok(())
 }
 
-fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
+/// Calculate the opacities for a grain-size value.
+fn compute_kappa(
+    ia: usize,
+    p: &mut Particle,
+    amin: f64,
+    amax: f64,
+    kpc: &KappaConfig,
+) -> Result<()> {
     let ns = kpc.na;
     let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
@@ -547,8 +520,8 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
     let mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
     let mfrac_mantle = tot_mantle / tot;
 
-    let aminlog = kpc.amin.log10();
-    let amaxlog = kpc.amax.log10();
+    let aminlog = amin.log10();
+    let amaxlog = amax.log10();
     let pow = -kpc.apow;
 
     if ns == 1 {
@@ -591,7 +564,7 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
                 };
 
                 // With the option `-d`m each computation is only a piece of the size grid
-                if *r_val < kpc.amin || *r_val > kpc.amax {
+                if *r_val < amin || *r_val > amax {
                     *nr_val = 0.0;
                 }
 
@@ -748,41 +721,17 @@ fn compute_kappa(kpc: &KappaConfig) -> Result<()> {
     }
 
     // Create shared memory for the variables
-    let kps = Arc::new(KappaState::new(
-        kpc, ns, nf, r, &nr, &mu, &e1_blend, &e2_blend,
-    ));
+    // let kps = Arc::new(KappaState::new(
+    //     kpc, ns, nf, r, &nr, &mu, &e1_blend, &e2_blend,
+    // ));
 
-    if kpc.split {
-        let num_threads = rayon::current_num_threads();
-        println!("Rayon thread pool size: {}", num_threads);
+    if !kpc.split {
         (0..kpc.nlam).into_par_iter().for_each(|ilam| {
-            let wvno = 2.0 * PI / kps.lam[ilam];
-            let f11 = RVector::zeros(kpc.nang);
-            let f12 = RVector::zeros(kpc.nang);
-            let f22 = RVector::zeros(kpc.nang);
-            let f33 = RVector::zeros(kpc.nang);
-            let f34 = RVector::zeros(kpc.nang);
-            let f44 = RVector::zeros(kpc.nang);
-            let mut csca = 0.0;
-            let mut cabs = 0.0;
-            let mut cext = 0.0;
-            let mut smat_nbad = 0;
-            let mut mass = 0.0;
-            let mut vol = 0.0;
-            for is in 0..ns {
-                let r1 = kps.r[is];
-                let err = 0;
-                let spheres = 0;
-                let toolarge = 0;
-                match kpc.method {
-                    KappaMethod::DHS => {
-                        let m_in = Complex::new(1.0, 0.0);
-                        for ifmn in 0..nf {}
-                    }
-                    KappaMethod::MMF => {}
-                    KappaMethod::CDE => {}
-                }
-            }
+            over_wavelengths(ilam, ns, nf, &r, kpc);
+        });
+    } else {
+        (0..kpc.nlam).for_each(|ilam| {
+            over_wavelengths(ilam, ns, nf, &r, kpc);
         });
     }
 
@@ -831,4 +780,35 @@ fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
             / (2.0 * m2.powi(2) + m1.powi(2) + vf_c * (m2.powi(2) - m1.powi(2))));
 
     (me.sqrt().re, me.sqrt().im)
+}
+
+/// Calculate the opacities for a wavelength value.
+fn over_wavelengths(ilam: usize, ns: usize, nf: usize, r: &RVector, kpc: &KappaConfig) {
+    let wvno = 2.0 * PI / kpc.lam[ilam];
+    let f11 = RVector::zeros(kpc.nang);
+    let f12 = RVector::zeros(kpc.nang);
+    let f22 = RVector::zeros(kpc.nang);
+    let f33 = RVector::zeros(kpc.nang);
+    let f34 = RVector::zeros(kpc.nang);
+    let f44 = RVector::zeros(kpc.nang);
+    let mut csca = 0.0;
+    let mut cabs = 0.0;
+    let mut cext = 0.0;
+    let mut smat_nbad = 0;
+    let mut mass = 0.0;
+    let mut vol = 0.0;
+    for is in 0..ns {
+        let r1 = r[is];
+        let err = 0;
+        let spheres = 0;
+        let toolarge = 0;
+        match kpc.method {
+            KappaMethod::DHS => {
+                let m_in = Complex::new(1.0, 0.0);
+                for ifmn in 0..nf {}
+            }
+            KappaMethod::MMF => {}
+            KappaMethod::CDE => {}
+        }
+    }
 }
