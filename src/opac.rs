@@ -395,6 +395,34 @@ pub fn run(kpc: &mut KappaConfig) -> Result<()> {
 }
 
 fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
+    // Sort by `kind = MaterialKind::Core`
+    kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
+        (MaterialKind::Core, MaterialKind::Core) => Ordering::Equal,
+        (MaterialKind::Core, _) => Ordering::Less,
+        (_, MaterialKind::Core) => Ordering::Greater,
+        _ => Ordering::Equal,
+    });
+
+    kpc.nmat = kpc.ncore + kpc.nmant;
+
+    // Make logarithmic wavelength grid
+    match kpc.wavelength_kind {
+        WavelengthKind::CmdLine => {
+            kpc.lam = RVector::logspace(10.0, kpc.lmin, kpc.lmax, kpc.nlam);
+        }
+        WavelengthKind::File => {
+            // already read from file
+        }
+    }
+
+    // Prepare sparse scattering file
+    if kpc.nsparse > 0 {
+        prepare_sparse(kpc);
+    }
+    // Writing wavelength grid file
+    if kpc.write_grid {
+        write_wavelength_grid(kpc)?;
+    }
     // Materials
     if kpc.nmat >= 20 {
         return Err(anyhow!("TooManyMaterials"));

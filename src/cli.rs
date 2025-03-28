@@ -451,29 +451,6 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             },
         }
     }
-    // Sort by `kind = MaterialKind::Core`
-    kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
-        (MaterialKind::Core, MaterialKind::Core) => Ordering::Equal,
-        (MaterialKind::Core, _) => Ordering::Less,
-        (_, MaterialKind::Core) => Ordering::Greater,
-        _ => Ordering::Equal,
-    });
-
-    kpc.nmat = kpc.ncore + kpc.nmant;
-
-    // Make logarithmic wavelength grid
-    if !kpc.lam.is_empty() {
-        kpc.lam = Array::logspace(10.0, kpc.lmin, kpc.lmax, kpc.nlam);
-    }
-    kpc.iscatlam = Array::zeros(kpc.nlam);
-    // Prepare sparse scattering file
-    if kpc.nsparse > 0 {
-        todo!()
-    }
-    // Writing wavelength grid file
-    if kpc.write_grid {
-        todo!()
-    }
 
     Ok(kpc)
 }
