@@ -1,5 +1,4 @@
 //! Command line interface for the `kappa`.
-use std::cmp::Ordering;
 use std::env;
 use std::iter::Peekable;
 use std::path::Path;
@@ -8,15 +7,14 @@ use std::process::exit;
 use anyhow::anyhow;
 use anyhow::Result;
 use colored::{Color, Colorize};
-use ndarray::Array;
 
 use crate::components::get_lnk_data;
 use crate::components::MATERIAL_KEYS;
 use crate::io::read_wavelength_grid;
 use crate::io::{read_lnk_file, read_sizedis_file};
-use crate::opac::SizeDistribution;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 use crate::opac::{Material, MaterialKind};
+use crate::opac::{SizeDistribution, WavelengthKind};
 use crate::types::RVector;
 use crate::utils::regrid_lnk_data;
 
