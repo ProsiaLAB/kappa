@@ -1,5 +1,6 @@
 use ndarray::Array1;
 
+use crate::opac::KappaConfig;
 use crate::types::RVector;
 
 pub mod constants {
@@ -1365,4 +1366,32 @@ pub fn regrid_lnk_data(
     }
 
     (e1, e2)
+}
+
+pub fn prepare_sparse(kpc: &mut KappaConfig) {
+    let f = kpc.lam[kpc.nlam - 1] / kpc.lam[kpc.nlam - 2];
+
+    for (valmin, valmax) in kpc.scatlammin.iter_mut().zip(kpc.scatlammax.iter_mut()) {
+        if *valmax / *valmin < f {
+            *valmin /= f.sqrt() / 1.0001;
+            *valmax *= f.sqrt() / 1.0001;
+        }
+    }
+
+    for (il, &lam_val) in kpc.lam.iter().enumerate() {
+        if kpc
+            .scatlammin
+            .iter()
+            .zip(kpc.scatlammax.iter())
+            .any(|(&min_val, &max_val)| lam_val >= min_val && lam_val <= max_val)
+        {
+            kpc.sparse_indices.insert(il);
+            if il > 0 {
+                kpc.sparse_indices.insert(il - 1);
+            }
+            if il + 1 < kpc.nlam {
+                kpc.sparse_indices.insert(il + 1);
+            }
+        }
+    }
 }
