@@ -18,26 +18,26 @@ use num_complex::{Complex, Complex64};
 
 use crate::types::{CMatrix, CVector, RMatrix, RVector};
 
-pub struct DHSConfig {
-    r_core: f64,
-    r_shell: f64,
-    wave_number: f64,
-    r_indsh: Complex64,
-    r_indco: Complex64,
-    mu: RVector,
-    numang: usize,
-    max_angle: usize,
+pub struct DHSConfig<'a> {
+    pub r_core: f64,
+    pub r_shell: f64,
+    pub wave_number: f64,
+    pub r_indsh: Complex64,
+    pub r_indco: Complex64,
+    pub mu: &'a RVector,
+    pub numang: usize,
+    pub max_angle: usize,
 }
 
 pub struct DHSResult {
-    q_ext: f64,
-    q_sca: f64,
-    q_bs: f64,
-    g_qsc: f64,
-    m0: RMatrix,
-    m1: RMatrix,
-    s10: RMatrix,
-    d10: RMatrix,
+    pub q_ext: f64,
+    pub q_sca: f64,
+    pub q_bs: f64,
+    pub g_qsc: f64,
+    pub m0: RMatrix,
+    pub m1: RMatrix,
+    pub s10: RMatrix,
+    pub d10: RMatrix,
 }
 
 // pub enum DHSError {
