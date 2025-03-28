@@ -818,13 +818,24 @@
 <a href="#801" id="801">801</a>
 <a href="#802" id="802">802</a>
 <a href="#803" id="803">803</a>
-<a href="#804" id="804">804</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
-//!
-//!
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
+//! This module contains the main routines to compute opacities
+//! and scattering matrices.
 
-</span><span class="kw">use </span>std::f64::consts::PI;
+</span><span class="kw">use </span>std::cmp::Ordering;
+<span class="kw">use </span>std::collections::HashSet;
+<span class="kw">use </span>std::f64::consts::PI;
 <span class="kw">use </span>std::mem::swap;
-<span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>anyhow::Result;
@@ -834,10 +845,11 @@
 <span class="kw">use </span>num_complex::{Complex, Complex64};
 <span class="kw">use </span>rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-<span class="kw">use </span><span class="kw">crate</span>::io::write_sizedis_file;
+<span class="kw">use </span><span class="kw">crate</span>::io::{write_sizedis_file, write_wavelength_grid};
 <span class="kw">use </span><span class="kw">crate</span>::types::RVecView;
-<span class="kw">use </span><span class="kw">crate</span>::types::{CVector, RMatrix, RVector, UVector};
+<span class="kw">use </span><span class="kw">crate</span>::types::{CVector, RMatrix, RVector};
 <span class="kw">use </span><span class="kw">crate</span>::utils::legendre::gauss_legendre;
+<span class="kw">use </span><span class="kw">crate</span>::utils::prepare_sparse;
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>Material {
@@ -883,11 +895,12 @@
     <span class="kw">pub </span>na: usize,
     <span class="kw">pub </span>ameans_file: [f64; <span class="number">3</span>],
     <span class="kw">pub </span>sizedis: SizeDistribution,
+    <span class="kw">pub </span>wavelength_kind: WavelengthKind,
     <span class="kw">pub </span>lmin: f64,
     <span class="kw">pub </span>lmax: f64,
     <span class="kw">pub </span>nlam: usize,
     <span class="kw">pub </span>lam: RVector,
-    <span class="kw">pub </span>iscatlam: UVector,
+    <span class="kw">pub </span>sparse_indices: HashSet&lt;usize&gt;,
     <span class="kw">pub </span>nang: usize,
     <span class="kw">pub </span>chop_angle: f64,
     <span class="kw">pub </span>pcore: f64,
@@ -902,6 +915,8 @@
     <span class="kw">pub </span>write_grid: bool,
     <span class="kw">pub </span>for_radmc: bool,
     <span class="kw">pub </span>nsparse: usize,
+    <span class="kw">pub </span>scatlammin: RVector,
+    <span class="kw">pub </span>scatlammax: RVector,
     <span class="kw">pub </span>nsubgrains: usize,
     <span class="kw">pub </span>mmf_struct: f64,
     <span class="kw">pub </span>mmf_a0: f64,
@@ -912,7 +927,7 @@
     <span class="kw">pub </span>xlim: f64,
     <span class="kw">pub </span>xlim_dhs: f64,
     <span class="kw">pub </span>materials: Vec&lt;Material&gt;,
-    <span class="kw">pub </span>outdir: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="kw">pub </span>outdir: String,
 }
 
 <span class="kw">impl </span>Default <span class="kw">for </span>KappaConfig {
@@ -927,11 +942,12 @@
             na: <span class="number">0</span>,
             ameans_file: [<span class="number">0.0</span>; <span class="number">3</span>],
             sizedis: SizeDistribution::Apow,
+            wavelength_kind: WavelengthKind::CmdLine,
             lmin: <span class="number">0.05</span>,
             lmax: <span class="number">1e4</span>,
             nlam,
             lam: RVector::zeros(nlam),
-            iscatlam: UVector::zeros(nlam),
+            sparse_indices: HashSet::new(),
             nang: <span class="number">180</span>,
             chop_angle: <span class="number">0.0</span>,
             pcore: <span class="number">0.0</span>,
@@ -946,6 +962,8 @@
             write_grid: <span class="bool-val">false</span>,
             for_radmc: <span class="bool-val">false</span>,
             nsparse: <span class="number">0</span>,
+            scatlammin: RVector::zeros(<span class="number">30</span>),
+            scatlammax: RVector::zeros(<span class="number">30</span>),
             nsubgrains: <span class="number">0</span>,
             mmf_struct: <span class="number">0.0</span>,
             mmf_a0: <span class="number">0.0</span>,
@@ -956,7 +974,7 @@
             xlim: <span class="number">1.0</span>,
             xlim_dhs: <span class="number">1.0</span>,
             materials: Vec::with_capacity(<span class="number">20</span>),
-            outdir: Option::Some(String::from(<span class="string">"output"</span>)),
+            outdir: String::from(<span class="string">"output"</span>),
         }
     }
 }
@@ -1031,83 +1049,18 @@
     }
 }
 
-<span class="kw">struct </span>KappaState&lt;<span class="lifetime">'a</span>&gt; {
-    r: RVector,
-    lam: RVecView&lt;<span class="lifetime">'a</span>&gt;,
-    nlam: usize,
-    mu: RVecView&lt;<span class="lifetime">'a</span>&gt;,
-    e1_blend: RVecView&lt;<span class="lifetime">'a</span>&gt;,
-    e2_blend: RVecView&lt;<span class="lifetime">'a</span>&gt;,
-    p: Particle,
-    nr: RVecView&lt;<span class="lifetime">'a</span>&gt;,
-    method: KappaMethod,
-    nf: usize,
-    ifmn: usize,
-    ns: usize,
-    pcore: f64,
-    rho_av: f64,
-    wf: RVector,
-    f: RVector,
-    split: bool,
-    nang: usize,
-    chopangle: f64,
-    qabsdqext_min: f64,
-    xlim: f64,
-    xlim_dhs: f64,
-    mmf_a0: f64,
-    mmf_struct: f64,
-    mmf_kf: f64,
-    mmfss: bool,
-}
-
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; KappaState&lt;<span class="lifetime">'a</span>&gt; {
-    <span class="kw">pub fn </span>new(
-        kpc: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>KappaConfig,
-        ns: usize,
-        nf: usize,
-        r: RVector,
-        nr: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
-        mu: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
-        e1_blend: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
-        e2_blend: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
-    ) -&gt; <span class="self">Self </span>{
-        KappaState {
-            r,
-            lam: kpc.lam.view(),
-            nlam: kpc.nlam,
-            mu: mu.view(),
-            e1_blend: e1_blend.view(),
-            e2_blend: e2_blend.view(),
-            p: Particle::default(),
-            nr: nr.view(),
-            method: KappaMethod::DHS,
-            nf,
-            ifmn: <span class="number">0</span>,
-            ns,
-            pcore: <span class="number">0.0</span>,
-            rho_av: <span class="number">0.0</span>,
-            wf: RVector::zeros(nf),
-            f: RVector::zeros(nf),
-            split: <span class="bool-val">true</span>,
-            nang: kpc.nang,
-            chopangle: <span class="number">0.0</span>,
-            qabsdqext_min: <span class="number">0.0</span>,
-            xlim: <span class="number">1.0</span>,
-            xlim_dhs: <span class="number">1.0</span>,
-            mmf_a0: <span class="number">0.0</span>,
-            mmf_struct: <span class="number">0.0</span>,
-            mmf_kf: <span class="number">0.0</span>,
-            mmfss: <span class="bool-val">false</span>,
-        }
-    }
-}
-
 <span class="attr">#[derive(PartialEq, Debug)]
 </span><span class="kw">pub enum </span>SizeDistribution {
     Apow,
     File,
     Normal,
     LogNormal,
+}
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">pub enum </span>WavelengthKind {
+    CmdLine,
+    File,
 }
 
 <span class="kw">impl </span>SizeDistribution {
@@ -1197,7 +1150,7 @@
     </span><span class="kw">pub </span>state: String,
     <span class="doccomment">/// Density of the component.
     </span><span class="kw">pub </span>rho: f64,
-    <span class="doccomment">/// size
+    <span class="doccomment">/// Number of wavelengths.
     </span><span class="kw">pub </span>size: usize,
     <span class="doccomment">/// Wavelengths.
     </span><span class="kw">pub </span>l0: RVector,
@@ -1207,14 +1160,67 @@
     </span><span class="kw">pub </span>k0: RVector,
 }
 
-<span class="kw">pub fn </span>run(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<span class="doccomment">/// Run the simulation.
+</span><span class="kw">pub fn </span>run(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     prepare_inputs(kpc)<span class="question-mark">?</span>;
-    <span class="comment">// println!("{:?}", kpc);
-    </span>compute_kappa(kpc)<span class="question-mark">?</span>;
+
+    <span class="kw">let </span><span class="kw-2">mut </span>p = Particle::default();
+
+    <span class="comment">// Loop for splitting the output into files by grain size
+    </span><span class="kw">if </span>kpc.split {
+        <span class="kw">let </span><span class="kw-2">mut </span>nsub = kpc.nsubgrains;
+        <span class="kw">if </span>nsub % <span class="number">2 </span>== <span class="number">0 </span>{
+            nsub += <span class="number">1</span>;
+        }
+        <span class="kw">let </span>afact = (kpc.amax / kpc.amin).powf(<span class="number">1.0 </span>/ kpc.na <span class="kw">as </span>f64);
+        <span class="kw">let </span>afsub = afact.powf(<span class="number">1.0 </span>/ (nsub - <span class="number">1</span>) <span class="kw">as </span>f64);
+
+        (<span class="number">0</span>..kpc.na).into_par_iter().for_each(|ia| {
+            <span class="kw">let </span>iaf = ia <span class="kw">as </span>f64;
+            <span class="kw">let </span><span class="kw-2">mut </span>p = Particle::default();
+            <span class="kw">let </span>asplit = kpc.amin * afact.powf(iaf + <span class="number">0.5</span>);
+            <span class="kw">let </span>nsubf = nsub <span class="kw">as </span>f64;
+            <span class="kw">let </span>aminsplit = asplit * afsub.powf(-nsubf / <span class="number">2.0</span>);
+            <span class="kw">let </span>amaxsplit = asplit * afsub.powf(nsubf / <span class="number">2.0</span>);
+            compute_kappa(ia, <span class="kw-2">&amp;mut </span>p, aminsplit, amaxsplit, kpc);
+        });
+    } <span class="kw">else </span>{
+        <span class="kw">let _ </span>= compute_kappa(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>p, kpc.amin, kpc.amax, kpc);
+    }
+
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">fn </span>prepare_inputs(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<span class="doccomment">/// Pre-process the inputs collected from the command-line
+</span><span class="kw">fn </span>prepare_inputs(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="comment">// Sort by `kind = MaterialKind::Core`
+    </span>kpc.materials.sort_by(|a, b| <span class="kw">match </span>(<span class="kw-2">&amp;</span>a.kind, <span class="kw-2">&amp;</span>b.kind) {
+        (MaterialKind::Core, MaterialKind::Core) =&gt; Ordering::Equal,
+        (MaterialKind::Core, <span class="kw">_</span>) =&gt; Ordering::Less,
+        (<span class="kw">_</span>, MaterialKind::Core) =&gt; Ordering::Greater,
+        <span class="kw">_ </span>=&gt; Ordering::Equal,
+    });
+
+    kpc.nmat = kpc.ncore + kpc.nmant;
+
+    <span class="comment">// Make logarithmic wavelength grid
+    </span><span class="kw">match </span>kpc.wavelength_kind {
+        WavelengthKind::CmdLine =&gt; {
+            kpc.lam = RVector::logspace(<span class="number">10.0</span>, kpc.lmin, kpc.lmax, kpc.nlam);
+        }
+        WavelengthKind::File =&gt; {
+            <span class="comment">// already read from file
+        </span>}
+    }
+
+    <span class="comment">// Prepare sparse scattering file
+    </span><span class="kw">if </span>kpc.nsparse &gt; <span class="number">0 </span>{
+        prepare_sparse(kpc);
+    }
+    <span class="comment">// Writing wavelength grid file
+    </span><span class="kw">if </span>kpc.write_grid {
+        write_wavelength_grid(kpc)<span class="question-mark">?</span>;
+    }
     <span class="comment">// Materials
     </span><span class="kw">if </span>kpc.nmat &gt;= <span class="number">20 </span>{
         <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"TooManyMaterials"</span>));
@@ -1310,7 +1316,14 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">fn </span>compute_kappa(kpc: <span class="kw-2">&amp;</span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<span class="doccomment">/// Calculate the opacities for a grain-size value.
+</span><span class="kw">fn </span>compute_kappa(
+    ia: usize,
+    p: <span class="kw-2">&amp;mut </span>Particle,
+    amin: f64,
+    amax: f64,
+    kpc: <span class="kw-2">&amp;</span>KappaConfig,
+) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>ns = kpc.na;
     <span class="kw">let </span>(nf, ifmn) = <span class="kw">if </span>kpc.fmax == <span class="number">0.0 </span>{ (<span class="number">1</span>, <span class="number">1</span>) } <span class="kw">else </span>{ (<span class="number">20</span>, <span class="number">12</span>) };
 
@@ -1337,8 +1350,8 @@
     <span class="kw">let </span>mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
     <span class="kw">let </span>mfrac_mantle = tot_mantle / tot;
 
-    <span class="kw">let </span>aminlog = kpc.amin.log10();
-    <span class="kw">let </span>amaxlog = kpc.amax.log10();
+    <span class="kw">let </span>aminlog = amin.log10();
+    <span class="kw">let </span>amaxlog = amax.log10();
     <span class="kw">let </span>pow = -kpc.apow;
 
     <span class="kw">if </span>ns == <span class="number">1 </span>{
@@ -1381,7 +1394,7 @@
                 };
 
                 <span class="comment">// With the option `-d`m each computation is only a piece of the size grid
-                </span><span class="kw">if </span><span class="kw-2">*</span>r_val &lt; kpc.amin || <span class="kw-2">*</span>r_val &gt; kpc.amax {
+                </span><span class="kw">if </span><span class="kw-2">*</span>r_val &lt; amin || <span class="kw-2">*</span>r_val &gt; amax {
                     <span class="kw-2">*</span>nr_val = <span class="number">0.0</span>;
                 }
 
@@ -1538,41 +1551,17 @@
     }
 
     <span class="comment">// Create shared memory for the variables
-    </span><span class="kw">let </span>kps = Arc::new(KappaState::new(
-        kpc, ns, nf, r, <span class="kw-2">&amp;</span>nr, <span class="kw-2">&amp;</span>mu, <span class="kw-2">&amp;</span>e1_blend, <span class="kw-2">&amp;</span>e2_blend,
-    ));
+    // let kps = Arc::new(KappaState::new(
+    //     kpc, ns, nf, r, &amp;nr, &amp;mu, &amp;e1_blend, &amp;e2_blend,
+    // ));
 
-    <span class="kw">if </span>kpc.split {
-        <span class="kw">let </span>num_threads = rayon::current_num_threads();
-        <span class="macro">println!</span>(<span class="string">"Rayon thread pool size: {}"</span>, num_threads);
+    </span><span class="kw">if </span>!kpc.split {
         (<span class="number">0</span>..kpc.nlam).into_par_iter().for_each(|ilam| {
-            <span class="kw">let </span>wvno = <span class="number">2.0 </span>* PI / kps.lam[ilam];
-            <span class="kw">let </span>f11 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span>f12 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span>f22 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span>f33 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span>f34 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span>f44 = RVector::zeros(kpc.nang);
-            <span class="kw">let </span><span class="kw-2">mut </span>csca = <span class="number">0.0</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>cabs = <span class="number">0.0</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>cext = <span class="number">0.0</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>smat_nbad = <span class="number">0</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>mass = <span class="number">0.0</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>vol = <span class="number">0.0</span>;
-            <span class="kw">for </span>is <span class="kw">in </span><span class="number">0</span>..ns {
-                <span class="kw">let </span>r1 = kps.r[is];
-                <span class="kw">let </span>err = <span class="number">0</span>;
-                <span class="kw">let </span>spheres = <span class="number">0</span>;
-                <span class="kw">let </span>toolarge = <span class="number">0</span>;
-                <span class="kw">match </span>kpc.method {
-                    KappaMethod::DHS =&gt; {
-                        <span class="kw">let </span>m_in = Complex::new(<span class="number">1.0</span>, <span class="number">0.0</span>);
-                        <span class="kw">for </span>ifmn <span class="kw">in </span><span class="number">0</span>..nf {}
-                    }
-                    KappaMethod::MMF =&gt; {}
-                    KappaMethod::CDE =&gt; {}
-                }
-            }
+            over_wavelengths(ilam, ns, nf, <span class="kw-2">&amp;</span>r, kpc);
+        });
+    } <span class="kw">else </span>{
+        (<span class="number">0</span>..kpc.nlam).for_each(|ilam| {
+            over_wavelengths(ilam, ns, nf, <span class="kw-2">&amp;</span>r, kpc);
         });
     }
 
@@ -1621,5 +1610,36 @@
             / (<span class="number">2.0 </span>* m2.powi(<span class="number">2</span>) + m1.powi(<span class="number">2</span>) + vf_c * (m2.powi(<span class="number">2</span>) - m1.powi(<span class="number">2</span>))));
 
     (me.sqrt().re, me.sqrt().im)
+}
+
+<span class="doccomment">/// Calculate the opacities for a wavelength value.
+</span><span class="kw">fn </span>over_wavelengths(ilam: usize, ns: usize, nf: usize, r: <span class="kw-2">&amp;</span>RVector, kpc: <span class="kw-2">&amp;</span>KappaConfig) {
+    <span class="kw">let </span>wvno = <span class="number">2.0 </span>* PI / kpc.lam[ilam];
+    <span class="kw">let </span>f11 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span>f12 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span>f22 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span>f33 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span>f34 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span>f44 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>csca = <span class="number">0.0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>cabs = <span class="number">0.0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>cext = <span class="number">0.0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>smat_nbad = <span class="number">0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>mass = <span class="number">0.0</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>vol = <span class="number">0.0</span>;
+    <span class="kw">for </span>is <span class="kw">in </span><span class="number">0</span>..ns {
+        <span class="kw">let </span>r1 = r[is];
+        <span class="kw">let </span>err = <span class="number">0</span>;
+        <span class="kw">let </span>spheres = <span class="number">0</span>;
+        <span class="kw">let </span>toolarge = <span class="number">0</span>;
+        <span class="kw">match </span>kpc.method {
+            KappaMethod::DHS =&gt; {
+                <span class="kw">let </span>m_in = Complex::new(<span class="number">1.0</span>, <span class="number">0.0</span>);
+                <span class="kw">for </span>ifmn <span class="kw">in </span><span class="number">0</span>..nf {}
+            }
+            KappaMethod::MMF =&gt; {}
+            KappaMethod::CDE =&gt; {}
+        }
+    }
 }
 </code></pre></div></section></main></body></html>
