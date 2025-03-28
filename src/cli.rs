@@ -212,6 +212,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     if let Some(nlam) = nlam {
                         kpc.nlam = nlam;
                     }
+                    kpc.wavelength_kind = WavelengthKind::CmdLine;
                 }
                 WavelengthArg::File(file) => {
                     // Read file
@@ -228,6 +229,8 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                             return Err(anyhow!("Could not read wavelength grid from file").into());
                         }
                     }
+                    kpc.lam = lam;
+                    kpc.wavelength_kind = WavelengthKind::File;
                 }
             },
             "--lmin" => {
