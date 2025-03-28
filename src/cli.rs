@@ -337,9 +337,9 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             // Other options
             "-o" => {
                 if let Some(next_arg) = args.next() {
-                    kpc.outdir = Some(next_arg.to_string());
+                    kpc.outdir = next_arg.to_string();
                 } else {
-                    kpc.outdir = Some("output".to_string());
+                    kpc.outdir = "output".to_string();
                 }
             }
             "-s" | "--scat" | "--scatter" => {

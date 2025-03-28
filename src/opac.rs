@@ -92,7 +92,7 @@ pub struct KappaConfig {
     pub xlim: f64,
     pub xlim_dhs: f64,
     pub materials: Vec<Material>,
-    pub outdir: Option<String>,
+    pub outdir: String,
 }
 
 impl Default for KappaConfig {
@@ -136,7 +136,7 @@ impl Default for KappaConfig {
             xlim: 1.0,
             xlim_dhs: 1.0,
             materials: Vec::with_capacity(20),
-            outdir: Option::Some(String::from("output")),
+            outdir: String::from("output"),
         }
     }
 }
