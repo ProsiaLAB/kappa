@@ -10,3 +10,4 @@ pub type CMatrix = Array2<Complex<f64>>;
 pub type RTensor = Array3<f64>;
 pub type CTensor = Array3<Complex<f64>>;
 pub type UVector = Array1<usize>;
+pub type BVector = Array1<bool>;
