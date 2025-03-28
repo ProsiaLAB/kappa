@@ -50,44 +50,8 @@ pub struct MieResult {
 // }
 
 pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult> {
-    // miec.delta = 1e-8;
-    // miec.cutoff = 1e-8;
-
-    // miec.thmin = 180.0 * (1.0 - 0.5) / miec.nangle as f64;
-    // miec.thmax = 180.0 * (miec.nangle as f64 - 0.5) / miec.nangle as f64;
-    // miec.step = (miec.thmax - miec.thmin) / (miec.nangle as f64 - 1.0);
-
-    // miec.cmm = vec![Complex::new(0.0, 0.0); miec.nparts];
-    // miec.cmm[0] = Complex::new(1.0, 0.0);
-
-    // let mut rdis: RMatrix = Array2::zeros((miec.nparts, miec.ndis));
-    // rdis[[0, 0]] = miec.rad;
-
-    // let mut nwrdis: RMatrix = Array2::zeros((miec.nparts, miec.ndis));
-    // nwrdis[[0, 0]] = 1.0;
-
-    let mut f_11 = RVector::zeros(miec.nangle);
-    let mut f_12 = RVector::zeros(miec.nangle);
-    let mut f_33 = RVector::zeros(miec.nangle);
-    let mut f_34 = RVector::zeros(miec.nangle);
-
-    let mier = mie(miec)?;
-
-    for i in 0..miec.nangle {
-        f_11[i] = mier.f_0[[0, miec.nangle - 1]];
-        f_12[i] = mier.f_0[[1, miec.nangle - 1]];
-        f_33[i] = mier.f_0[[2, miec.nangle - 1]];
-        f_34[i] = mier.f_0[[3, miec.nangle - 1]];
-    }
-
-    Ok(mier)
-}
-
-fn mie(miec: &MieConfig) -> Result<MieResult> {
     let m = miec.cmm.conj();
-
     let mier = get_scattering_matrix(miec, m)?;
-
     Ok(mier)
 }
 
@@ -106,6 +70,10 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         numpar: 0.0,
         volume: 0.0,
         f_0: RMatrix::zeros((3, 3)),
+        f_11: RVector::zeros(miec.nangle),
+        f_12: RVector::zeros(miec.nangle),
+        f_33: RVector::zeros(miec.nangle),
+        f_34: RVector::zeros(miec.nangle),
     };
 
     let mut fac_90 = 0.0;
@@ -290,6 +258,13 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     mier.volume = (4.0 / 3.0) * PI * mier.reff;
     mier.reff = PI * mier.reff / mier.g;
     mier.xeff = rtox * mier.reff;
+
+    for i in 0..miec.nangle {
+        mier.f_11[i] = mier.f_0[[0, miec.nangle - 1]];
+        mier.f_12[i] = mier.f_0[[1, miec.nangle - 1]];
+        mier.f_33[i] = mier.f_0[[2, miec.nangle - 1]];
+        mier.f_34[i] = mier.f_0[[3, miec.nangle - 1]];
+    }
 
     Ok(mier)
 }
