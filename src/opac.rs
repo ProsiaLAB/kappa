@@ -219,6 +219,20 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
+struct KappaState<'a> {
+    ns: usize,
+    nf: usize,
+    ifmn: usize,
+    r: &'a RVector,
+    nr: &'a RVector,
+    f: &'a RVector,
+    wf: &'a RVector,
+    e1_blend: &'a RVector,
+    e2_blend: &'a RVector,
+    mu: &'a RVector,
+    rho_av: f64,
+}
+
 #[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
     Apow,
