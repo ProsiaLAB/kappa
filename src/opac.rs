@@ -7,9 +7,11 @@ use std::collections::HashSet;
 use std::f64::consts::PI;
 use std::mem::swap;
 use std::process::exit;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::s;
 use ndarray::Zip;
 use num_complex::ComplexFloat;
@@ -18,6 +20,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::dhs::toon_ackerman_1981;
 use crate::dhs::DHSConfig;
+use crate::fractal::mean_scattering;
+use crate::fractal::FractalConfig;
+use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
 use crate::io::{write_sizedis_file, write_wavelength_grid};
 use crate::mie::de_rooij_1984;
 use crate::mie::MieConfig;
@@ -323,6 +328,16 @@ pub struct Particle {
     pub is_ok_lmin: f64,
 }
 
+struct KappaResult {
+    mueller: Mueller,
+    mass: f64,
+    vol: f64,
+    k_ext: f64,
+    k_sca: f64,
+    g: f64,
+    trust: bool,
+}
+
 /// Defines a material component which is initialized
 /// at runtime by consuming a LNK file.
 ///
@@ -361,20 +376,31 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
         let afact = (kpc.amax / kpc.amin).powf(1.0 / kpc.na as f64);
         let afsub = afact.powf(1.0 / (nsub - 1) as f64);
 
+        let bar = Arc::new(ProgressBar::new(kpc.nlam as u64));
+
+        bar.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) 🚀",
+                )
+                .unwrap()
+                .progress_chars("█▓▒░ "),
+        );
+
         (0..kpc.na).into_par_iter().try_for_each(|ia| {
             let iaf = ia as f64;
-            let mut p = Particle::default();
             let asplit = kpc.amin * afact.powf(iaf + 0.5);
             let nsubf = nsub as f64;
             let aminsplit = asplit * afsub.powf(-nsubf / 2.0);
             let amaxsplit = asplit * afsub.powf(nsubf / 2.0);
-            compute_kappa(ia, &mut p, aminsplit, amaxsplit, kpc)?;
+            let _ = compute_kappa(ia, aminsplit, amaxsplit, kpc)?;
+            bar.inc(1); // Increment the progress bar inside the parallel loop
             Ok::<(), KappaError>(())
         })?;
+        bar.finish_with_message("Processing complete!");
         exit(0);
     } else {
-        let mut p = Particle::default();
-        let _ = compute_kappa(0, &mut p, kpc.amin, kpc.amax, kpc);
+        let _ = compute_kappa(0, kpc.amin, kpc.amax, kpc);
     }
 
     Ok(())
@@ -508,11 +534,10 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
 /// Calculate the opacities for a grain-size value.
 fn compute_kappa(
     ia: usize,
-    p: &mut Particle,
     amin: f64,
     amax: f64,
     kpc: &KappaConfig,
-) -> Result<(), KappaError> {
+) -> Result<Particle, KappaError> {
     let ns = kpc.na;
     let (nf, ifmn) = if kpc.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
@@ -715,7 +740,7 @@ fn compute_kappa(
 
     if kpc.write_grid || kpc.blend_only {
         println!("Exiting after writing requested files");
-        return Ok(());
+        exit(0);
     }
 
     // Check how we are going to average over hollow sphere components
@@ -753,20 +778,54 @@ fn compute_kappa(
         rho_av,
     };
 
-    if !kpc.split {
-        (0..kpc.nlam).into_par_iter().try_for_each(|ilam| {
-            over_wavelengths(ilam, &kps, kpc)?;
-            Ok::<(), KappaError>(())
-        })?;
-    } else {
-        (0..kpc.nlam).try_for_each(|ilam| {
-            over_wavelengths(ilam, &kps, kpc)?;
-            Ok::<(), KappaError>(())
-        })?;
-    }
+    let p = {
+        let results: Result<Vec<KappaResult>, _> = if !kpc.split {
+            (0..kpc.nlam)
+                .into_par_iter()
+                .map(|ilam| over_wavelengths(ilam, &kps, kpc))
+                .collect()
+        } else {
+            (0..kpc.nlam)
+                .map(|ilam| over_wavelengths(ilam, &kps, kpc))
+                .collect()
+        };
 
-    // todo!()
-    Ok(())
+        results.map(|lamrs| {
+            let rho = lamrs[0].mass / lamrs[0].vol;
+            let k_ext = lamrs.iter().map(|lamr| lamr.k_ext).collect::<RVector>();
+            let k_sca = lamrs.iter().map(|lamr| lamr.k_sca).collect::<RVector>();
+            let g = lamrs.iter().map(|lamr| lamr.g).collect::<RVector>();
+            let trust = lamrs.iter().map(|lamr| lamr.trust).collect::<BVector>();
+            let mueller = lamrs
+                .into_iter()
+                .map(|lamr| lamr.mueller)
+                .collect::<Vec<Mueller>>();
+
+            let mut is_ok = true;
+            let mut is_ok_lmin = 0.0;
+
+            for ilam in 0..kpc.nlam {
+                if !trust[ilam] {
+                    is_ok = false;
+                    is_ok_lmin = kpc.lam[ilam];
+                };
+            }
+
+            Particle {
+                rho,
+                k_ext,
+                k_sca,
+                g,
+                f: mueller,
+                trust,
+                is_ok,
+                is_ok_lmin,
+                ..Default::default()
+            }
+        })?
+    };
+
+    Ok(p)
 }
 
 fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
@@ -813,7 +872,7 @@ fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
 }
 
 /// Calculate the opacities for a wavelength value.
-fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<()> {
+fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<KappaResult> {
     let qabsdqext_min = 1e-4;
     let wvno = 2.0 * PI / kpc.lam[ilam];
     let mut f11 = RVector::zeros(kpc.nang);
@@ -828,6 +887,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
     let mut smat_nbad = 0;
     let mut mass = 0.0;
     let mut vol = 0.0;
+    let nangf = kpc.nang as f64;
     for is in 0..kps.ns {
         let r1 = kps.r[is];
         let mut spheres = false;
@@ -835,7 +895,6 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
         match kpc.method {
             KappaMethod::DHS => {
                 let m_in = Complex::new(1.0, 0.0);
-                let nangf = kpc.nang as f64;
                 for ifn in 0..kps.nf {
                     let mut rad: f64;
                     if kps.f[ifn] == 0.0 {
@@ -975,12 +1034,199 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                 }
             }
             KappaMethod::MMF => {
-                todo!()
+                let m_mono = 4.0 * PI / 3.0 * kpc.mmf_a0.powi(3) * kps.rho_av;
+                let v_agg = 4.0 * PI / 3.0 * r1.powi(3);
+                let m_agg = v_agg * kps.rho_av;
+                let nmono = m_agg / m_mono;
+                let dfrac = if kpc.mmf_struct > 1.0 {
+                    kpc.mmf_struct
+                } else {
+                    3.0 * nmono.ln() / (nmono - kpc.mmf_struct).ln()
+                };
+                let kfrac = if kpc.mmf_kf > 0.0 {
+                    kpc.mmf_kf
+                } else {
+                    (5.0 / 3.0).powf(dfrac)
+                };
+                let fracc = FractalConfig {
+                    solver: FractalSolver::ModifiedMeanField,
+                    cutoff: FractalCutoff::Gaussian,
+                    geometry: FractalGeometry::Tazaki,
+                    nang: kpc.nang / 2 + 1,
+                    pn: nmono,
+                    r0: kpc.mmf_a0,
+                    df: dfrac,
+                    k0: kfrac,
+                    lmd: kpc.lam[ilam],
+                    refrel: Complex::new(kps.e1_blend[ilam], kps.e2_blend[ilam]),
+                    ..Default::default()
+                };
+                let fracr = mean_scattering(&fracc)?;
+                if fracr.dphi > 1.0 {
+                    smat_nbad += 1;
+                }
+                let factor = 4.0 * PI / wvno.powi(2);
+                for j in 0..kpc.nang {
+                    f11[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[0, j]] + fracr.smat[[0, j + 1]]) * factor;
+                    f12[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[1, j]] + fracr.smat[[1, j + 1]]) * factor;
+                    f22[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[0, j]] + fracr.smat[[0, j + 1]]) * factor;
+                    f33[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[2, j]] + fracr.smat[[2, j + 1]]) * factor;
+                    f34[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[3, j]] + fracr.smat[[3, j + 1]]) * factor;
+                    f44[j] +=
+                        kps.nr[is] * 0.5 * (fracr.smat[[2, j]] + fracr.smat[[2, j + 1]]) * factor;
+                }
+                cext += kps.nr[is] * fracr.c_ext;
+                csca += kps.nr[is] * fracr.c_sca;
+                cabs += kps.nr[is] * fracr.c_abs;
+                mass += kps.nr[is] * m_agg;
+                vol += kps.nr[is] * v_agg;
             }
             KappaMethod::CDE => {
-                todo!()
+                let v = 4.0 * PI * r1.powi(3) / 3.0;
+                vol += kps.nr[is] * v;
+                mass += kps.nr[is] * kps.rho_av * v;
+                let m = Complex::new(kps.e1_blend[ilam], kps.e2_blend[ilam]);
+                let dcabs = 2.0 * wvno * v * (m.powi(2) / (m.powi(2) - 1.0) * m.powi(2).ln()).im;
+                let dcsca = if (kps.e2_blend[ilam] / kps.e1_blend[ilam]).abs() < 1e-6 {
+                    // Non-absorbing case
+                    let mre = m.re;
+                    wvno.powi(4) * v.powi(2) / (3.0 * PI) * (mre.powi(2) - 1.0 - mre.powi(2).ln())
+                } else {
+                    // Absorbing case
+                    wvno.powi(4) * v.powi(2) * (m.powi(2) - 1.0).abs().powi(2)
+                        / (3.0 * PI * m.powi(2).im)
+                        * (m.powi(2) / (m.powi(2) - 1.0) * m.powi(2).ln()).im
+                };
+                cabs += kps.nr[is] * dcabs;
+                csca += kps.nr[is] * dcsca;
+                cext += kps.nr[is] * (dcabs + dcsca);
+                if is == kps.ns - 1 {
+                    // Final size, cscat is complete at this point
+                    // Compute the scattering matrix deep in the Rayleigh limit
+                    let lmie = kpc.lam[ilam];
+                    let rmie = lmie / 1e3;
+                    let e1_mie = kps.e1_blend[kpc.nlam - 1];
+                    let e2_mie = kps.e2_blend[kpc.nlam - 1];
+                    let thmin = 180.0 * (1.0 - 0.5) / nangf;
+                    let thmax = 180.0 * (nangf - 0.5) / nangf;
+                    let miec = MieConfig {
+                        nangle: kpc.nang,
+                        delta: 1e-8,
+                        thmin,
+                        thmax,
+                        step: (thmax - thmin) / (nangf - 1.0),
+                        lam: lmie,
+                        cmm: Complex::new(e1_mie, e2_mie),
+                        rad: rmie,
+                    };
+                    let mier = de_rooij_1984(&miec)?;
+                    let mie_f22 = mier.f_11.clone();
+                    let mie_f44 = mier.f_33.clone();
+                    for j in 0..kpc.nang {
+                        f11[j] = mier.f_11[j] * csca;
+                        f12[j] = mier.f_12[j] * csca;
+                        f22[j] = mie_f22[j] * csca;
+                        f33[j] = mier.f_33[j] * csca;
+                        f34[j] = mier.f_34[j] * csca;
+                        f44[j] = mie_f44[j] * csca;
+                    }
+                }
             }
         }
     }
-    Ok(())
+
+    // if ilam == 0 {
+    //     let rho = mass / vol;
+    // } // TODO: This can be moved out of parallel loop
+    let mut k_ext = 1e4 * cext / mass;
+    let mut k_sca = 1e4 * csca / mass;
+    let k_abs = 1e4 * cabs / mass;
+    f11 /= csca;
+    f12 /= csca;
+    f22 /= csca;
+    f33 /= csca;
+    f34 /= csca;
+    f44 /= csca;
+
+    if kpc.chop_angle > 0.0 {
+        // Flatten the peak
+        let ichop = (kpc.chop_angle / (180.0 / nangf)) as usize;
+        if ichop > 1 {
+            for i in 0..ichop {
+                f11[i] = f11[ichop + 1];
+                f12[i] = f12[ichop + 1];
+                f22[i] = f22[ichop + 1];
+                f33[i] = f33[ichop + 1];
+                f34[i] = f34[ichop + 1];
+                f44[i] = f44[ichop + 1];
+            }
+        }
+        let mut tot = 0.0;
+        let mut tot2 = 0.0;
+        for j in 0..kpc.nang {
+            let jf = j as f64;
+            tot += f11[j] * (PI * (jf + 0.5) / nangf).sin() * (PI / nangf) * 2.0 * PI;
+            tot2 += (PI * (jf + 0.5) / nangf).sin() * (PI / nangf) * 2.0 * PI;
+        }
+        for j in 0..kpc.nang {
+            f11[j] = f11[j] * tot2 / tot;
+            f12[j] = f12[j] * tot2 / tot;
+            f22[j] = f22[j] * tot2 / tot;
+            f33[j] = f33[j] * tot2 / tot;
+            f34[j] = f34[j] * tot2 / tot;
+            f44[j] = f44[j] * tot2 / tot;
+        }
+        k_sca *= tot / tot2;
+        k_ext = k_sca + k_abs;
+    }
+    let mut tot = 0.0;
+    let mut g = 0.0;
+    let mut test_scat = true;
+
+    if smat_nbad > 0 {
+        test_scat = false;
+    }
+    for i in 0..kpc.nang {
+        let ir = i as f64;
+        g += f11[i] * (PI * (ir + 0.5) / nangf).cos() * (PI * (ir + 0.5) / nangf).sin();
+        tot += f11[i] * (PI * (ir + 0.5) / nangf).sin();
+    }
+    g /= tot;
+    if smat_nbad > 0 && !kpc.mmf_ss {
+        g = 0.0;
+        for i in 0..kpc.nang {
+            f11[i] = 0.0;
+            f12[i] = 0.0;
+            f22[i] = 0.0;
+            f33[i] = 0.0;
+            f34[i] = 0.0;
+            f44[i] = 0.0;
+        }
+    }
+
+    let mueller = Mueller {
+        f11,
+        f12,
+        f22,
+        f33,
+        f34,
+        f44,
+    };
+
+    let lamr = KappaResult {
+        mueller,
+        mass,
+        vol,
+        k_ext,
+        k_sca,
+        g,
+        trust: test_scat,
+    };
+
+    Ok(lamr)
 }

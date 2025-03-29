@@ -408,8 +408,7 @@
 <a href="#391" id="391">391</a>
 <a href="#392" id="392">392</a>
 <a href="#393" id="393">393</a>
-<a href="#394" id="394">394</a>
-<a href="#395" id="395">395</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
+<a href="#394" id="394">394</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
 //! low-porosity aggregates.
 //! In order to simulate irregularities in grains (irregular shapes, or the properties of
 //! low-porosity aggregates), `kappa` averages the opacities of grains with an inner
@@ -670,9 +669,8 @@
     <span class="kw">let </span><span class="kw-2">mut </span>ac = <span class="number">1.5 </span>* acoe;
     <span class="kw">let </span><span class="kw-2">mut </span>bc = <span class="number">1.5 </span>* bcoe;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>s0 = CMatrix::zeros((<span class="number">3</span>, <span class="number">3</span>));
-    <span class="kw">let </span><span class="kw-2">mut </span>s1 = CMatrix::zeros((<span class="number">3</span>, <span class="number">3</span>));
-
+    <span class="kw">let </span><span class="kw-2">mut </span>s0 = CMatrix::zeros((<span class="number">1440</span>, <span class="number">3</span>));
+    <span class="kw">let </span><span class="kw-2">mut </span>s1 = CMatrix::zeros((<span class="number">1440</span>, <span class="number">3</span>));
     <span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..dhsc.numang {
         s0[[j, <span class="number">0</span>]] = ac * pi[[j, <span class="number">1</span>]] + bc * tau[[j, <span class="number">1</span>]];
         s0[[j, <span class="number">1</span>]] = ac * pi[[j, <span class="number">1</span>]] - bc * tau[[j, <span class="number">1</span>]];
