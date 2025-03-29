@@ -848,7 +848,7 @@ fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
             .iter()
             .zip(abun.iter())
             .map(|(&e_in_j, &abun_j)| {
-                (e_in_j.powi(2) - mm.powi(2)) / (e_in_j.powi(2) + 2.0 * mm.powi(2)) * abun_j
+                ((e_in_j.powi(2) - mm.powi(2)) / (e_in_j.powi(2) + 2.0 * mm.powi(2))) * abun_j
             })
             .sum::<Complex64>()
             + ((mvac.powi(2) - mm.powi(2)) / (mvac.powi(2) + 2.0 * mm.powi(2)) * abunvac);

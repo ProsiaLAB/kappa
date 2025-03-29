@@ -254,7 +254,7 @@ pub mod legendre {
 
         for i in 0..m {
             let ir = i as f64;
-            let mut z = PI * (ir + 0.75) / (nf + 0.5);
+            let mut z = (PI * (ir + 0.75) / (nf + 0.5)).cos();
             let mut z1 = 2.0 * z;
             while (z - z1).abs() > eps {
                 let mut p1 = 1.0;
