@@ -259,9 +259,8 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let mut ac = 1.5 * acoe;
     let mut bc = 1.5 * bcoe;
 
-    let mut s0 = CMatrix::zeros((3, 3));
-    let mut s1 = CMatrix::zeros((3, 3));
-
+    let mut s0 = CMatrix::zeros((1440, 3));
+    let mut s1 = CMatrix::zeros((1440, 3));
     for j in 0..dhsc.numang {
         s0[[j, 0]] = ac * pi[[j, 1]] + bc * tau[[j, 1]];
         s0[[j, 1]] = ac * pi[[j, 1]] - bc * tau[[j, 1]];
