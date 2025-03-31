@@ -624,8 +624,8 @@ fn compute_kappa(
     }
 
     // Copy the refractory index data for all materials into local arrays
-    let mut e1 = RMatrix::zeros((kpc.nlam, kpc.nmat + 1));
-    let mut e2 = RMatrix::zeros((kpc.nlam, kpc.nmat + 1));
+    let mut e1 = RMatrix::zeros((kpc.nlam, kpc.nmat));
+    let mut e2 = RMatrix::zeros((kpc.nlam, kpc.nmat));
     for im in 0..kpc.nmat {
         e1.slice_mut(s![.., im]).assign(&kpc.materials[im].re);
         e2.slice_mut(s![.., im]).assign(&kpc.materials[im].im);
@@ -757,7 +757,7 @@ fn compute_kappa(
     // Initialize mu
     let mut mu = RVector::zeros(kpc.nang);
     let nangby2f = (kpc.nang / 2) as f64;
-    for (j, val) in mu.iter_mut().enumerate() {
+    for (j, val) in mu.iter_mut().take(kpc.nang / 2 + 1).enumerate() {
         let jf = j as f64;
         let theta = (jf - 0.5) / nangby2f * PI / 2.0;
         *val = theta.cos();
