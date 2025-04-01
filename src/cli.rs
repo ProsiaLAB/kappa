@@ -8,10 +8,10 @@ use anyhow::anyhow;
 use anyhow::Result;
 use colored::{Color, Colorize};
 
-use crate::components::get_lnk_data;
 use crate::components::MATERIAL_KEYS;
 use crate::io::read_wavelength_grid;
 use crate::io::{read_lnk_file, read_sizedis_file};
+use crate::opac::RefractiveIndexKind;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 use crate::opac::{Material, MaterialKind};
 use crate::opac::{SizeDistribution, WavelengthKind};
@@ -210,7 +210,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     if let Some(nlam) = nlam {
                         kpc.nlam = nlam;
                     }
-                    kpc.wavelength_kind = WavelengthKind::CmdLine;
+                    kpc.wavelength_kind = WavelengthKind::Other;
                 }
                 WavelengthArg::File(file) => {
                     // Read file
@@ -623,9 +623,9 @@ where
     if MATERIAL_KEYS.contains(&material_arg) {
         material.key = material_arg.to_string();
         material.kind = material_type;
-        let component = get_lnk_data(&material.key);
-        (material.re, material.im) =
-            regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
+        // let component = get_lnk_data(&material.key);
+        // (material.re, material.im) =
+        //     regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
         // See if there is a next argument
         // If there is, it should be a mass fraction
         if let Some(next_arg) = args.peek() {
@@ -659,9 +659,11 @@ where
         let k0_slice: &[f64] = &component.k0.to_vec();
         (material.re, material.im) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
         material.rho = component.rho;
+        material.cmd = RefractiveIndexKind::File;
         Ok(material)
     } else if material_arg.contains(':') {
         // This is n:k:rho format
+        material.cmd = RefractiveIndexKind::CmdLine;
         let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
             return Err(anyhow!("Invalid material format").into());
