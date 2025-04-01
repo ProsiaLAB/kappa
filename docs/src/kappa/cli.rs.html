@@ -1034,7 +1034,9 @@
 <a href="#1017" id="1017">1017</a>
 <a href="#1018" id="1018">1018</a>
 <a href="#1019" id="1019">1019</a>
-<a href="#1020" id="1020">1020</a></pre></div><pre class="rust"><code><span class="doccomment">//! Command line interface for the `kappa`.
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a></pre></div><pre class="rust"><code><span class="doccomment">//! Command line interface for the `kappa`.
 </span><span class="kw">use </span>std::env;
 <span class="kw">use </span>std::iter::Peekable;
 <span class="kw">use </span>std::path::Path;
@@ -1044,10 +1046,10 @@
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>colored::{Color, Colorize};
 
-<span class="kw">use </span><span class="kw">crate</span>::components::get_lnk_data;
 <span class="kw">use </span><span class="kw">crate</span>::components::MATERIAL_KEYS;
 <span class="kw">use </span><span class="kw">crate</span>::io::read_wavelength_grid;
 <span class="kw">use </span><span class="kw">crate</span>::io::{read_lnk_file, read_sizedis_file};
+<span class="kw">use </span><span class="kw">crate</span>::opac::RefractiveIndexKind;
 <span class="kw">use </span><span class="kw">crate</span>::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 <span class="kw">use </span><span class="kw">crate</span>::opac::{Material, MaterialKind};
 <span class="kw">use </span><span class="kw">crate</span>::opac::{SizeDistribution, WavelengthKind};
@@ -1246,7 +1248,7 @@
                     <span class="kw">if let </span><span class="prelude-val">Some</span>(nlam) = nlam {
                         kpc.nlam = nlam;
                     }
-                    kpc.wavelength_kind = WavelengthKind::CmdLine;
+                    kpc.wavelength_kind = WavelengthKind::Other;
                 }
                 WavelengthArg::File(file) =&gt; {
                     <span class="comment">// Read file
@@ -1659,10 +1661,10 @@
     <span class="kw">if </span>MATERIAL_KEYS.contains(<span class="kw-2">&amp;</span>material_arg) {
         material.key = material_arg.to_string();
         material.kind = material_type;
-        <span class="kw">let </span>component = get_lnk_data(<span class="kw-2">&amp;</span>material.key);
-        (material.re, material.im) =
-            regrid_lnk_data(component.l0, component.n0, component.k0, <span class="kw-2">&amp;</span>kpc.lam, <span class="bool-val">true</span>);
-        <span class="comment">// See if there is a next argument
+        <span class="comment">// let component = get_lnk_data(&amp;material.key);
+        // (material.re, material.im) =
+        //     regrid_lnk_data(component.l0, component.n0, component.k0, &amp;kpc.lam, true);
+        // See if there is a next argument
         // If there is, it should be a mass fraction
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(next_arg) = args.peek() {
             <span class="comment">// If it is a number, it is a mass fraction
@@ -1695,10 +1697,12 @@
         <span class="kw">let </span>k0_slice: <span class="kw-2">&amp;</span>[f64] = <span class="kw-2">&amp;</span>component.k0.to_vec();
         (material.re, material.im) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, <span class="kw-2">&amp;</span>kpc.lam, <span class="bool-val">true</span>);
         material.rho = component.rho;
+        material.cmd = RefractiveIndexKind::File;
         <span class="prelude-val">Ok</span>(material)
     } <span class="kw">else if </span>material_arg.contains(<span class="string">':'</span>) {
         <span class="comment">// This is n:k:rho format
-        </span><span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = material_arg.split(<span class="string">':'</span>).collect();
+        </span>material.cmd = RefractiveIndexKind::CmdLine;
+        <span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = material_arg.split(<span class="string">':'</span>).collect();
         <span class="kw">if </span>parts.len() != <span class="number">3 </span>{
             <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Invalid material format"</span>).into());
         } <span class="kw">else </span>{

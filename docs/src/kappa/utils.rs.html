@@ -1411,7 +1411,16 @@
 <a href="#1394" id="1394">1394</a>
 <a href="#1395" id="1395">1395</a>
 <a href="#1396" id="1396">1396</a>
-<a href="#1397" id="1397">1397</a></pre></div><pre class="rust"><code><span class="kw">use </span>ndarray::Array1;
+<a href="#1397" id="1397">1397</a>
+<a href="#1398" id="1398">1398</a>
+<a href="#1399" id="1399">1399</a>
+<a href="#1400" id="1400">1400</a>
+<a href="#1401" id="1401">1401</a>
+<a href="#1402" id="1402">1402</a>
+<a href="#1403" id="1403">1403</a>
+<a href="#1404" id="1404">1404</a>
+<a href="#1405" id="1405">1405</a>
+<a href="#1406" id="1406">1406</a></pre></div><pre class="rust"><code><span class="kw">use </span>ndarray::Array1;
 
 <span class="kw">use </span><span class="kw">crate</span>::opac::KappaConfig;
 <span class="kw">use </span><span class="kw">crate</span>::types::RVector;
@@ -1667,7 +1676,7 @@
 
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..m {
             <span class="kw">let </span>ir = i <span class="kw">as </span>f64;
-            <span class="kw">let </span><span class="kw-2">mut </span>z = PI * (ir + <span class="number">0.75</span>) / (nf + <span class="number">0.5</span>);
+            <span class="kw">let </span><span class="kw-2">mut </span>z = (PI * (ir + <span class="number">0.75</span>) / (nf + <span class="number">0.5</span>)).cos();
             <span class="kw">let </span><span class="kw-2">mut </span>z1 = <span class="number">2.0 </span>* z;
             <span class="kw">while </span>(z - z1).abs() &gt; eps {
                 <span class="kw">let </span><span class="kw-2">mut </span>p1 = <span class="number">1.0</span>;
@@ -2712,6 +2721,7 @@
     loglog: bool,
 ) -&gt; (RVector, RVector) {
     <span class="kw">let </span>n = lam.len();
+    <span class="kw">let </span>n_actual = l0.len();
     <span class="kw">let </span><span class="kw-2">mut </span>x0 = l0[<span class="number">0</span>];
     <span class="kw">let </span><span class="kw-2">mut </span>y01 = n0[<span class="number">0</span>];
     <span class="kw">let </span><span class="kw-2">mut </span>y02 = k0[<span class="number">0</span>];
@@ -2723,14 +2733,25 @@
     </span><span class="kw">let </span><span class="kw-2">mut </span>e1: RVector = Array1::zeros(n);
     <span class="kw">let </span><span class="kw-2">mut </span>e2: RVector = Array1::zeros(n);
     <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>i0 = <span class="number">0</span>;
-    <span class="kw">while </span>i0 &lt; n {
+
+    <span class="kw">while </span>x0 &gt;= lam[i] {
+        e1[i] = y01;
+        e2[i] = y02;
+        i += <span class="number">1</span>;
+        <span class="kw">if </span>i &gt;= n {
+            <span class="comment">// All requested lambda are before first data point
+            </span><span class="kw">break</span>;
+        }
+    }
+    <span class="comment">// Main interpolation loop
+    </span><span class="kw">for </span>i0 <span class="kw">in </span><span class="number">0</span>..n_actual {
         <span class="kw">let </span>x1 = l0[i0];
         <span class="kw">let </span>y11 = n0[i0];
         <span class="kw">let </span>y12 = k0[i0];
 
-        <span class="kw">while </span>i &lt; n &amp;&amp; lam[i] &lt;= x1 &amp;&amp; lam[i] &gt; x0 {
-            <span class="kw">let </span>lgy11 = y11.log10();
+        <span class="kw">while </span>lam[i] &lt;= x1 &amp;&amp; lam[i] &gt; x0 {
+            <span class="comment">// log-log interpolation between points
+            </span><span class="kw">let </span>lgy11 = y11.log10();
             <span class="kw">let </span>lgy12 = y12.log10();
             <span class="kw">let </span>lgy01 = y01.log10();
             <span class="kw">let </span>lgy02 = y02.log10();
@@ -2742,37 +2763,34 @@
             e2[i] = <span class="number">10f64</span>.powf(lgy12 + (lggr - lgx1) * (lgy02 - lgy12) / (lgx0 - lgx1));
 
             i += <span class="number">1</span>;
+            <span class="kw">if </span>i &gt;= n {
+                <span class="kw">break</span>;
+            }
         }
+
         x0 = x1;
         y01 = y11;
         y02 = y12;
-        i0 += <span class="number">1</span>;
     }
 
-    <span class="comment">// Extrapolation
+    <span class="comment">// Extrapolation to long wavelengths
     </span><span class="kw">if </span>loglog {
-        <span class="kw">let </span>m0 = (e1[i - <span class="number">1</span>], e2[i - <span class="number">1</span>]);
-        <span class="kw">if </span>m0.<span class="number">0</span>.abs() &gt; <span class="number">2.0 </span>{
-            <span class="kw">for </span>j <span class="kw">in </span>i..n {
-                <span class="kw">let </span>factor = (lam[j] / lam[i - <span class="number">1</span>]).sqrt();
-                e1[j] = m0.<span class="number">0 </span>* factor;
-                e2[j] = m0.<span class="number">1 </span>* factor;
-            }
-        } <span class="kw">else </span>{
-            <span class="kw">let </span>slope1 =
-                (n0[n - <span class="number">1</span>].log10() - n0[n - <span class="number">2</span>].log10()) / (l0[n - <span class="number">1</span>].log10() - l0[n - <span class="number">2</span>].log10());
-            <span class="kw">let </span>sect1 = n0[n - <span class="number">2</span>].log10();
-            <span class="kw">let </span>slope2 =
-                (k0[n - <span class="number">1</span>].log10() - k0[n - <span class="number">2</span>].log10()) / (l0[n - <span class="number">1</span>].log10() - l0[n - <span class="number">2</span>].log10());
-            <span class="kw">let </span>sect2 = k0[n - <span class="number">2</span>].log10();
-            <span class="kw">for </span>j <span class="kw">in </span>i..n {
-                <span class="kw">let </span>dist = (lam[j] / l0[n - <span class="number">2</span>]).log10();
-                e1[j] = <span class="number">10f64</span>.powf(slope1 * dist + sect1);
-                e2[j] = <span class="number">10f64</span>.powf(slope2 * dist + sect2);
-            }
+        <span class="comment">// Use log-log extrapolation
+        </span><span class="kw">let </span>slope1 = (n0[n_actual - <span class="number">1</span>] / n0[n_actual - <span class="number">2</span>]).log10()
+            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
+        <span class="kw">let </span>sect1 = n0[n_actual - <span class="number">2</span>].log10();
+        <span class="kw">let </span>slope2 = (k0[n_actual - <span class="number">1</span>] / k0[n_actual - <span class="number">2</span>]).log10()
+            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
+        <span class="kw">let </span>sect2 = k0[n_actual - <span class="number">2</span>].log10();
+
+        <span class="kw">for </span>j <span class="kw">in </span>i..n {
+            <span class="kw">let </span>dist = (lam[j] / l0[n_actual - <span class="number">2</span>]).log10();
+            e1[j] = <span class="number">10f64</span>.powf(slope1 * dist + sect1);
+            e2[j] = <span class="number">10f64</span>.powf(slope2 * dist + sect2);
         }
     } <span class="kw">else </span>{
-        <span class="kw">for </span>j <span class="kw">in </span>i..n {
+        <span class="comment">// Use the dielectric extrapolation, this is the default
+        </span><span class="kw">for </span>j <span class="kw">in </span>i..n {
             e1[j] = e1[i - <span class="number">1</span>];
             e2[j] = e2[i - <span class="number">1</span>] * lam[i - <span class="number">1</span>] / lam[j];
         }

@@ -1246,7 +1246,28 @@
 <a href="#1229" id="1229">1229</a>
 <a href="#1230" id="1230">1230</a>
 <a href="#1231" id="1231">1231</a>
-<a href="#1232" id="1232">1232</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
+<a href="#1232" id="1232">1232</a>
+<a href="#1233" id="1233">1233</a>
+<a href="#1234" id="1234">1234</a>
+<a href="#1235" id="1235">1235</a>
+<a href="#1236" id="1236">1236</a>
+<a href="#1237" id="1237">1237</a>
+<a href="#1238" id="1238">1238</a>
+<a href="#1239" id="1239">1239</a>
+<a href="#1240" id="1240">1240</a>
+<a href="#1241" id="1241">1241</a>
+<a href="#1242" id="1242">1242</a>
+<a href="#1243" id="1243">1243</a>
+<a href="#1244" id="1244">1244</a>
+<a href="#1245" id="1245">1245</a>
+<a href="#1246" id="1246">1246</a>
+<a href="#1247" id="1247">1247</a>
+<a href="#1248" id="1248">1248</a>
+<a href="#1249" id="1249">1249</a>
+<a href="#1250" id="1250">1250</a>
+<a href="#1251" id="1251">1251</a>
+<a href="#1252" id="1252">1252</a>
+<a href="#1253" id="1253">1253</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
 //! This module contains the main routines to compute opacities
 //! and scattering matrices.
 
@@ -1261,11 +1282,11 @@
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>indicatif::{ProgressBar, ProgressStyle};
 <span class="kw">use </span>ndarray::s;
-<span class="kw">use </span>ndarray::Zip;
 <span class="kw">use </span>num_complex::ComplexFloat;
 <span class="kw">use </span>num_complex::{Complex, Complex64};
 <span class="kw">use </span>rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+<span class="kw">use </span><span class="kw">crate</span>::components::get_lnk_data;
 <span class="kw">use </span><span class="kw">crate</span>::dhs::toon_ackerman_1981;
 <span class="kw">use </span><span class="kw">crate</span>::dhs::DHSConfig;
 <span class="kw">use </span><span class="kw">crate</span>::fractal::mean_scattering;
@@ -1277,6 +1298,7 @@
 <span class="kw">use </span><span class="kw">crate</span>::types::{BVector, CVector, RMatrix, RVector};
 <span class="kw">use </span><span class="kw">crate</span>::utils::legendre::gauss_legendre;
 <span class="kw">use </span><span class="kw">crate</span>::utils::prepare_sparse;
+<span class="kw">use </span><span class="kw">crate</span>::utils::regrid_lnk_data;
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>Material {
@@ -1288,6 +1310,7 @@
     <span class="kw">pub </span>mfrac: f64,
     <span class="kw">pub </span>re: RVector,
     <span class="kw">pub </span>im: RVector,
+    <span class="kw">pub </span>cmd: RefractiveIndexKind,
 }
 
 <span class="kw">impl </span>Default <span class="kw">for </span>Material {
@@ -1302,6 +1325,7 @@
             mfrac: <span class="number">1.0</span>,
             re: RVector::zeros(nlam),
             im: RVector::zeros(nlam),
+            cmd: RefractiveIndexKind::Other,
         }
     }
 }
@@ -1310,6 +1334,13 @@
 </span><span class="kw">pub enum </span>MaterialKind {
     Core,
     Mantle,
+}
+
+<span class="attr">#[derive(Debug, PartialEq)]
+</span><span class="kw">pub enum </span>RefractiveIndexKind {
+    File,
+    CmdLine,
+    Other,
 }
 
 <span class="attr">#[derive(Debug)]
@@ -1369,7 +1400,7 @@
             na: <span class="number">0</span>,
             ameans_file: [<span class="number">0.0</span>; <span class="number">3</span>],
             sizedis: SizeDistribution::Apow,
-            wavelength_kind: WavelengthKind::CmdLine,
+            wavelength_kind: WavelengthKind::Other,
             lmin: <span class="number">0.05</span>,
             lmax: <span class="number">1e4</span>,
             nlam,
@@ -1391,15 +1422,15 @@
             nsparse: <span class="number">0</span>,
             scatlammin: RVector::zeros(<span class="number">30</span>),
             scatlammax: RVector::zeros(<span class="number">30</span>),
-            nsubgrains: <span class="number">0</span>,
+            nsubgrains: <span class="number">5</span>,
             mmf_struct: <span class="number">0.0</span>,
             mmf_a0: <span class="number">0.0</span>,
             mmf_kf: <span class="number">0.0</span>,
             mmf_ss: <span class="bool-val">false</span>,
-            split: <span class="bool-val">true</span>,
+            split: <span class="bool-val">false</span>,
             blend_only: <span class="bool-val">false</span>,
-            xlim: <span class="number">1.0</span>,
-            xlim_dhs: <span class="number">1.0</span>,
+            xlim: <span class="number">1e8</span>,
+            xlim_dhs: <span class="number">1e4</span>,
             materials: Vec::with_capacity(<span class="number">20</span>),
             outdir: String::from(<span class="string">"output"</span>),
         }
@@ -1500,7 +1531,7 @@
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub enum </span>WavelengthKind {
-    CmdLine,
+    Other,
     File,
 }
 
@@ -1615,6 +1646,18 @@
 </span><span class="kw">pub fn </span>run(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;(), KappaError&gt; {
     prepare_inputs(kpc)<span class="question-mark">?</span>;
 
+    <span class="kw">for </span>material <span class="kw">in </span><span class="kw-2">&amp;mut </span>kpc.materials {
+        <span class="kw">match </span>material.cmd {
+            RefractiveIndexKind::CmdLine =&gt; {}
+            RefractiveIndexKind::File | RefractiveIndexKind::Other =&gt; {
+                <span class="kw">let </span>component = get_lnk_data(<span class="kw-2">&amp;</span>material.key);
+                (material.re, material.im) =
+                    regrid_lnk_data(component.l0, component.n0, component.k0, <span class="kw-2">&amp;</span>kpc.lam, <span class="bool-val">true</span>);
+                material.rho = component.rho;
+            }
+        }
+    }
+
     <span class="comment">// Loop for splitting the output into files by grain size
     </span><span class="kw">if </span>kpc.split {
         <span class="kw">let </span><span class="kw-2">mut </span>nsub = kpc.nsubgrains;
@@ -1656,34 +1699,6 @@
 
 <span class="doccomment">/// Pre-process the inputs collected from the command-line
 </span><span class="kw">fn </span>prepare_inputs(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="comment">// Sort by `kind = MaterialKind::Core`
-    </span>kpc.materials.sort_by(|a, b| <span class="kw">match </span>(<span class="kw-2">&amp;</span>a.kind, <span class="kw-2">&amp;</span>b.kind) {
-        (MaterialKind::Core, MaterialKind::Core) =&gt; Ordering::Equal,
-        (MaterialKind::Core, <span class="kw">_</span>) =&gt; Ordering::Less,
-        (<span class="kw">_</span>, MaterialKind::Core) =&gt; Ordering::Greater,
-        <span class="kw">_ </span>=&gt; Ordering::Equal,
-    });
-
-    kpc.nmat = kpc.ncore + kpc.nmant;
-
-    <span class="comment">// Make logarithmic wavelength grid
-    </span><span class="kw">match </span>kpc.wavelength_kind {
-        WavelengthKind::CmdLine =&gt; {
-            kpc.lam = RVector::logspace(<span class="number">10.0</span>, kpc.lmin, kpc.lmax, kpc.nlam);
-        }
-        WavelengthKind::File =&gt; {
-            <span class="comment">// already read from file
-        </span>}
-    }
-
-    <span class="comment">// Prepare sparse scattering file
-    </span><span class="kw">if </span>kpc.nsparse &gt; <span class="number">0 </span>{
-        prepare_sparse(kpc);
-    }
-    <span class="comment">// Writing wavelength grid file
-    </span><span class="kw">if </span>kpc.write_grid {
-        write_wavelength_grid(kpc)<span class="question-mark">?</span>;
-    }
     <span class="comment">// Materials
     </span><span class="kw">if </span>kpc.nmat &gt;= <span class="number">20 </span>{
         <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"TooManyMaterials"</span>));
@@ -1776,6 +1791,35 @@
         </span>));
     }
 
+    <span class="comment">// Sort by `kind = MaterialKind::Core`
+    </span>kpc.materials.sort_by(|a, b| <span class="kw">match </span>(<span class="kw-2">&amp;</span>a.kind, <span class="kw-2">&amp;</span>b.kind) {
+        (MaterialKind::Core, MaterialKind::Core) =&gt; Ordering::Equal,
+        (MaterialKind::Core, <span class="kw">_</span>) =&gt; Ordering::Less,
+        (<span class="kw">_</span>, MaterialKind::Core) =&gt; Ordering::Greater,
+        <span class="kw">_ </span>=&gt; Ordering::Equal,
+    });
+
+    kpc.nmat = kpc.ncore + kpc.nmant;
+
+    <span class="comment">// Make logarithmic wavelength grid
+    </span><span class="kw">match </span>kpc.wavelength_kind {
+        WavelengthKind::Other =&gt; {
+            kpc.lam = RVector::logspace(<span class="number">10.0</span>, kpc.lmin.log10(), kpc.lmax.log10(), kpc.nlam);
+        }
+        WavelengthKind::File =&gt; {
+            <span class="comment">// already read from file
+        </span>}
+    }
+
+    <span class="comment">// Prepare sparse scattering file
+    </span><span class="kw">if </span>kpc.nsparse &gt; <span class="number">0 </span>{
+        prepare_sparse(kpc);
+    }
+    <span class="comment">// Writing wavelength grid file
+    </span><span class="kw">if </span>kpc.write_grid {
+        write_wavelength_grid(kpc)<span class="question-mark">?</span>;
+    }
+
     <span class="prelude-val">Ok</span>(())
 }
 
@@ -1823,46 +1867,41 @@
         <span class="kw">let </span><span class="kw-2">mut </span>tot = <span class="number">0.0</span>;
         <span class="comment">// Size distribution
         </span><span class="kw">let </span>nsf = (ns - <span class="number">1</span>) <span class="kw">as </span>f64;
-        Zip::indexed(<span class="kw-2">&amp;mut </span>r)
-            .and(<span class="kw-2">&amp;mut </span>nr)
-            .for_each(|is, r_val, nr_val| {
-                <span class="comment">// Calculate size distribution values
-                </span><span class="kw">let </span>isf = is <span class="kw">as </span>f64;
-                <span class="kw-2">*</span>r_val = <span class="number">10.0f64</span>.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
-
-                <span class="comment">// Apply size distribution and exponential calculation
-                </span><span class="kw-2">*</span>nr_val = <span class="kw">match </span>kpc.sizedis {
-                    <span class="comment">// Log-normal or normal size distribution
-                    </span>SizeDistribution::Normal | SizeDistribution::LogNormal =&gt; {
-                        <span class="kw">if </span>kpc.asigma &lt; <span class="number">0.0 </span>{
-                            <span class="kw">let </span>expo = <span class="number">0.5 </span>* ((<span class="kw-2">*</span>r_val - kpc.amean) / kpc.asigma).powf(<span class="number">2.0</span>);
-                            <span class="kw">if </span>expo &gt; <span class="number">99.0 </span>{
-                                <span class="number">0.0
-                            </span>} <span class="kw">else </span>{
-                                (-expo).exp()
-                            }
-                        } <span class="kw">else </span>{
-                            <span class="kw">let </span>expo = <span class="number">0.5 </span>* ((<span class="kw-2">*</span>r_val / kpc.amean).ln() / kpc.asigma).powf(<span class="number">2.0</span>);
-                            <span class="kw">if </span>expo &gt; <span class="number">99.0 </span>{
-                                <span class="number">0.0
-                            </span>} <span class="kw">else </span>{
-                                (-expo).exp()
-                            }
+        <span class="kw">for </span>(is, (r_val, nr_val)) <span class="kw">in </span>r.iter_mut().zip(nr.iter_mut()).enumerate() {
+            <span class="kw">let </span>isf = is <span class="kw">as </span>f64;
+            <span class="kw-2">*</span>r_val = <span class="number">10.0f64</span>.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+            <span class="comment">// Apply size distribution and exponential calculation
+            </span><span class="kw-2">*</span>nr_val = <span class="kw">match </span>kpc.sizedis {
+                <span class="comment">// Power law size distribution
+                </span>SizeDistribution::Normal | SizeDistribution::LogNormal =&gt; {
+                    <span class="kw">if </span>kpc.asigma &lt; <span class="number">0.0 </span>{
+                        <span class="kw">let </span>expo = <span class="number">0.5 </span>* ((<span class="kw-2">*</span>r_val - kpc.amean) / kpc.asigma).powf(<span class="number">2.0</span>);
+                        <span class="kw">if </span>expo &gt; <span class="number">99.0 </span>{
+                            <span class="number">0.0
+                        </span>} <span class="kw">else </span>{
+                            (-expo).exp()
+                        }
+                    } <span class="kw">else </span>{
+                        <span class="kw">let </span>expo = <span class="number">0.5 </span>* ((<span class="kw-2">*</span>r_val / kpc.amean).ln() / kpc.asigma).powf(<span class="number">2.0</span>);
+                        <span class="kw">if </span>expo &gt; <span class="number">99.0 </span>{
+                            <span class="number">0.0
+                        </span>} <span class="kw">else </span>{
+                            (-expo).exp()
                         }
                     }
-                    <span class="comment">// Power law size distribution
-                    </span><span class="kw">_ </span>=&gt; r_val.powf(pow + <span class="number">1.0</span>),
-                };
-
-                <span class="comment">// With the option `-d`m each computation is only a piece of the size grid
-                </span><span class="kw">if </span><span class="kw-2">*</span>r_val &lt; amin || <span class="kw-2">*</span>r_val &gt; amax {
-                    <span class="kw-2">*</span>nr_val = <span class="number">0.0</span>;
                 }
-
-                <span class="comment">// Volume normalization
-                </span>tot += <span class="kw-2">*</span>nr_val * r_val.powi(<span class="number">3</span>);
-            });
-
+                SizeDistribution::File =&gt; {
+                    <span class="macro">todo!</span>() <span class="comment">// TODO: Move this out of else block
+                </span>}
+                <span class="kw">_ </span>=&gt; r_val.powf(pow + <span class="number">1.0</span>),
+            };
+            <span class="comment">// With the option `-d`m each computation is only a piece of the size grid
+            </span><span class="kw">if </span><span class="kw-2">*</span>r_val &lt; amin || <span class="kw-2">*</span>r_val &gt; amax {
+                <span class="kw-2">*</span>nr_val = <span class="number">0.0</span>;
+            }
+            <span class="comment">// Volume normalization
+            </span>tot += <span class="kw-2">*</span>nr_val * r_val.powi(<span class="number">3</span>);
+        }
         <span class="comment">// Normalize nr
         </span>nr = <span class="number">1.0 </span>* nr / tot;
     }
@@ -1872,8 +1911,8 @@
     }
 
     <span class="comment">// Copy the refractory index data for all materials into local arrays
-    </span><span class="kw">let </span><span class="kw-2">mut </span>e1 = RMatrix::zeros((kpc.nlam, kpc.nmat + <span class="number">1</span>));
-    <span class="kw">let </span><span class="kw-2">mut </span>e2 = RMatrix::zeros((kpc.nlam, kpc.nmat + <span class="number">1</span>));
+    </span><span class="kw">let </span><span class="kw-2">mut </span>e1 = RMatrix::zeros((kpc.nlam, kpc.nmat));
+    <span class="kw">let </span><span class="kw-2">mut </span>e2 = RMatrix::zeros((kpc.nlam, kpc.nmat));
     <span class="kw">for </span>im <span class="kw">in </span><span class="number">0</span>..kpc.nmat {
         e1.slice_mut(<span class="macro">s!</span>[.., im]).assign(<span class="kw-2">&amp;</span>kpc.materials[im].re);
         e2.slice_mut(<span class="macro">s!</span>[.., im]).assign(<span class="kw-2">&amp;</span>kpc.materials[im].im);
@@ -1947,7 +1986,7 @@
             </span><span class="kw">for </span>im <span class="kw">in </span><span class="number">0</span>..kpc.ncore {
                 e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
             }
-            <span class="kw">let </span>e_out = bruggeman_blend(<span class="kw-2">&amp;</span>mfrac.to_vec(), <span class="kw-2">&amp;</span>e_in.to_vec())<span class="question-mark">?</span>;
+            <span class="kw">let </span>e_out = bruggeman_blend(<span class="kw-2">&amp;</span>vfrac_core.to_vec(), <span class="kw-2">&amp;</span>e_in.to_vec())<span class="question-mark">?</span>;
             e1_blend[il] = e_out.re;
             e2_blend[il] = e_out.im;
         }
@@ -2005,7 +2044,7 @@
     <span class="comment">// Initialize mu
     </span><span class="kw">let </span><span class="kw-2">mut </span>mu = RVector::zeros(kpc.nang);
     <span class="kw">let </span>nangby2f = (kpc.nang / <span class="number">2</span>) <span class="kw">as </span>f64;
-    <span class="kw">for </span>(j, val) <span class="kw">in </span>mu.iter_mut().enumerate() {
+    <span class="kw">for </span>(j, val) <span class="kw">in </span>mu.iter_mut().take(kpc.nang / <span class="number">2 </span>+ <span class="number">1</span>).enumerate() {
         <span class="kw">let </span>jf = j <span class="kw">as </span>f64;
         <span class="kw">let </span>theta = (jf - <span class="number">0.5</span>) / nangby2f * PI / <span class="number">2.0</span>;
         <span class="kw-2">*</span>val = theta.cos();
@@ -2025,12 +2064,13 @@
         mu: <span class="kw-2">&amp;</span>mu,
         rho_av,
     };
+    P = [<span class="number">1</span>, <span class="number">32</span>, <span class="number">4</span>];
 
     <span class="kw">let </span>p = {
         <span class="kw">let </span>results: <span class="prelude-ty">Result</span>&lt;Vec&lt;KappaResult&gt;, <span class="kw">_</span>&gt; = <span class="kw">if </span>!kpc.split {
             (<span class="number">0</span>..kpc.nlam)
-                .into_par_iter()
-                .map(|ilam| over_wavelengths(ilam, <span class="kw-2">&amp;</span>kps, kpc))
+                <span class="comment">// .into_par_iter()
+                </span>.map(|ilam| over_wavelengths(ilam, <span class="kw-2">&amp;</span>kps, kpc))
                 .collect()
         } <span class="kw">else </span>{
             (<span class="number">0</span>..kpc.nlam)
@@ -2092,14 +2132,14 @@
     <span class="kw">let </span><span class="kw-2">mut </span>tot: Complex64 = Complex::new(<span class="number">0.0</span>, <span class="number">0.0</span>);
     <span class="kw">let </span><span class="kw-2">mut </span>me: Complex64 = Complex::new(<span class="number">0.0</span>, <span class="number">0.0</span>);
     <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">100 </span>{
-        tot = e_in
+        tot = ((mvac.powi(<span class="number">2</span>) - mm.powi(<span class="number">2</span>)) / (mvac.powi(<span class="number">2</span>) + <span class="number">2.0 </span>* mm.powi(<span class="number">2</span>))) * abunvac;
+        tot += e_in
             .iter()
             .zip(abun.iter())
             .map(|(<span class="kw-2">&amp;</span>e_in_j, <span class="kw-2">&amp;</span>abun_j)| {
-                (e_in_j.powi(<span class="number">2</span>) - mm.powi(<span class="number">2</span>)) / (e_in_j.powi(<span class="number">2</span>) + <span class="number">2.0 </span>* mm.powi(<span class="number">2</span>)) * abun_j
+                ((e_in_j.powi(<span class="number">2</span>) - mm.powi(<span class="number">2</span>)) / (e_in_j.powi(<span class="number">2</span>) + <span class="number">2.0 </span>* mm.powi(<span class="number">2</span>))) * abun_j
             })
-            .sum::&lt;Complex64&gt;()
-            + ((mvac.powi(<span class="number">2</span>) - mm.powi(<span class="number">2</span>)) / (mvac.powi(<span class="number">2</span>) + <span class="number">2.0 </span>* mm.powi(<span class="number">2</span>)) * abunvac);
+            .sum::&lt;Complex64&gt;();
 
         me = mm * ((<span class="number">2.0 </span>* tot + <span class="number">1.0</span>) / (<span class="number">1.0 </span>- tot)).sqrt();
         mm = me;
@@ -2175,7 +2215,8 @@
                             mie_f44,
                         ) = <span class="kw">match </span>toon_ackerman_1981(<span class="kw-2">&amp;</span>dhsc) {
                             <span class="prelude-val">Ok</span>(dhsr) =&gt; {
-                                <span class="kw">if </span>spheres {
+                                <span class="comment">// println!("{:?}", dhsr.q_ext);
+                                </span><span class="kw">if </span>spheres {
                                     rad = r1;
                                 } <span class="kw">else if </span>too_large {
                                     rad = r1 / (<span class="number">1.0 </span>- kps.f[kps.ifmn]).powf(<span class="number">1.0 </span>/ <span class="number">3.0</span>);
@@ -2213,7 +2254,8 @@
                                     mie_f44,
                                 )
                             }
-                            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+                            <span class="prelude-val">Err</span>(e) =&gt; {
+                                <span class="macro">println!</span>(<span class="string">"DHS error: {:?}"</span>, e);
                                 rad = r1;
                                 <span class="kw">let </span>rmie = rad;
                                 <span class="kw">let </span>lmie = kpc.lam[ilam];

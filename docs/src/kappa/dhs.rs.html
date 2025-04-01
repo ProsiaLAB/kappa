@@ -408,7 +408,17 @@
 <a href="#391" id="391">391</a>
 <a href="#392" id="392">392</a>
 <a href="#393" id="393">393</a>
-<a href="#394" id="394">394</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
 //! low-porosity aggregates.
 //! In order to simulate irregularities in grains (irregular shapes, or the properties of
 //! low-porosity aggregates), `kappa` averages the opacities of grains with an inner
@@ -420,15 +430,18 @@
 //! `kappa` switches from DHS to [`crate::mie::de_rooij_1984`].
 
 </span><span class="kw">use </span>std::f64::consts::PI;
+<span class="kw">use </span>std::process::exit;
 
 <span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>anyhow::Result;
+<span class="kw">use </span>ndarray::s;
 <span class="kw">use </span>num_complex::ComplexFloat;
 <span class="kw">use </span>num_complex::{Complex, Complex64};
 
 <span class="kw">use </span><span class="kw">crate</span>::types::{CMatrix, CVector, RMatrix, RVector};
 
-<span class="kw">pub struct </span>DHSConfig&lt;<span class="lifetime">'a</span>&gt; {
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>DHSConfig&lt;<span class="lifetime">'a</span>&gt; {
     <span class="kw">pub </span>r_core: f64,
     <span class="kw">pub </span>r_shell: f64,
     <span class="kw">pub </span>wave_number: f64,
@@ -558,6 +571,9 @@
         }
     }
 
+    <span class="macro">dbg!</span>(acap.slice(<span class="macro">s!</span>[..nmx_1]));
+    exit(<span class="number">0</span>);
+
     <span class="kw">let </span><span class="kw-2">mut </span>si2tht = RVector::zeros(dhsc.numang);
     <span class="kw">let </span><span class="kw-2">mut </span>pi = RMatrix::zeros((dhsc.numang, <span class="number">3</span>));
     <span class="kw">let </span><span class="kw-2">mut </span>tau = RMatrix::zeros((dhsc.numang, <span class="number">3</span>));
@@ -678,7 +694,7 @@
         s1[[j, <span class="number">1</span>]] = bc * pi[[j, <span class="number">1</span>]] - ac * tau[[j, <span class="number">1</span>]];
     }
 
-    n = <span class="number">1</span>;
+    n = <span class="number">2</span>;
 
     t[<span class="number">3</span>] = <span class="number">1.5</span>;
 
@@ -734,6 +750,7 @@
         <span class="kw">let </span>bm_0_im = bcoem_0.im;
 
         t[<span class="number">3</span>] = (<span class="number">2.0 </span>* (nf) - <span class="number">1.0</span>) / ((nf) * (nf - <span class="number">1.0</span>));
+        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"1"</span>);
         t[<span class="number">1</span>] = (nf - <span class="number">1.0</span>) / (nf + <span class="number">1.0</span>) / (nf);
         dgqsc += t[<span class="number">1</span>] * (am_0_re * are + am_0_im * aim + bm_0_re * bre + bm_0_im * bim)
             + t[<span class="number">3</span>] * (am_0_re * bm_0_re + am_0_im * bm_0_im);
@@ -741,6 +758,7 @@
         t[<span class="number">2</span>] = <span class="number">2.0 </span>* (nf) + <span class="number">1.0</span>;
         dqext += t[<span class="number">2</span>] * (are + bre);
         t[<span class="number">3</span>] = are * are + aim * aim + bre * bre + bim * bim;
+        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"2"</span>);
         dqsca += t[<span class="number">2</span>] * t[<span class="number">3</span>];
         rmm = -rmm;
         sback += t[<span class="number">2</span>] * rmm * (acoe - bcoe);
@@ -782,7 +800,9 @@
 
         acoem_0 = acoe;
         bcoem_0 = bcoe;
+        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"3"</span>);
     }
+    exit(<span class="number">0</span>);
 
     <span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..dhsc.numang {
         <span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">1 </span>{

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["KappaError","KappaMethod","MaterialKind","SizeDistribution","WavelengthKind"],"fn":["run"],"struct":["Component","KappaConfig","Material","Mueller","Particle"],"trait":["SpecialConfigs"]};
+window.SIDEBAR_ITEMS = {"enum":["KappaError","KappaMethod","MaterialKind","RefractiveIndexKind","SizeDistribution","WavelengthKind"],"fn":["run"],"struct":["Component","KappaConfig","Material","Mueller","Particle"],"trait":["SpecialConfigs"]};

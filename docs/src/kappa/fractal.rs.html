@@ -838,8 +838,7 @@
 <a href="#821" id="821">821</a>
 <a href="#822" id="822">822</a>
 <a href="#823" id="823">823</a>
-<a href="#824" id="824">824</a>
-<a href="#825" id="825">825</a></pre></div><pre class="rust"><code><span class="doccomment">//! Computes light scattering properties of randomly oriented
+<a href="#824" id="824">824</a></pre></div><pre class="rust"><code><span class="doccomment">//! Computes light scattering properties of randomly oriented
 //! fractal dust aggregates by means of the modified mean field theory developed
 //! in [Tazaki &amp; Tanaka (2018)](https://iopscience.iop.org/article/10.3847/1538-4357/aac32d/meta). This code is also capable of computing the light
 //! scattering solution based on the Rayleigh-Gans-Debye theory and the Mean field
@@ -856,6 +855,7 @@
 <span class="kw">use </span>num_complex::{Complex, Complex64};
 
 <span class="kw">use </span><span class="kw">crate</span>::geofractal::get_geometric_cross_section_tazaki;
+<span class="kw">use </span><span class="kw">crate</span>::geofractal::{AFactor, IntegrationMethod};
 <span class="kw">use </span><span class="kw">crate</span>::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
 <span class="kw">use </span><span class="kw">crate</span>::utils::gamma::gamma;
 <span class="kw">use </span><span class="kw">crate</span>::utils::{bessel, legendre, linalg, special};
@@ -917,9 +917,7 @@
     ModifiedMeanField,
 }
 
-<span class="attr">#[repr(i32)]
-#[derive(Clone, Copy)]
-</span><span class="kw">pub enum </span>FractalCutoff {
+<span class="kw">pub enum </span>FractalCutoff {
     Gaussian,
     Exponential,
     FractalDimension,
@@ -1228,9 +1226,9 @@
                 }
                 FractalGeometry::Tazaki =&gt; {
                     get_geometric_cross_section_tazaki(
-                        <span class="number">3</span>, <span class="comment">// Use approximation
-                        </span><span class="number">1</span>, <span class="comment">// Without small-cluster limit
-                        </span>fracc.cutoff <span class="kw">as </span>i32,
+                        <span class="kw-2">&amp;</span>IntegrationMethod::AnAn,
+                        <span class="kw-2">&amp;</span>AFactor::Unity,
+                        <span class="kw-2">&amp;</span>fracc.cutoff,
                         fracc.pn,
                         fracc.k0,
                         fracc.df,

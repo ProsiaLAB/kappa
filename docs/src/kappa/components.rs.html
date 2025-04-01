@@ -12836,7 +12836,66 @@
 <a href="#12819" id="12819">12819</a>
 <a href="#12820" id="12820">12820</a>
 <a href="#12821" id="12821">12821</a>
-<a href="#12822" id="12822">12822</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines structs, variables and other statically defined
+<a href="#12822" id="12822">12822</a>
+<a href="#12823" id="12823">12823</a>
+<a href="#12824" id="12824">12824</a>
+<a href="#12825" id="12825">12825</a>
+<a href="#12826" id="12826">12826</a>
+<a href="#12827" id="12827">12827</a>
+<a href="#12828" id="12828">12828</a>
+<a href="#12829" id="12829">12829</a>
+<a href="#12830" id="12830">12830</a>
+<a href="#12831" id="12831">12831</a>
+<a href="#12832" id="12832">12832</a>
+<a href="#12833" id="12833">12833</a>
+<a href="#12834" id="12834">12834</a>
+<a href="#12835" id="12835">12835</a>
+<a href="#12836" id="12836">12836</a>
+<a href="#12837" id="12837">12837</a>
+<a href="#12838" id="12838">12838</a>
+<a href="#12839" id="12839">12839</a>
+<a href="#12840" id="12840">12840</a>
+<a href="#12841" id="12841">12841</a>
+<a href="#12842" id="12842">12842</a>
+<a href="#12843" id="12843">12843</a>
+<a href="#12844" id="12844">12844</a>
+<a href="#12845" id="12845">12845</a>
+<a href="#12846" id="12846">12846</a>
+<a href="#12847" id="12847">12847</a>
+<a href="#12848" id="12848">12848</a>
+<a href="#12849" id="12849">12849</a>
+<a href="#12850" id="12850">12850</a>
+<a href="#12851" id="12851">12851</a>
+<a href="#12852" id="12852">12852</a>
+<a href="#12853" id="12853">12853</a>
+<a href="#12854" id="12854">12854</a>
+<a href="#12855" id="12855">12855</a>
+<a href="#12856" id="12856">12856</a>
+<a href="#12857" id="12857">12857</a>
+<a href="#12858" id="12858">12858</a>
+<a href="#12859" id="12859">12859</a>
+<a href="#12860" id="12860">12860</a>
+<a href="#12861" id="12861">12861</a>
+<a href="#12862" id="12862">12862</a>
+<a href="#12863" id="12863">12863</a>
+<a href="#12864" id="12864">12864</a>
+<a href="#12865" id="12865">12865</a>
+<a href="#12866" id="12866">12866</a>
+<a href="#12867" id="12867">12867</a>
+<a href="#12868" id="12868">12868</a>
+<a href="#12869" id="12869">12869</a>
+<a href="#12870" id="12870">12870</a>
+<a href="#12871" id="12871">12871</a>
+<a href="#12872" id="12872">12872</a>
+<a href="#12873" id="12873">12873</a>
+<a href="#12874" id="12874">12874</a>
+<a href="#12875" id="12875">12875</a>
+<a href="#12876" id="12876">12876</a>
+<a href="#12877" id="12877">12877</a>
+<a href="#12878" id="12878">12878</a>
+<a href="#12879" id="12879">12879</a>
+<a href="#12880" id="12880">12880</a>
+<a href="#12881" id="12881">12881</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines structs, variables and other statically defined
 //! data structures for built-in materials in `kappa`.
 
 </span><span class="kw">pub const </span>MATERIAL_KEYS: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[
@@ -12910,8 +12969,8 @@
         <span class="string">"gra" </span>| <span class="string">"c-gra" </span>=&gt; <span class="kw-2">&amp;</span>C_GRA,
         <span class="string">"org" </span>| <span class="string">"c-org" </span>=&gt; <span class="kw-2">&amp;</span>C_ORG,
         <span class="string">"nano" </span>| <span class="string">"c-nano" </span>=&gt; <span class="kw-2">&amp;</span>C_NANO,
-        <span class="comment">// "pyr-mg70" =&gt; &amp;PYR_MG70,
-        // "pyr-mg60" =&gt; &amp;PYR_MG60,
+        <span class="string">"pyr-mg70" </span>| <span class="string">"pyr" </span>=&gt; <span class="kw-2">&amp;</span>PYR_MG70,
+        <span class="comment">// "pyr-mg60" =&gt; &amp;PYR_MG60,
         // "pyr-mg50" =&gt; &amp;PYR_MG50,
         // "pyr-mg40" =&gt; &amp;PYR_MG40,
         </span><span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"No data for key {}"</span>, key),
@@ -25657,5 +25716,64 @@
     l0: L0_CH3OH_A,
     n0: N0_CH3OH_A,
     k0: K0_CH3OH_A,
+};
+
+<span class="kw">static </span>L0_PYR_MG70: <span class="kw-2">&amp;</span>[f64; <span class="number">109</span>] = <span class="kw-2">&amp;</span>[
+    <span class="number">0.20000</span>, <span class="number">0.22000</span>, <span class="number">0.24000</span>, <span class="number">0.26000</span>, <span class="number">0.28000</span>, <span class="number">0.30000</span>, <span class="number">0.32000</span>, <span class="number">0.34000</span>, <span class="number">0.36000</span>, <span class="number">0.38000</span>,
+    <span class="number">0.40000</span>, <span class="number">0.42000</span>, <span class="number">0.45000</span>, <span class="number">0.50000</span>, <span class="number">0.55000</span>, <span class="number">0.60000</span>, <span class="number">0.65000</span>, <span class="number">0.70000</span>, <span class="number">0.75000</span>, <span class="number">0.80000</span>,
+    <span class="number">0.90000</span>, <span class="number">1.00000</span>, <span class="number">1.10000</span>, <span class="number">1.20000</span>, <span class="number">1.30000</span>, <span class="number">1.40000</span>, <span class="number">1.50000</span>, <span class="number">1.60000</span>, <span class="number">1.70000</span>, <span class="number">1.80000</span>,
+    <span class="number">1.90000</span>, <span class="number">2.00000</span>, <span class="number">2.20000</span>, <span class="number">2.40000</span>, <span class="number">2.60000</span>, <span class="number">2.80000</span>, <span class="number">3.00000</span>, <span class="number">3.50000</span>, <span class="number">4.00000</span>, <span class="number">4.50000</span>,
+    <span class="number">5.00000</span>, <span class="number">5.50000</span>, <span class="number">6.00000</span>, <span class="number">6.50000</span>, <span class="number">7.00000</span>, <span class="number">7.50000</span>, <span class="number">8.00000</span>, <span class="number">8.20000</span>, <span class="number">8.40000</span>, <span class="number">8.60000</span>,
+    <span class="number">8.80000</span>, <span class="number">9.00000</span>, <span class="number">9.20000</span>, <span class="number">9.40000</span>, <span class="number">9.60000</span>, <span class="number">9.80000</span>, <span class="number">10.00000</span>, <span class="number">10.20000</span>, <span class="number">10.40000</span>, <span class="number">10.60000</span>,
+    <span class="number">10.80000</span>, <span class="number">11.00000</span>, <span class="number">11.20000</span>, <span class="number">11.40000</span>, <span class="number">11.60000</span>, <span class="number">11.80000</span>, <span class="number">12.00000</span>, <span class="number">12.50000</span>, <span class="number">13.00000</span>,
+    <span class="number">13.50000</span>, <span class="number">14.00000</span>, <span class="number">14.50000</span>, <span class="number">15.00000</span>, <span class="number">15.50000</span>, <span class="number">16.00000</span>, <span class="number">16.50000</span>, <span class="number">17.00000</span>, <span class="number">17.50000</span>,
+    <span class="number">18.00000</span>, <span class="number">18.50000</span>, <span class="number">19.00000</span>, <span class="number">19.50000</span>, <span class="number">20.00000</span>, <span class="number">21.00000</span>, <span class="number">22.00000</span>, <span class="number">23.00000</span>, <span class="number">24.00000</span>,
+    <span class="number">25.00000</span>, <span class="number">26.00000</span>, <span class="number">27.00000</span>, <span class="number">28.00000</span>, <span class="number">29.00000</span>, <span class="number">30.00000</span>, <span class="number">32.00000</span>, <span class="number">34.00000</span>, <span class="number">36.00000</span>,
+    <span class="number">38.00000</span>, <span class="number">40.00000</span>, <span class="number">45.00000</span>, <span class="number">50.00000</span>, <span class="number">55.00000</span>, <span class="number">60.00000</span>, <span class="number">65.00000</span>, <span class="number">70.00000</span>, <span class="number">75.00000</span>,
+    <span class="number">80.00000</span>, <span class="number">100.00000</span>, <span class="number">200.00000</span>, <span class="number">500.00000</span>,
+];
+<span class="kw">static </span>N0_PYR_MG70: <span class="kw-2">&amp;</span>[f64; <span class="number">109</span>] = <span class="kw-2">&amp;</span>[
+    <span class="number">1.696000</span>, <span class="number">1.672920</span>, <span class="number">1.666340</span>, <span class="number">1.665530</span>, <span class="number">1.670280</span>, <span class="number">1.673660</span>, <span class="number">1.676740</span>, <span class="number">1.676420</span>, <span class="number">1.671350</span>,
+    <span class="number">1.665620</span>, <span class="number">1.660000</span>, <span class="number">1.655260</span>, <span class="number">1.648920</span>, <span class="number">1.639480</span>, <span class="number">1.635180</span>, <span class="number">1.631690</span>, <span class="number">1.628810</span>, <span class="number">1.625270</span>,
+    <span class="number">1.622110</span>, <span class="number">1.623180</span>, <span class="number">1.618720</span>, <span class="number">1.614730</span>, <span class="number">1.613230</span>, <span class="number">1.614030</span>, <span class="number">1.605260</span>, <span class="number">1.613480</span>, <span class="number">1.602270</span>,
+    <span class="number">1.604150</span>, <span class="number">1.599910</span>, <span class="number">1.595960</span>, <span class="number">1.591550</span>, <span class="number">1.593010</span>, <span class="number">1.583330</span>, <span class="number">1.579590</span>, <span class="number">1.582000</span>, <span class="number">1.576590</span>,
+    <span class="number">1.574030</span>, <span class="number">1.563700</span>, <span class="number">1.560280</span>, <span class="number">1.548670</span>, <span class="number">1.533690</span>, <span class="number">1.511210</span>, <span class="number">1.476460</span>, <span class="number">1.441560</span>, <span class="number">1.391820</span>,
+    <span class="number">1.312370</span>, <span class="number">1.155270</span>, <span class="number">1.072930</span>, <span class="number">1.015300</span>, <span class="number">0.987127</span>, <span class="number">0.973704</span>, <span class="number">1.013680</span>, <span class="number">1.085100</span>, <span class="number">1.197290</span>,
+    <span class="number">1.327850</span>, <span class="number">1.450290</span>, <span class="number">1.566430</span>, <span class="number">1.672260</span>, <span class="number">1.779280</span>, <span class="number">1.878890</span>, <span class="number">1.966090</span>, <span class="number">2.037210</span>, <span class="number">2.090630</span>,
+    <span class="number">2.128890</span>, <span class="number">2.144500</span>, <span class="number">2.125550</span>, <span class="number">2.070960</span>, <span class="number">1.902000</span>, <span class="number">1.794360</span>, <span class="number">1.711630</span>, <span class="number">1.661770</span>, <span class="number">1.593620</span>,
+    <span class="number">1.519070</span>, <span class="number">1.427040</span>, <span class="number">1.346980</span>, <span class="number">1.306690</span>, <span class="number">1.311580</span>, <span class="number">1.349710</span>, <span class="number">1.421240</span>, <span class="number">1.516260</span>, <span class="number">1.599300</span>,
+    <span class="number">1.690780</span>, <span class="number">1.778010</span>, <span class="number">1.937930</span>, <span class="number">2.090230</span>, <span class="number">2.155340</span>, <span class="number">2.183930</span>, <span class="number">2.203610</span>, <span class="number">2.221440</span>, <span class="number">2.254160</span>,
+    <span class="number">2.290280</span>, <span class="number">2.341640</span>, <span class="number">2.392840</span>, <span class="number">2.464250</span>, <span class="number">2.512420</span>, <span class="number">2.551500</span>, <span class="number">2.581660</span>, <span class="number">2.587040</span>, <span class="number">2.607800</span>,
+    <span class="number">2.639760</span>, <span class="number">2.647060</span>, <span class="number">2.660060</span>, <span class="number">2.662580</span>, <span class="number">2.670950</span>, <span class="number">2.676600</span>, <span class="number">2.693010</span>, <span class="number">2.690890</span>, <span class="number">2.690890</span>,
+    <span class="number">2.690890</span>,
+];
+<span class="kw">static </span>K0_PYR_MG70: <span class="kw-2">&amp;</span>[f64; <span class="number">109</span>] = <span class="kw-2">&amp;</span>[
+    <span class="number">0.032659</span>, <span class="number">0.057080</span>, <span class="number">0.065823</span>, <span class="number">0.071997</span>, <span class="number">0.071043</span>, <span class="number">0.065171</span>, <span class="number">0.056195</span>, <span class="number">0.044329</span>, <span class="number">0.034272</span>,
+    <span class="number">0.027317</span>, <span class="number">0.022410</span>, <span class="number">0.0160</span>, <span class="number">0.0105</span>, <span class="number">0.0057</span>, <span class="number">0.0042</span>, <span class="number">0.0035</span>, <span class="number">0.0032</span>, <span class="number">0.0030</span>, <span class="number">0.002868</span>, <span class="number">0.002796</span>,
+    <span class="number">0.002730</span>, <span class="number">0.002689</span>, <span class="number">0.002545</span>, <span class="number">0.002315</span>, <span class="number">0.002067</span>, <span class="number">0.001841</span>, <span class="number">0.001729</span>, <span class="number">0.001701</span>, <span class="number">0.001730</span>,
+    <span class="number">0.001760</span>, <span class="number">0.001747</span>, <span class="number">0.001720</span>, <span class="number">0.001545</span>, <span class="number">0.001402</span>, <span class="number">0.001340</span>, <span class="number">0.001376</span>, <span class="number">0.001368</span>, <span class="number">0.001370</span>,
+    <span class="number">0.001379</span>, <span class="number">0.001503</span>, <span class="number">0.003005</span>, <span class="number">0.004492</span>, <span class="number">0.004350</span>, <span class="number">0.004728</span>, <span class="number">0.006027</span>, <span class="number">0.009029</span>, <span class="number">0.075000</span>,
+    <span class="number">0.173280</span>, <span class="number">0.274492</span>, <span class="number">0.390366</span>, <span class="number">0.520220</span>, <span class="number">0.669612</span>, <span class="number">0.796176</span>, <span class="number">0.904355</span>, <span class="number">0.962505</span>, <span class="number">0.988934</span>,
+    <span class="number">0.992840</span>, <span class="number">0.981458</span>, <span class="number">0.964218</span>, <span class="number">0.915665</span>, <span class="number">0.856509</span>, <span class="number">0.779662</span>, <span class="number">0.691399</span>, <span class="number">0.597051</span>, <span class="number">0.491735</span>,
+    <span class="number">0.375869</span>, <span class="number">0.285915</span>, <span class="number">0.205806</span>, <span class="number">0.193781</span>, <span class="number">0.207051</span>, <span class="number">0.223611</span>, <span class="number">0.240045</span>, <span class="number">0.246027</span>, <span class="number">0.309868</span>,
+    <span class="number">0.402327</span>, <span class="number">0.535251</span>, <span class="number">0.669393</span>, <span class="number">0.793894</span>, <span class="number">0.905266</span>, <span class="number">0.979994</span>, <span class="number">1.026750</span>, <span class="number">1.064410</span>, <span class="number">1.082480</span>,
+    <span class="number">1.099860</span>, <span class="number">1.030980</span>, <span class="number">0.949954</span>, <span class="number">0.897780</span>, <span class="number">0.873337</span>, <span class="number">0.864705</span>, <span class="number">0.863328</span>, <span class="number">0.865256</span>, <span class="number">0.863798</span>,
+    <span class="number">0.841428</span>, <span class="number">0.784714</span>, <span class="number">0.729619</span>, <span class="number">0.679722</span>, <span class="number">0.626253</span>, <span class="number">0.583750</span>, <span class="number">0.527359</span>, <span class="number">0.463198</span>, <span class="number">0.425524</span>,
+    <span class="number">0.386256</span>, <span class="number">0.354838</span>, <span class="number">0.331863</span>, <span class="number">0.318764</span>, <span class="number">0.289955</span>, <span class="number">0.23</span>, <span class="number">0.115</span>, <span class="number">0.046</span>,
+];
+
+<span class="doccomment">/// Pyroxene
+///
+/// # References
+/// - &lt;https://ui.adsabs.harvard.edu/abs/1995A&amp;A...300..503D&gt;
+</span><span class="kw">pub static </span>PYR_MG70: StaticComponent = StaticComponent {
+    name: <span class="string">"Pyroxene"</span>,
+    class: <span class="string">"Silicates"</span>,
+    state: <span class="string">"Amorphous"</span>,
+    rho: <span class="number">3.01</span>,
+    size: <span class="number">109</span>,
+    l0: L0_PYR_MG70,
+    n0: N0_PYR_MG70,
+    k0: K0_PYR_MG70,
 };
 </code></pre></div></section></main></body></html>

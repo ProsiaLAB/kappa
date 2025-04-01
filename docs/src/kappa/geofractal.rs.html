@@ -232,13 +232,50 @@
 <a href="#215" id="215">215</a>
 <a href="#216" id="216">216</a>
 <a href="#217" id="217">217</a>
-<a href="#218" id="218">218</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::f64::consts::PI;
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::f64::consts::PI;
 
 <span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>anyhow::Result;
 
+<span class="kw">use </span><span class="kw">crate</span>::fractal::FractalCutoff;
 <span class="kw">use </span><span class="kw">crate</span>::types::RVector;
 <span class="kw">use </span><span class="kw">crate</span>::utils::gamma::{gamma, gamma_ur};
+
+<span class="doccomment">/// Method for solving radial and angular integration
+/// when computing the mean overlapping efficiency.
+</span><span class="attr">#[derive(PartialEq)]
+</span><span class="kw">pub enum </span>IntegrationMethod {
+    <span class="doccomment">/// Radial (Numerical); Angular (Numerical)
+    ///
+    /// This is the default method.
+    </span>NumNum,
+    <span class="doccomment">/// Radial (Numerical); Angular (Analytical)
+    </span>NumAn,
+    <span class="doccomment">/// Radial (Analytical); Angular (Analytical)
+    </span>AnAn,
+}
+
+<span class="kw">pub enum </span>AFactor {
+    Unity,
+    TwoRegimes,
+}
 
 <span class="doccomment">/// Computing geometrical cross-section of randomly oriented
 /// fractal dust aggregates based on a statistical distribution
@@ -260,9 +297,9 @@
 ///
 ///
 </span><span class="kw">pub fn </span>get_geometric_cross_section_tazaki(
-    iqapp: i32,
-    iqcon: i32,
-    iqcor: i32,
+    method: <span class="kw-2">&amp;</span>IntegrationMethod,
+    afac: <span class="kw-2">&amp;</span>AFactor,
+    cutoff: <span class="kw-2">&amp;</span>FractalCutoff,
     pn: f64,
     k0: f64,
     df: f64,
@@ -277,28 +314,21 @@
         <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"ExceedsMaxFractalDimension"</span>));
     }
 
-    <span class="kw">if </span>iqcon != <span class="number">1 </span>&amp;&amp; iqcon != <span class="number">2 </span>{
-        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"UnknownRegimeFactor"</span>));
-    }
-
-    <span class="kw">if </span>iqapp != <span class="number">1 </span>&amp;&amp; iqapp != <span class="number">2 </span>{
-        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"UnknownIntegrationMethod"</span>));
-    }
-
-    <span class="kw">let </span><span class="kw-2">mut </span>a = <span class="number">1.0</span>;
-
-    <span class="kw">if </span>iqcon == <span class="number">2 </span>{
-        <span class="kw">let </span><span class="kw-2">mut </span>pnth = <span class="number">11.0 </span>* df - <span class="number">8.5</span>;
-        pnth = pnth.min(<span class="number">8.0</span>);
-        <span class="kw">if </span>pn &lt; pnth {
-            g = gfit(pn);
-            <span class="kw">return </span><span class="prelude-val">Ok</span>(g);
+    <span class="kw">let </span>a = <span class="kw">match </span>afac {
+        AFactor::Unity =&gt; <span class="number">1.0</span>,
+        AFactor::TwoRegimes =&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>pnth = <span class="number">11.0 </span>* df - <span class="number">8.5</span>;
+            pnth = pnth.min(<span class="number">8.0</span>);
+            <span class="kw">if </span>pn &lt; pnth {
+                g = gfit(pn);
+                <span class="kw">return </span><span class="prelude-val">Ok</span>(g);
+            }
+            <span class="kw">let </span>sigmath = mean_overlap_efficiency(<span class="kw-2">&amp;</span>method, <span class="kw-2">&amp;</span>cutoff, k0, df, pnth);
+            (<span class="number">1.0 </span>+ (pnth - <span class="number">1.0</span>) * sigmath) * gfit(pnth)
         }
-        <span class="kw">let </span>sigmath = mean_overlap_efficiency(iqapp, iqcor, k0, df, pnth);
-        a = (<span class="number">1.0 </span>+ (pnth - <span class="number">1.0</span>) * sigmath) * gfit(pnth);
-    }
+    };
 
-    <span class="kw">let </span>sigma = mean_overlap_efficiency(iqapp, iqcor, k0, df, pn);
+    <span class="kw">let </span>sigma = mean_overlap_efficiency(<span class="kw-2">&amp;</span>method, <span class="kw-2">&amp;</span>cutoff, k0, df, pn);
 
     g = a / (<span class="number">1.0 </span>+ (pn - <span class="number">1.0</span>) * sigma);
 
@@ -351,7 +381,13 @@
 ///     fang(rho,u) = [Arcsin{sqrt(1-rho^2u^2)} - rho*u*sqrt{1-rho^2u^2}]*u/sqrt(1-u^2)
 ///
 /// Note that the angular integral function S(rho) ≈1 when rho &gt;&gt; 1.
-</span><span class="kw">fn </span>mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) -&gt; f64 {
+</span><span class="kw">fn </span>mean_overlap_efficiency(
+    method: <span class="kw-2">&amp;</span>IntegrationMethod,
+    cutoff: <span class="kw-2">&amp;</span>FractalCutoff,
+    k0: f64,
+    df: f64,
+    pn: f64,
+) -&gt; f64 {
     <span class="kw">let </span>xmax = <span class="number">25.0</span>;
     <span class="kw">let </span>nx = <span class="number">1000</span>;
 
@@ -361,26 +397,25 @@
 
     <span class="kw">let </span><span class="kw-2">mut </span>sigma: f64;
 
-    <span class="kw">match </span>iqcor {
-        <span class="number">1 </span>=&gt; {
+    <span class="kw">match </span>cutoff {
+        FractalCutoff::Gaussian =&gt; {
             aicgm = <span class="number">0.5 </span>* (df - <span class="number">2.0</span>);
             xmin = df * (k0 / pn).powf(<span class="number">2.0 </span>/ df);
             factor = xmin / <span class="number">16.0 </span>/ gamma(<span class="number">0.5 </span>* df);
         }
-        <span class="number">2 </span>=&gt; {
+        FractalCutoff::Exponential =&gt; {
             aicgm = df - <span class="number">2.0</span>;
             xmin = <span class="number">2.0 </span>* (<span class="number">0.5 </span>* df * (df + <span class="number">1.0</span>)).sqrt() * (k0 / pn).powf(<span class="number">1.0 </span>/ df);
             factor = xmin * xmin / <span class="number">16.0 </span>/ gamma(df);
         }
-        <span class="number">3 </span>=&gt; {
+        FractalCutoff::FractalDimension =&gt; {
             aicgm = (df - <span class="number">2.0</span>) / df;
             xmin = <span class="number">2.0f64</span>.powf(df - <span class="number">1.0</span>) * k0 / pn;
             factor = xmin.powf(<span class="number">2.0 </span>/ df) / <span class="number">16.0</span>;
         }
-        <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
     }
 
-    <span class="kw">if </span>df &gt; <span class="number">2.0 </span>&amp;&amp; iqapp == <span class="number">3 </span>{
+    <span class="kw">if </span>df &gt; <span class="number">2.0 </span>&amp;&amp; <span class="kw-2">*</span>method == IntegrationMethod::AnAn {
         sigma = factor * gamma(aicgm) * gamma_ur(aicgm, xmin);
     } <span class="kw">else </span>{
         <span class="kw">let </span>nxf = nx <span class="kw">as </span>f64;
@@ -391,8 +426,8 @@
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..nx {
             <span class="kw">let </span>ir = i <span class="kw">as </span>f64;
             x[i] = (xmin.ln() + ir * dlnx).exp();
-            <span class="kw">if </span>iqapp == <span class="number">1 </span>{
-                sang[i] = angular_integration(iqcor, x[i], xmin, df);
+            <span class="kw">if </span><span class="kw-2">*</span>method == IntegrationMethod::NumNum {
+                sang[i] = angular_integration(cutoff, x[i], xmin, df);
             }
         }
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..nx - <span class="number">1 </span>{
@@ -411,16 +446,15 @@
     x.powf(a) * (-x).exp()
 }
 
-<span class="kw">fn </span>angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -&gt; f64 {
+<span class="kw">fn </span>angular_integration(cutoff: <span class="kw-2">&amp;</span>FractalCutoff, x: f64, xmin: f64, df: f64) -&gt; f64 {
     <span class="kw">let </span>nmax_u = <span class="number">1000</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>sang: f64;
 
-    <span class="kw">let </span>rho: f64 = <span class="kw">match </span>iqcor {
-        <span class="number">1 </span>=&gt; (x / xmin).sqrt(),
-        <span class="number">2 </span>=&gt; x / xmin,
-        <span class="number">3 </span>=&gt; (x / xmin).powf(<span class="number">1.0 </span>/ df),
-        <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+    <span class="kw">let </span>rho: f64 = <span class="kw">match </span>cutoff {
+        FractalCutoff::Gaussian =&gt; (x / xmin).sqrt(),
+        FractalCutoff::Exponential =&gt; x / xmin,
+        FractalCutoff::FractalDimension =&gt; (x / xmin).powf(<span class="number">1.0 </span>/ df),
     };
     <span class="kw">let </span><span class="kw-2">mut </span>u = RVector::zeros(nmax_u);
 

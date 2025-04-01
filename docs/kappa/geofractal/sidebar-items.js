@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_geometric_cross_section_tazaki"]};
+window.SIDEBAR_ITEMS = {"enum":["AFactor","IntegrationMethod"],"fn":["get_geometric_cross_section_tazaki"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MATERIAL_KEYS"],"fn":["get_lnk_data"],"static":["ASTROSIL","CH3OH_A","C_GRA","C_NANO","C_ORG","C_P","C_Z"],"struct":["StaticComponent"]};
+window.SIDEBAR_ITEMS = {"constant":["MATERIAL_KEYS"],"fn":["get_lnk_data"],"static":["ASTROSIL","CH3OH_A","C_GRA","C_NANO","C_ORG","C_P","C_Z","PYR_MG70"],"struct":["StaticComponent"]};
