@@ -15,6 +15,7 @@ use ndarray::s;
 use num_complex::{Complex, Complex64};
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
+use crate::geofractal::{AFactor, IntegrationMethod};
 use crate::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
 use crate::utils::gamma::gamma;
 use crate::utils::{bessel, legendre, linalg, special};
@@ -76,8 +77,6 @@ pub enum FractalSolver {
     ModifiedMeanField,
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy)]
 pub enum FractalCutoff {
     Gaussian,
     Exponential,
@@ -387,9 +386,9 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
                 }
                 FractalGeometry::Tazaki => {
                     get_geometric_cross_section_tazaki(
-                        3, // Use approximation
-                        1, // Without small-cluster limit
-                        fracc.cutoff as i32,
+                        &IntegrationMethod::AnAn,
+                        &AFactor::Unity,
+                        &fracc.cutoff,
                         fracc.pn,
                         fracc.k0,
                         fracc.df,

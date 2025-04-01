@@ -3,8 +3,28 @@ use std::f64::consts::PI;
 use anyhow::anyhow;
 use anyhow::Result;
 
+use crate::fractal::FractalCutoff;
 use crate::types::RVector;
 use crate::utils::gamma::{gamma, gamma_ur};
+
+/// Method for solving radial and angular integration
+/// when computing the mean overlapping efficiency.
+#[derive(PartialEq)]
+pub enum IntegrationMethod {
+    /// Radial (Numerical); Angular (Numerical)
+    ///
+    /// This is the default method.
+    NumNum,
+    /// Radial (Numerical); Angular (Analytical)
+    NumAn,
+    /// Radial (Analytical); Angular (Analytical)
+    AnAn,
+}
+
+pub enum AFactor {
+    Unity,
+    TwoRegimes,
+}
 
 /// Computing geometrical cross-section of randomly oriented
 /// fractal dust aggregates based on a statistical distribution
@@ -26,9 +46,9 @@ use crate::utils::gamma::{gamma, gamma_ur};
 ///
 ///
 pub fn get_geometric_cross_section_tazaki(
-    iqapp: i32,
-    iqcon: i32,
-    iqcor: i32,
+    method: &IntegrationMethod,
+    afac: &AFactor,
+    cutoff: &FractalCutoff,
     pn: f64,
     k0: f64,
     df: f64,
@@ -43,28 +63,21 @@ pub fn get_geometric_cross_section_tazaki(
         return Err(anyhow!("ExceedsMaxFractalDimension"));
     }
 
-    if iqcon != 1 && iqcon != 2 {
-        return Err(anyhow!("UnknownRegimeFactor"));
-    }
-
-    if iqapp != 1 && iqapp != 2 {
-        return Err(anyhow!("UnknownIntegrationMethod"));
-    }
-
-    let mut a = 1.0;
-
-    if iqcon == 2 {
-        let mut pnth = 11.0 * df - 8.5;
-        pnth = pnth.min(8.0);
-        if pn < pnth {
-            g = gfit(pn);
-            return Ok(g);
+    let a = match afac {
+        AFactor::Unity => 1.0,
+        AFactor::TwoRegimes => {
+            let mut pnth = 11.0 * df - 8.5;
+            pnth = pnth.min(8.0);
+            if pn < pnth {
+                g = gfit(pn);
+                return Ok(g);
+            }
+            let sigmath = mean_overlap_efficiency(&method, &cutoff, k0, df, pnth);
+            (1.0 + (pnth - 1.0) * sigmath) * gfit(pnth)
         }
-        let sigmath = mean_overlap_efficiency(iqapp, iqcor, k0, df, pnth);
-        a = (1.0 + (pnth - 1.0) * sigmath) * gfit(pnth);
-    }
+    };
 
-    let sigma = mean_overlap_efficiency(iqapp, iqcor, k0, df, pn);
+    let sigma = mean_overlap_efficiency(&method, &cutoff, k0, df, pn);
 
     g = a / (1.0 + (pn - 1.0) * sigma);
 
@@ -117,7 +130,13 @@ fn gfit(pn: f64) -> f64 {
 ///     fang(rho,u) = [Arcsin{sqrt(1-rho^2u^2)} - rho*u*sqrt{1-rho^2u^2}]*u/sqrt(1-u^2)
 ///
 /// Note that the angular integral function S(rho) ≈1 when rho >> 1.
-fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) -> f64 {
+fn mean_overlap_efficiency(
+    method: &IntegrationMethod,
+    cutoff: &FractalCutoff,
+    k0: f64,
+    df: f64,
+    pn: f64,
+) -> f64 {
     let xmax = 25.0;
     let nx = 1000;
 
@@ -127,26 +146,25 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
 
     let mut sigma: f64;
 
-    match iqcor {
-        1 => {
+    match cutoff {
+        FractalCutoff::Gaussian => {
             aicgm = 0.5 * (df - 2.0);
             xmin = df * (k0 / pn).powf(2.0 / df);
             factor = xmin / 16.0 / gamma(0.5 * df);
         }
-        2 => {
+        FractalCutoff::Exponential => {
             aicgm = df - 2.0;
             xmin = 2.0 * (0.5 * df * (df + 1.0)).sqrt() * (k0 / pn).powf(1.0 / df);
             factor = xmin * xmin / 16.0 / gamma(df);
         }
-        3 => {
+        FractalCutoff::FractalDimension => {
             aicgm = (df - 2.0) / df;
             xmin = 2.0f64.powf(df - 1.0) * k0 / pn;
             factor = xmin.powf(2.0 / df) / 16.0;
         }
-        _ => unreachable!(),
     }
 
-    if df > 2.0 && iqapp == 3 {
+    if df > 2.0 && *method == IntegrationMethod::AnAn {
         sigma = factor * gamma(aicgm) * gamma_ur(aicgm, xmin);
     } else {
         let nxf = nx as f64;
@@ -157,8 +175,8 @@ fn mean_overlap_efficiency(iqapp: i32, iqcor: i32, k0: f64, df: f64, pn: f64) ->
         for i in 0..nx {
             let ir = i as f64;
             x[i] = (xmin.ln() + ir * dlnx).exp();
-            if iqapp == 1 {
-                sang[i] = angular_integration(iqcor, x[i], xmin, df);
+            if *method == IntegrationMethod::NumNum {
+                sang[i] = angular_integration(cutoff, x[i], xmin, df);
             }
         }
         for i in 0..nx - 1 {
@@ -177,16 +195,15 @@ fn radial_integrand(a: f64, x: f64) -> f64 {
     x.powf(a) * (-x).exp()
 }
 
-fn angular_integration(iqcor: i32, x: f64, xmin: f64, df: f64) -> f64 {
+fn angular_integration(cutoff: &FractalCutoff, x: f64, xmin: f64, df: f64) -> f64 {
     let nmax_u = 1000;
 
     let mut sang: f64;
 
-    let rho: f64 = match iqcor {
-        1 => (x / xmin).sqrt(),
-        2 => x / xmin,
-        3 => (x / xmin).powf(1.0 / df),
-        _ => unreachable!(),
+    let rho: f64 = match cutoff {
+        FractalCutoff::Gaussian => (x / xmin).sqrt(),
+        FractalCutoff::Exponential => x / xmin,
+        FractalCutoff::FractalDimension => (x / xmin).powf(1.0 / df),
     };
     let mut u = RVector::zeros(nmax_u);
 
