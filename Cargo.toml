@@ -14,3 +14,8 @@ rayon = "1.10.0"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", ".katex-header.html"]
+
+[profile.release]
+lto = true        # Link-time optimization
+codegen-units = 1 # Slower build times, but more optimization
+opt-level = 3     # Highest optimization level
