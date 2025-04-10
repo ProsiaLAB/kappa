@@ -409,16 +409,7 @@
 <a href="#392" id="392">392</a>
 <a href="#393" id="393">393</a>
 <a href="#394" id="394">394</a>
-<a href="#395" id="395">395</a>
-<a href="#396" id="396">396</a>
-<a href="#397" id="397">397</a>
-<a href="#398" id="398">398</a>
-<a href="#399" id="399">399</a>
-<a href="#400" id="400">400</a>
-<a href="#401" id="401">401</a>
-<a href="#402" id="402">402</a>
-<a href="#403" id="403">403</a>
-<a href="#404" id="404">404</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
+<a href="#395" id="395">395</a></pre></div><pre class="rust"><code><span class="doccomment">//! Distribution of Hollow Spheres (DHS) for irregular grains and
 //! low-porosity aggregates.
 //! In order to simulate irregularities in grains (irregular shapes, or the properties of
 //! low-porosity aggregates), `kappa` averages the opacities of grains with an inner
@@ -430,11 +421,9 @@
 //! `kappa` switches from DHS to [`crate::mie::de_rooij_1984`].
 
 </span><span class="kw">use </span>std::f64::consts::PI;
-<span class="kw">use </span>std::process::exit;
 
 <span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>anyhow::Result;
-<span class="kw">use </span>ndarray::s;
 <span class="kw">use </span>num_complex::ComplexFloat;
 <span class="kw">use </span>num_complex::{Complex, Complex64};
 
@@ -452,7 +441,8 @@
     <span class="kw">pub </span>max_angle: usize,
 }
 
-<span class="kw">pub struct </span>DHSResult {
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">pub struct </span>DHSResult {
     <span class="kw">pub </span>q_ext: f64,
     <span class="kw">pub </span>q_sca: f64,
     <span class="kw">pub </span>q_bs: f64,
@@ -490,13 +480,8 @@
 </span><span class="kw">pub fn </span>toon_ackerman_1981(dhsc: <span class="kw-2">&amp;</span>DHSConfig) -&gt; <span class="prelude-ty">Result</span>&lt;DHSResult&gt; {
     <span class="kw">let </span>ll = <span class="number">300000</span>;
     <span class="kw">let </span>mxang = <span class="number">1440</span>;
-
     <span class="kw">let </span>tol = <span class="number">1e-6</span>;
-
     <span class="kw">let </span>c_i = Complex::new(<span class="number">0.0</span>, <span class="number">1.0</span>);
-
-    <span class="kw">let </span><span class="kw-2">mut </span>w = CMatrix::zeros((<span class="number">3</span>, ll));
-    <span class="kw">let </span><span class="kw-2">mut </span>acap = CVector::zeros(ll);
 
     <span class="kw">let </span>x_shell = dhsc.r_shell * dhsc.wave_number;
     <span class="kw">let </span>x_core = dhsc.r_core * dhsc.wave_number;
@@ -510,6 +495,9 @@
         nmx_1 = <span class="number">150</span>;
         nmx_2 = <span class="number">135</span>;
     }
+
+    <span class="kw">let </span><span class="kw-2">mut </span>w = CMatrix::zeros((<span class="number">3</span>, nmx_1 + <span class="number">1</span>));
+    <span class="kw">let </span><span class="kw-2">mut </span>acap = CVector::zeros(nmx_1 + <span class="number">1</span>);
 
     <span class="kw">if </span>dhsc.wave_number &lt;= <span class="number">0.0 </span>{
         <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"InvalidWaveNumber"</span>));
@@ -565,14 +553,11 @@
 
     <span class="kw">for </span>nn <span class="kw">in </span>(<span class="number">0</span>..nmx_1).rev() {
         <span class="kw">let </span>nnf = nn <span class="kw">as </span>f64;
-        acap[nn] = (nnf + <span class="number">1.0</span>) * rrfx - (<span class="number">1.0 </span>/ ((nnf + <span class="number">1.0</span>) * rrfx + acap[nn + <span class="number">1</span>]));
+        acap[nn] = ((nnf + <span class="number">2.0</span>) * rrfx) - (<span class="number">1.0 </span>/ ((nnf + <span class="number">2.0</span>) * rrfx + acap[nn + <span class="number">1</span>]));
         <span class="kw">for </span>m <span class="kw">in </span><span class="number">0</span>..<span class="number">3 </span>{
-            w[(m, nn)] = (nnf + <span class="number">1.0</span>) * z[m + <span class="number">1</span>] - (<span class="number">1.0 </span>/ ((nnf + <span class="number">1.0</span>) * z[m + <span class="number">1</span>] + w[(m, nn + <span class="number">1</span>)]));
+            w[[m, nn]] = (nnf + <span class="number">2.0</span>) / z[m + <span class="number">1</span>] - (<span class="number">1.0 </span>/ ((nnf + <span class="number">2.0</span>) / z[m + <span class="number">1</span>] + w[[m, nn + <span class="number">1</span>]]));
         }
     }
-
-    <span class="macro">dbg!</span>(acap.slice(<span class="macro">s!</span>[..nmx_1]));
-    exit(<span class="number">0</span>);
 
     <span class="kw">let </span><span class="kw-2">mut </span>si2tht = RVector::zeros(dhsc.numang);
     <span class="kw">let </span><span class="kw-2">mut </span>pi = RMatrix::zeros((dhsc.numang, <span class="number">3</span>));
@@ -633,7 +618,7 @@
     temp <span class="kw-2">*</span>= (acap[n] + <span class="number">1.0 </span>/ z[<span class="number">0</span>]) / (w[[<span class="number">2</span>, n]] + <span class="number">1.0 </span>/ z[<span class="number">3</span>]);
     <span class="kw">let </span><span class="kw-2">mut </span>tempsq = temp * temp;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>p23_h23 = <span class="number">0.5 </span>+ Complex::new(sin_x3 * sin_x3 - <span class="number">0.5</span>, cos_x3 * sin_x3) * e_y3;
+    <span class="kw">let </span><span class="kw-2">mut </span>p23_h23 = <span class="number">0.5 </span>+ Complex::new(sin_x3 * sin_x3 - <span class="number">0.5</span>, cos_x3 * sin_x3) * e_y3 * e_y3;
     <span class="kw">let </span><span class="kw-2">mut </span>p23_h20 =
         <span class="number">0.5 </span>* Complex::new(
             sin_x0 * sin_x3 - cos_x0 * cos_x3,
@@ -685,8 +670,9 @@
     <span class="kw">let </span><span class="kw-2">mut </span>ac = <span class="number">1.5 </span>* acoe;
     <span class="kw">let </span><span class="kw-2">mut </span>bc = <span class="number">1.5 </span>* bcoe;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>s0 = CMatrix::zeros((<span class="number">1440</span>, <span class="number">3</span>));
-    <span class="kw">let </span><span class="kw-2">mut </span>s1 = CMatrix::zeros((<span class="number">1440</span>, <span class="number">3</span>));
+    <span class="kw">let </span><span class="kw-2">mut </span>s0 = CMatrix::zeros((dhsc.numang, <span class="number">3</span>));
+    <span class="kw">let </span><span class="kw-2">mut </span>s1 = CMatrix::zeros((dhsc.numang, <span class="number">3</span>));
+
     <span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..dhsc.numang {
         s0[[j, <span class="number">0</span>]] = ac * pi[[j, <span class="number">1</span>]] + bc * tau[[j, <span class="number">1</span>]];
         s0[[j, <span class="number">1</span>]] = ac * pi[[j, <span class="number">1</span>]] - bc * tau[[j, <span class="number">1</span>]];
@@ -720,17 +706,17 @@
         d_h0 = -(nf) / z[<span class="number">0</span>] + <span class="number">1.0 </span>/ (nf / z[<span class="number">0</span>] - d_h0);
         d_h1 = -(nf) / z[<span class="number">1</span>] + <span class="number">1.0 </span>/ (nf / z[<span class="number">1</span>] - d_h1);
         d_h3 = -(nf) / z[<span class="number">3</span>] + <span class="number">1.0 </span>/ (nf / z[<span class="number">3</span>] - d_h3);
-        p23_h23 /= (d_h3 + nf / z[<span class="number">3</span>]) * (w[[<span class="number">2</span>, n]] + nf / z[<span class="number">3</span>]);
-        p23_h20 /= (d_h0 + nf / z[<span class="number">0</span>]) * (w[[<span class="number">2</span>, n]] + nf / z[<span class="number">3</span>]);
-        temp <span class="kw-2">*</span>= (acap[n] + nf / z[<span class="number">0</span>]) / (w[[<span class="number">2</span>, n]] + nf / z[<span class="number">3</span>]);
+        p23_h23 /= (d_h3 + nf / z[<span class="number">3</span>]) * (w[[<span class="number">2</span>, n - <span class="number">1</span>]] + nf / z[<span class="number">3</span>]);
+        p23_h20 /= (d_h0 + nf / z[<span class="number">0</span>]) * (w[[<span class="number">2</span>, n - <span class="number">1</span>]] + nf / z[<span class="number">3</span>]);
+        temp <span class="kw-2">*</span>= (acap[n - <span class="number">1</span>] + nf / z[<span class="number">0</span>]) / (w[[<span class="number">2</span>, n - <span class="number">1</span>]] + nf / z[<span class="number">3</span>]);
         tempsq = temp * temp;
 
-        u[<span class="number">0</span>] = k3 * acap[n] - k2 * w[[<span class="number">0</span>, n]];
-        u[<span class="number">1</span>] = k3 * acap[n] - k2 * d_h1;
-        u[<span class="number">2</span>] = k2 * acap[n] - k3 * w[[<span class="number">0</span>, n]];
-        u[<span class="number">3</span>] = k2 * acap[n] - k3 * d_h1;
-        u[<span class="number">4</span>] = k1 * w[[<span class="number">2</span>, n]] - k2 * w[[<span class="number">1</span>, n]];
-        u[<span class="number">5</span>] = k2 * w[[<span class="number">2</span>, n]] - k1 * w[[<span class="number">1</span>, n]];
+        u[<span class="number">0</span>] = k3 * acap[n - <span class="number">1</span>] - k2 * w[[<span class="number">0</span>, n - <span class="number">1</span>]];
+        u[<span class="number">1</span>] = k3 * acap[n - <span class="number">1</span>] - k2 * d_h1;
+        u[<span class="number">2</span>] = k2 * acap[n - <span class="number">1</span>] - k3 * w[[<span class="number">0</span>, n - <span class="number">1</span>]];
+        u[<span class="number">3</span>] = k2 * acap[n - <span class="number">1</span>] - k3 * d_h1;
+        u[<span class="number">4</span>] = k1 * w[[<span class="number">2</span>, n - <span class="number">1</span>]] - k2 * w[[<span class="number">1</span>, n - <span class="number">1</span>]];
+        u[<span class="number">5</span>] = k2 * w[[<span class="number">2</span>, n - <span class="number">1</span>]] - k1 * w[[<span class="number">1</span>, n - <span class="number">1</span>]];
         u[<span class="number">6</span>] = -c_i * (temp * p23_h20 - p23_h23);
         u[<span class="number">7</span>] = ta[<span class="number">2</span>] / wfn[<span class="number">1</span>];
 
@@ -750,20 +736,18 @@
         <span class="kw">let </span>bm_0_im = bcoem_0.im;
 
         t[<span class="number">3</span>] = (<span class="number">2.0 </span>* (nf) - <span class="number">1.0</span>) / ((nf) * (nf - <span class="number">1.0</span>));
-        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"1"</span>);
-        t[<span class="number">1</span>] = (nf - <span class="number">1.0</span>) / (nf + <span class="number">1.0</span>) / (nf);
+        t[<span class="number">1</span>] = (nf - <span class="number">1.0</span>) * (nf + <span class="number">1.0</span>) / (nf);
         dgqsc += t[<span class="number">1</span>] * (am_0_re * are + am_0_im * aim + bm_0_re * bre + bm_0_im * bim)
             + t[<span class="number">3</span>] * (am_0_re * bm_0_re + am_0_im * bm_0_im);
 
         t[<span class="number">2</span>] = <span class="number">2.0 </span>* (nf) + <span class="number">1.0</span>;
         dqext += t[<span class="number">2</span>] * (are + bre);
         t[<span class="number">3</span>] = are * are + aim * aim + bre * bre + bim * bim;
-        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"2"</span>);
         dqsca += t[<span class="number">2</span>] * t[<span class="number">3</span>];
         rmm = -rmm;
         sback += t[<span class="number">2</span>] * rmm * (acoe - bcoe);
 
-        t[<span class="number">1</span>] = (nf) / (nf + <span class="number">1.0</span>);
+        t[<span class="number">1</span>] = (nf) * (nf + <span class="number">1.0</span>);
         t[<span class="number">0</span>] = t[<span class="number">2</span>] / t[<span class="number">1</span>];
 
         ac = t[<span class="number">0</span>] * acoe;
@@ -800,9 +784,7 @@
 
         acoem_0 = acoe;
         bcoem_0 = bcoe;
-        <span class="macro">dbg!</span>(t[<span class="number">3</span>], <span class="string">"3"</span>);
     }
-    exit(<span class="number">0</span>);
 
     <span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..dhsc.numang {
         <span class="kw">for </span>k <span class="kw">in </span><span class="number">0</span>..<span class="number">1 </span>{

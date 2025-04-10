@@ -1267,7 +1267,16 @@
 <a href="#1250" id="1250">1250</a>
 <a href="#1251" id="1251">1251</a>
 <a href="#1252" id="1252">1252</a>
-<a href="#1253" id="1253">1253</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
+<a href="#1253" id="1253">1253</a>
+<a href="#1254" id="1254">1254</a>
+<a href="#1255" id="1255">1255</a>
+<a href="#1256" id="1256">1256</a>
+<a href="#1257" id="1257">1257</a>
+<a href="#1258" id="1258">1258</a>
+<a href="#1259" id="1259">1259</a>
+<a href="#1260" id="1260">1260</a>
+<a href="#1261" id="1261">1261</a>
+<a href="#1262" id="1262">1262</a></pre></div><pre class="rust"><code><span class="doccomment">//! The heart of `kappa`.
 //! This module contains the main routines to compute opacities
 //! and scattering matrices.
 
@@ -1308,6 +1317,7 @@
     <span class="kw">pub </span>k: f64,
     <span class="kw">pub </span>rho: f64,
     <span class="kw">pub </span>mfrac: f64,
+    <span class="kw">pub </span>vfrac: f64,
     <span class="kw">pub </span>re: RVector,
     <span class="kw">pub </span>im: RVector,
     <span class="kw">pub </span>cmd: RefractiveIndexKind,
@@ -1323,6 +1333,7 @@
             k: <span class="number">0.0</span>,
             rho: <span class="number">0.0</span>,
             mfrac: <span class="number">1.0</span>,
+            vfrac: <span class="number">0.0</span>,
             re: RVector::zeros(nlam),
             im: RVector::zeros(nlam),
             cmd: RefractiveIndexKind::Other,
@@ -1366,6 +1377,13 @@
     <span class="kw">pub </span>nmat: usize,
     <span class="kw">pub </span>ncore: usize,
     <span class="kw">pub </span>nmant: usize,
+    <span class="kw">pub </span>rho_core: f64,
+    <span class="kw">pub </span>rho_mantle: f64,
+    <span class="kw">pub </span>rho_av: f64,
+    <span class="kw">pub </span>tot_mfrac_core: f64,
+    <span class="kw">pub </span>tot_vfrac_core: f64,
+    <span class="kw">pub </span>tot_mfrac_mantle: f64,
+    <span class="kw">pub </span>tot_vfrac_mantle: f64,
     <span class="kw">pub </span>method: KappaMethod,
     <span class="kw">pub </span>fmax: f64,
     <span class="kw">pub </span>write_fits: bool,
@@ -1413,6 +1431,13 @@
             nmat: <span class="number">0</span>,
             ncore: <span class="number">0</span>,
             nmant: <span class="number">0</span>,
+            rho_core: <span class="number">0.0</span>,
+            rho_mantle: <span class="number">0.0</span>,
+            rho_av: <span class="number">0.0</span>,
+            tot_mfrac_core: <span class="number">0.0</span>,
+            tot_vfrac_core: <span class="number">0.0</span>,
+            tot_mfrac_mantle: <span class="number">0.0</span>,
+            tot_vfrac_mantle: <span class="number">0.0</span>,
             method: KappaMethod::DHS,
             fmax: <span class="number">0.8</span>,
             write_fits: <span class="bool-val">false</span>,
@@ -1518,7 +1543,6 @@
     e1_blend: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
     e2_blend: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
     mu: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RVector,
-    rho_av: f64,
 }
 
 <span class="attr">#[derive(PartialEq, Debug)]
@@ -1656,6 +1680,70 @@
                 material.rho = component.rho;
             }
         }
+    }
+
+    <span class="comment">// Normalize the mass fractions
+    </span>(kpc.tot_mfrac_core, kpc.tot_mfrac_mantle) =
+        kpc.materials
+            .iter()
+            .fold((<span class="number">0.0</span>, <span class="number">0.0</span>), |(tot_core, tot_mantle), m| <span class="kw">match </span>m.kind {
+                MaterialKind::Core =&gt; (tot_core + m.mfrac, tot_mantle),
+                MaterialKind::Mantle =&gt; (tot_core, tot_mantle + m.mfrac),
+            });
+    kpc.materials.iter_mut().for_each(|m| <span class="kw">match </span>m.kind {
+        MaterialKind::Core =&gt; {
+            m.mfrac /= kpc.tot_mfrac_core;
+        }
+        MaterialKind::Mantle =&gt; {
+            m.mfrac /= kpc.tot_mfrac_mantle;
+        }
+    });
+    kpc.materials.iter_mut().for_each(|m| {
+        m.vfrac = m.mfrac / m.rho;
+    });
+    (kpc.tot_vfrac_core, kpc.tot_vfrac_mantle) =
+        kpc.materials
+            .iter()
+            .fold((<span class="number">0.0</span>, <span class="number">0.0</span>), |(tot_core, tot_mantle), m| <span class="kw">match </span>m.kind {
+                MaterialKind::Core =&gt; (tot_core + m.vfrac, tot_mantle),
+                MaterialKind::Mantle =&gt; (tot_core, tot_mantle + m.vfrac),
+            });
+
+    <span class="comment">// Turn mass fractions into volume fractions
+    </span>kpc.rho_core = kpc.tot_mfrac_core / kpc.tot_vfrac_core;
+    kpc.rho_mantle = kpc.tot_mfrac_mantle / kpc.tot_vfrac_mantle;
+
+    <span class="comment">// Normalize volume fractions
+    </span>kpc.materials.iter_mut().for_each(|m| <span class="kw">match </span>m.kind {
+        MaterialKind::Core =&gt; m.vfrac /= kpc.tot_vfrac_core,
+        MaterialKind::Mantle =&gt; m.vfrac /= kpc.tot_vfrac_mantle,
+    });
+
+    <span class="kw">if </span>kpc.pcore &gt; <span class="number">0.0 </span>{
+        kpc.materials.iter_mut().for_each(|m| {
+            <span class="kw">if </span>m.kind == MaterialKind::Core {
+                m.vfrac <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pcore;
+            }
+        });
+        kpc.rho_core <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pcore;
+    }
+
+    <span class="kw">if </span>kpc.pmantle &gt; <span class="number">0.0 </span>{
+        kpc.materials.iter_mut().for_each(|m| {
+            <span class="kw">if </span>m.kind == MaterialKind::Mantle {
+                m.vfrac <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pmantle;
+            }
+        });
+        kpc.rho_mantle <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pmantle;
+    }
+
+    <span class="comment">// Calculate average density of the whole grain
+    </span><span class="kw">if </span>kpc.nmant == <span class="number">0 </span>{
+        kpc.rho_av = kpc.rho_core;
+    } <span class="kw">else </span>{
+        kpc.rho_av =
+            kpc.rho_core / (<span class="number">1.0 </span>+ kpc.tot_mfrac_mantle * (kpc.rho_core / kpc.rho_mantle - <span class="number">1.0</span>));
+        kpc.tot_vfrac_mantle = kpc.tot_mfrac_mantle * kpc.rho_av / kpc.rho_mantle;
     }
 
     <span class="comment">// Loop for splitting the output into files by grain size
@@ -1839,32 +1927,17 @@
     <span class="kw">let </span><span class="kw-2">mut </span>e1mantle = RVector::zeros(kpc.nlam);
     <span class="kw">let </span>e2mantle = RVector::zeros(kpc.nlam);
 
-    <span class="comment">// Normalize the mass fractions
-    </span><span class="kw">let </span>(tot, tot_mantle) = kpc
-        .materials
-        .iter()
-        .fold((<span class="number">0.0</span>, <span class="number">0.0</span>), |(sum, sum_mantle), m| {
-            <span class="kw">let </span>sum_mantle = <span class="kw">if </span>m.kind == MaterialKind::Mantle {
-                sum_mantle + m.mfrac
-            } <span class="kw">else </span>{
-                sum_mantle
-            };
-            (sum + m.mfrac, sum_mantle)
-        });
-
-    <span class="kw">let </span>mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
-    <span class="kw">let </span>mfrac_mantle = tot_mantle / tot;
-
     <span class="kw">let </span>aminlog = amin.log10();
     <span class="kw">let </span>amaxlog = amax.log10();
     <span class="kw">let </span>pow = -kpc.apow;
+
+    <span class="kw">let </span><span class="kw-2">mut </span>tot = <span class="number">0.0</span>;
 
     <span class="kw">if </span>ns == <span class="number">1 </span>{
         <span class="comment">// Just one size
         </span>r[<span class="number">0</span>] = <span class="number">10.0_f64</span>.powf((aminlog + amaxlog) / <span class="number">2.0</span>);
         nr[<span class="number">0</span>] = r[<span class="number">0</span>].powf(pow + <span class="number">1.0</span>); <span class="comment">// should be 1/r[0]^3 ???  Not important.
     </span>} <span class="kw">else </span>{
-        <span class="kw">let </span><span class="kw-2">mut </span>tot = <span class="number">0.0</span>;
         <span class="comment">// Size distribution
         </span><span class="kw">let </span>nsf = (ns - <span class="number">1</span>) <span class="kw">as </span>f64;
         <span class="kw">for </span>(is, (r_val, nr_val)) <span class="kw">in </span>r.iter_mut().zip(nr.iter_mut()).enumerate() {
@@ -1918,58 +1991,6 @@
         e2.slice_mut(<span class="macro">s!</span>[.., im]).assign(<span class="kw-2">&amp;</span>kpc.materials[im].im);
     }
 
-    <span class="kw">let </span><span class="kw-2">mut </span>rho_mantle: f64 = <span class="number">0.0</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>vfrac_mantle = RVector::zeros(kpc.nmant);
-
-    <span class="comment">// Core: Turn mass fractions into volume fractions, compute rho_core
-    </span><span class="kw">let </span>mtot_core = kpc
-        .materials
-        .iter()
-        .filter(|m| m.kind == MaterialKind::Core)
-        .fold(<span class="number">0.0</span>, |sum, m| sum + m.mfrac);
-    <span class="kw">let </span><span class="kw-2">mut </span>vfrac_core = kpc
-        .materials
-        .iter()
-        .filter(|m| m.kind == MaterialKind::Core)
-        .map(|m| m.mfrac / m.rho)
-        .collect::&lt;RVector&gt;();
-    <span class="kw">let </span>vtot_core = vfrac_core.iter().sum::&lt;f64&gt;();
-    <span class="kw">let </span><span class="kw-2">mut </span>rho_core = mtot_core / vtot_core;
-    vfrac_core /= vtot_core;
-    <span class="kw">if </span>kpc.pcore &gt; <span class="number">0.0 </span>{
-        vfrac_core <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pcore;
-        rho_core <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pcore;
-    }
-
-    <span class="comment">// Mantle: Turn mass fractions to volume fractions, compute rho_mantle
-    </span><span class="kw">if </span>kpc.nmant &gt; <span class="number">0 </span>{
-        <span class="kw">let </span>mtot_mantle = kpc
-            .materials
-            .iter()
-            .filter(|m| m.kind == MaterialKind::Mantle)
-            .fold(<span class="number">0.0</span>, |sum, m| sum + m.mfrac);
-        vfrac_mantle = kpc
-            .materials
-            .iter()
-            .filter(|m| m.kind == MaterialKind::Mantle)
-            .map(|m| m.mfrac / m.rho)
-            .collect::&lt;RVector&gt;();
-        <span class="kw">let </span>vtot_mantle = vfrac_mantle.iter().sum::&lt;f64&gt;();
-        rho_mantle = mtot_mantle / vtot_mantle;
-        vfrac_mantle /= vtot_mantle;
-        <span class="kw">if </span>kpc.pmantle &gt; <span class="number">0.0 </span>{
-            vfrac_mantle <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pmantle;
-            rho_mantle <span class="kw-2">*</span>= <span class="number">1.0 </span>- kpc.pmantle;
-        }
-    }
-
-    <span class="kw">let </span>rho_av = <span class="kw">if </span>kpc.nmant == <span class="number">0 </span>{
-        rho_core
-    } <span class="kw">else </span>{
-        rho_core / (<span class="number">1.0 </span>+ mfrac_mantle * (rho_core / rho_mantle - <span class="number">1.0</span>))
-    };
-    <span class="kw">let </span>vfrac_mantle_f = mfrac_mantle * rho_av / rho_mantle;
-
     <span class="kw">let </span><span class="kw-2">mut </span>e1_blend = RVector::zeros(kpc.nlam);
     <span class="kw">let </span><span class="kw-2">mut </span>e2_blend = RVector::zeros(kpc.nlam);
     <span class="kw">let </span><span class="kw-2">mut </span>e_in = CVector::zeros(kpc.ncore);
@@ -1986,7 +2007,14 @@
             </span><span class="kw">for </span>im <span class="kw">in </span><span class="number">0</span>..kpc.ncore {
                 e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
             }
-            <span class="kw">let </span>e_out = bruggeman_blend(<span class="kw-2">&amp;</span>vfrac_core.to_vec(), <span class="kw-2">&amp;</span>e_in.to_vec())<span class="question-mark">?</span>;
+            <span class="kw">let </span>e_out = bruggeman_blend(
+                <span class="kw-2">&amp;</span>kpc.materials
+                    .iter()
+                    .filter(|m| <span class="macro">matches!</span>(m.kind, MaterialKind::Core))
+                    .map(|m| m.vfrac)
+                    .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+                <span class="kw-2">&amp;</span>e_in.to_vec(),
+            )<span class="question-mark">?</span>;
             e1_blend[il] = e_out.re;
             e2_blend[il] = e_out.im;
         }
@@ -2004,14 +2032,21 @@
                 </span><span class="kw">for </span>im <span class="kw">in </span><span class="number">0</span>..kpc.nmant {
                     e_in[im] = Complex::new(e1[[il, im + kpc.ncore]], e2[[il, im + kpc.ncore]]);
                 }
-                <span class="kw">let </span>e_out = bruggeman_blend(<span class="kw-2">&amp;</span>vfrac_mantle.to_vec(), <span class="kw-2">&amp;</span>e_in.to_vec())<span class="question-mark">?</span>;
+                <span class="kw">let </span>e_out = bruggeman_blend(
+                    <span class="kw-2">&amp;</span>kpc.materials
+                        .iter()
+                        .filter(|m| <span class="macro">matches!</span>(m.kind, MaterialKind::Mantle))
+                        .map(|m| m.vfrac)
+                        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+                    <span class="kw-2">&amp;</span>e_in.to_vec(),
+                )<span class="question-mark">?</span>;
                 e1mantle[il] = e_out.re;
                 e1mantle[il] = e_out.im;
             }
             <span class="kw">let </span>(e1mg, e2mg) = maxwell_garnet_blend(
                 Complex::new(e1_blend[il], e2_blend[il]),
                 Complex::new(e1mantle[il], e2mantle[il]),
-                vfrac_mantle_f,
+                kpc.tot_vfrac_mantle,
             );
             e1_blend[il] = e1mg;
             e2_blend[il] = e2mg;
@@ -2044,9 +2079,9 @@
     <span class="comment">// Initialize mu
     </span><span class="kw">let </span><span class="kw-2">mut </span>mu = RVector::zeros(kpc.nang);
     <span class="kw">let </span>nangby2f = (kpc.nang / <span class="number">2</span>) <span class="kw">as </span>f64;
-    <span class="kw">for </span>(j, val) <span class="kw">in </span>mu.iter_mut().take(kpc.nang / <span class="number">2 </span>+ <span class="number">1</span>).enumerate() {
+    <span class="kw">for </span>(j, val) <span class="kw">in </span>mu.iter_mut().take(kpc.nang / <span class="number">2</span>).enumerate() {
         <span class="kw">let </span>jf = j <span class="kw">as </span>f64;
-        <span class="kw">let </span>theta = (jf - <span class="number">0.5</span>) / nangby2f * PI / <span class="number">2.0</span>;
+        <span class="kw">let </span>theta = (jf + <span class="number">0.5</span>) / nangby2f * PI / <span class="number">2.0</span>;
         <span class="kw-2">*</span>val = theta.cos();
     }
 
@@ -2062,15 +2097,13 @@
         e1_blend: <span class="kw-2">&amp;</span>e1_blend,
         e2_blend: <span class="kw-2">&amp;</span>e2_blend,
         mu: <span class="kw-2">&amp;</span>mu,
-        rho_av,
     };
-    P = [<span class="number">1</span>, <span class="number">32</span>, <span class="number">4</span>];
 
     <span class="kw">let </span>p = {
         <span class="kw">let </span>results: <span class="prelude-ty">Result</span>&lt;Vec&lt;KappaResult&gt;, <span class="kw">_</span>&gt; = <span class="kw">if </span>!kpc.split {
             (<span class="number">0</span>..kpc.nlam)
-                <span class="comment">// .into_par_iter()
-                </span>.map(|ilam| over_wavelengths(ilam, <span class="kw-2">&amp;</span>kps, kpc))
+                .into_par_iter()
+                .map(|ilam| over_wavelengths(ilam, <span class="kw-2">&amp;</span>kps, kpc))
                 .collect()
         } <span class="kw">else </span>{
             (<span class="number">0</span>..kpc.nlam)
@@ -2162,7 +2195,8 @@
 <span class="doccomment">/// Calculate the opacities for a wavelength value.
 </span><span class="kw">fn </span>over_wavelengths(ilam: usize, kps: <span class="kw-2">&amp;</span>KappaState, kpc: <span class="kw-2">&amp;</span>KappaConfig) -&gt; <span class="prelude-ty">Result</span>&lt;KappaResult&gt; {
     <span class="kw">let </span>qabsdqext_min = <span class="number">1e-4</span>;
-    <span class="kw">let </span>wvno = <span class="number">2.0 </span>* PI / kpc.lam[ilam];
+    <span class="comment">// dbg!(ilam);
+    </span><span class="kw">let </span>wvno = <span class="number">2.0 </span>* PI / kpc.lam[ilam];
     <span class="kw">let </span><span class="kw-2">mut </span>f11 = RVector::zeros(kpc.nang);
     <span class="kw">let </span><span class="kw-2">mut </span>f12 = RVector::zeros(kpc.nang);
     <span class="kw">let </span><span class="kw-2">mut </span>f22 = RVector::zeros(kpc.nang);
@@ -2176,6 +2210,12 @@
     <span class="kw">let </span><span class="kw-2">mut </span>mass = <span class="number">0.0</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>vol = <span class="number">0.0</span>;
     <span class="kw">let </span>nangf = kpc.nang <span class="kw">as </span>f64;
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f11 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f12 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f22 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f33 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f34 = RVector::zeros(kpc.nang);
+    <span class="kw">let </span><span class="kw-2">mut </span>mie_f44 = RVector::zeros(kpc.nang);
     <span class="kw">for </span>is <span class="kw">in </span><span class="number">0</span>..kps.ns {
         <span class="kw">let </span>r1 = kps.r[is];
         <span class="kw">let </span><span class="kw-2">mut </span>spheres = <span class="bool-val">false</span>;
@@ -2204,18 +2244,10 @@
                             numang: kpc.nang / <span class="number">2</span>,
                             max_angle: kpc.nang,
                         };
-                        <span class="kw">let </span>(
-                            csmie,
-                            <span class="kw-2">mut </span>cemie,
-                            <span class="kw-2">mut </span>mie_f11,
-                            mie_f12,
-                            mie_f22,
-                            mie_f33,
-                            mie_f34,
-                            mie_f44,
-                        ) = <span class="kw">match </span>toon_ackerman_1981(<span class="kw-2">&amp;</span>dhsc) {
+                        <span class="kw">let </span>(csmie, <span class="kw-2">mut </span>cemie) = <span class="kw">match </span>toon_ackerman_1981(<span class="kw-2">&amp;</span>dhsc) {
                             <span class="prelude-val">Ok</span>(dhsr) =&gt; {
-                                <span class="comment">// println!("{:?}", dhsr.q_ext);
+                                <span class="comment">// dbg!(&amp;dhsr);
+                                // exit(0);
                                 </span><span class="kw">if </span>spheres {
                                     rad = r1;
                                 } <span class="kw">else if </span>too_large {
@@ -2224,12 +2256,6 @@
                                 <span class="kw">let </span>cemie = dhsr.q_ext * PI * rad.powi(<span class="number">2</span>);
                                 <span class="kw">let </span>csmie = dhsr.q_sca * PI * rad.powi(<span class="number">2</span>);
                                 <span class="kw">let </span>factor = <span class="number">2.0 </span>* PI / csmie / wvno.powi(<span class="number">2</span>);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f11 = RVector::zeros(kpc.nang);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f12 = RVector::zeros(kpc.nang);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f22 = RVector::zeros(kpc.nang);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f33 = RVector::zeros(kpc.nang);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f34 = RVector::zeros(kpc.nang);
-                                <span class="kw">let </span><span class="kw-2">mut </span>mie_f44 = RVector::zeros(kpc.nang);
                                 <span class="kw">for </span>j <span class="kw">in </span><span class="number">0</span>..(kpc.nang / <span class="number">2</span>) {
                                     mie_f11[j] = (dhsr.m1[[j, <span class="number">0</span>]] + dhsr.m0[[j, <span class="number">0</span>]]) * factor;
                                     mie_f12[j] = (dhsr.m1[[j, <span class="number">0</span>]] - dhsr.m0[[j, <span class="number">0</span>]]) * factor;
@@ -2249,10 +2275,7 @@
                                     mie_f34[kpc.nang - j - <span class="number">1</span>] = (-dhsr.d10[[j, <span class="number">1</span>]]) * factor;
                                     mie_f44[kpc.nang - j - <span class="number">1</span>] = (dhsr.s10[[j, <span class="number">1</span>]]) * factor;
                                 }
-                                (
-                                    csmie, cemie, mie_f11, mie_f12, mie_f22, mie_f33, mie_f34,
-                                    mie_f44,
-                                )
+                                (csmie, cemie)
                             }
                             <span class="prelude-val">Err</span>(e) =&gt; {
                                 <span class="macro">println!</span>(<span class="string">"DHS error: {:?}"</span>, e);
@@ -2282,12 +2305,7 @@
                                 <span class="kw">let </span>mier = de_rooij_1984(<span class="kw-2">&amp;</span>miec)<span class="question-mark">?</span>;
                                 <span class="kw">let </span>cemie = mier.c_ext;
                                 <span class="kw">let </span>csmie = mier.c_sca;
-                                <span class="kw">let </span>mie_f22 = mier.f_11.clone();
-                                <span class="kw">let </span>mie_f44 = mier.f_33.clone();
-                                (
-                                    csmie, cemie, mier.f_11, mier.f_12, mie_f22, mier.f_33,
-                                    mier.f_34, mie_f44,
-                                )
+                                (csmie, cemie)
                             }
                         };
 
@@ -2318,15 +2336,15 @@
                         cext += kps.wf[ifn] * kps.nr[is] * cemie;
                         csca += kps.wf[ifn] * kps.nr[is] * csmie;
                         cabs += kps.wf[ifn] * kps.nr[is] * camie;
-                        mass += kps.wf[ifn] * kps.nr[is] * kps.rho_av * <span class="number">4.0 </span>* PI * r1.powi(<span class="number">3</span>) / <span class="number">3.0</span>;
+                        mass += kps.wf[ifn] * kps.nr[is] * kpc.rho_av * <span class="number">4.0 </span>* PI * r1.powi(<span class="number">3</span>) / <span class="number">3.0</span>;
                         vol += kps.wf[ifn] * kps.nr[is] * <span class="number">4.0 </span>* PI * r1.powi(<span class="number">3</span>) / <span class="number">3.0</span>;
                     }
                 }
             }
             KappaMethod::MMF =&gt; {
-                <span class="kw">let </span>m_mono = <span class="number">4.0 </span>* PI / <span class="number">3.0 </span>* kpc.mmf_a0.powi(<span class="number">3</span>) * kps.rho_av;
+                <span class="kw">let </span>m_mono = <span class="number">4.0 </span>* PI / <span class="number">3.0 </span>* kpc.mmf_a0.powi(<span class="number">3</span>) * kpc.rho_av;
                 <span class="kw">let </span>v_agg = <span class="number">4.0 </span>* PI / <span class="number">3.0 </span>* r1.powi(<span class="number">3</span>);
-                <span class="kw">let </span>m_agg = v_agg * kps.rho_av;
+                <span class="kw">let </span>m_agg = v_agg * kpc.rho_av;
                 <span class="kw">let </span>nmono = m_agg / m_mono;
                 <span class="kw">let </span>dfrac = <span class="kw">if </span>kpc.mmf_struct &gt; <span class="number">1.0 </span>{
                     kpc.mmf_struct
@@ -2379,7 +2397,7 @@
             KappaMethod::CDE =&gt; {
                 <span class="kw">let </span>v = <span class="number">4.0 </span>* PI * r1.powi(<span class="number">3</span>) / <span class="number">3.0</span>;
                 vol += kps.nr[is] * v;
-                mass += kps.nr[is] * kps.rho_av * v;
+                mass += kps.nr[is] * kpc.rho_av * v;
                 <span class="kw">let </span>m = Complex::new(kps.e1_blend[ilam], kps.e2_blend[ilam]);
                 <span class="kw">let </span>dcabs = <span class="number">2.0 </span>* wvno * v * (m.powi(<span class="number">2</span>) / (m.powi(<span class="number">2</span>) - <span class="number">1.0</span>) * m.powi(<span class="number">2</span>).ln()).im;
                 <span class="kw">let </span>dcsca = <span class="kw">if </span>(kps.e2_blend[ilam] / kps.e1_blend[ilam]).abs() &lt; <span class="number">1e-6 </span>{

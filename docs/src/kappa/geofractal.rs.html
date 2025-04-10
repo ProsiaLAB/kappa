@@ -323,12 +323,12 @@
                 g = gfit(pn);
                 <span class="kw">return </span><span class="prelude-val">Ok</span>(g);
             }
-            <span class="kw">let </span>sigmath = mean_overlap_efficiency(<span class="kw-2">&amp;</span>method, <span class="kw-2">&amp;</span>cutoff, k0, df, pnth);
+            <span class="kw">let </span>sigmath = mean_overlap_efficiency(method, cutoff, k0, df, pnth);
             (<span class="number">1.0 </span>+ (pnth - <span class="number">1.0</span>) * sigmath) * gfit(pnth)
         }
     };
 
-    <span class="kw">let </span>sigma = mean_overlap_efficiency(<span class="kw-2">&amp;</span>method, <span class="kw-2">&amp;</span>cutoff, k0, df, pn);
+    <span class="kw">let </span>sigma = mean_overlap_efficiency(method, cutoff, k0, df, pn);
 
     g = a / (<span class="number">1.0 </span>+ (pn - <span class="number">1.0</span>) * sigma);
 
