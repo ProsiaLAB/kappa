@@ -13,11 +13,11 @@ use anyhow::anyhow;
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::s;
-use ndarray::Zip;
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::components::get_lnk_data;
 use crate::dhs::toon_ackerman_1981;
 use crate::dhs::DHSConfig;
 use crate::fractal::mean_scattering;
@@ -29,6 +29,7 @@ use crate::mie::MieConfig;
 use crate::types::{BVector, CVector, RMatrix, RVector};
 use crate::utils::legendre::gauss_legendre;
 use crate::utils::prepare_sparse;
+use crate::utils::regrid_lnk_data;
 
 #[derive(Debug)]
 pub struct Material {
@@ -38,8 +39,10 @@ pub struct Material {
     pub k: f64,
     pub rho: f64,
     pub mfrac: f64,
+    pub vfrac: f64,
     pub re: RVector,
     pub im: RVector,
+    pub cmd: RefractiveIndexKind,
 }
 
 impl Default for Material {
@@ -52,8 +55,10 @@ impl Default for Material {
             k: 0.0,
             rho: 0.0,
             mfrac: 1.0,
+            vfrac: 0.0,
             re: RVector::zeros(nlam),
             im: RVector::zeros(nlam),
+            cmd: RefractiveIndexKind::Other,
         }
     }
 }
@@ -62,6 +67,13 @@ impl Default for Material {
 pub enum MaterialKind {
     Core,
     Mantle,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum RefractiveIndexKind {
+    File,
+    CmdLine,
+    Other,
 }
 
 #[derive(Debug)]
@@ -87,6 +99,13 @@ pub struct KappaConfig {
     pub nmat: usize,
     pub ncore: usize,
     pub nmant: usize,
+    pub rho_core: f64,
+    pub rho_mantle: f64,
+    pub rho_av: f64,
+    pub tot_mfrac_core: f64,
+    pub tot_vfrac_core: f64,
+    pub tot_mfrac_mantle: f64,
+    pub tot_vfrac_mantle: f64,
     pub method: KappaMethod,
     pub fmax: f64,
     pub write_fits: bool,
@@ -121,7 +140,7 @@ impl Default for KappaConfig {
             na: 0,
             ameans_file: [0.0; 3],
             sizedis: SizeDistribution::Apow,
-            wavelength_kind: WavelengthKind::CmdLine,
+            wavelength_kind: WavelengthKind::Other,
             lmin: 0.05,
             lmax: 1e4,
             nlam,
@@ -134,6 +153,13 @@ impl Default for KappaConfig {
             nmat: 0,
             ncore: 0,
             nmant: 0,
+            rho_core: 0.0,
+            rho_mantle: 0.0,
+            rho_av: 0.0,
+            tot_mfrac_core: 0.0,
+            tot_vfrac_core: 0.0,
+            tot_mfrac_mantle: 0.0,
+            tot_vfrac_mantle: 0.0,
             method: KappaMethod::DHS,
             fmax: 0.8,
             write_fits: false,
@@ -143,15 +169,15 @@ impl Default for KappaConfig {
             nsparse: 0,
             scatlammin: RVector::zeros(30),
             scatlammax: RVector::zeros(30),
-            nsubgrains: 0,
+            nsubgrains: 5,
             mmf_struct: 0.0,
             mmf_a0: 0.0,
             mmf_kf: 0.0,
             mmf_ss: false,
-            split: true,
+            split: false,
             blend_only: false,
-            xlim: 1.0,
-            xlim_dhs: 1.0,
+            xlim: 1e8,
+            xlim_dhs: 1e4,
             materials: Vec::with_capacity(20),
             outdir: String::from("output"),
         }
@@ -239,7 +265,6 @@ struct KappaState<'a> {
     e1_blend: &'a RVector,
     e2_blend: &'a RVector,
     mu: &'a RVector,
-    rho_av: f64,
 }
 
 #[derive(PartialEq, Debug)]
@@ -252,7 +277,7 @@ pub enum SizeDistribution {
 
 #[derive(Debug)]
 pub enum WavelengthKind {
-    CmdLine,
+    Other,
     File,
 }
 
@@ -367,6 +392,82 @@ pub struct Component {
 pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
 
+    for material in &mut kpc.materials {
+        match material.cmd {
+            RefractiveIndexKind::CmdLine => {}
+            RefractiveIndexKind::File | RefractiveIndexKind::Other => {
+                let component = get_lnk_data(&material.key);
+                (material.re, material.im) =
+                    regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
+                material.rho = component.rho;
+            }
+        }
+    }
+
+    // Normalize the mass fractions
+    (kpc.tot_mfrac_core, kpc.tot_mfrac_mantle) =
+        kpc.materials
+            .iter()
+            .fold((0.0, 0.0), |(tot_core, tot_mantle), m| match m.kind {
+                MaterialKind::Core => (tot_core + m.mfrac, tot_mantle),
+                MaterialKind::Mantle => (tot_core, tot_mantle + m.mfrac),
+            });
+    kpc.materials.iter_mut().for_each(|m| match m.kind {
+        MaterialKind::Core => {
+            m.mfrac /= kpc.tot_mfrac_core;
+        }
+        MaterialKind::Mantle => {
+            m.mfrac /= kpc.tot_mfrac_mantle;
+        }
+    });
+    kpc.materials.iter_mut().for_each(|m| {
+        m.vfrac = m.mfrac / m.rho;
+    });
+    (kpc.tot_vfrac_core, kpc.tot_vfrac_mantle) =
+        kpc.materials
+            .iter()
+            .fold((0.0, 0.0), |(tot_core, tot_mantle), m| match m.kind {
+                MaterialKind::Core => (tot_core + m.vfrac, tot_mantle),
+                MaterialKind::Mantle => (tot_core, tot_mantle + m.vfrac),
+            });
+
+    // Turn mass fractions into volume fractions
+    kpc.rho_core = kpc.tot_mfrac_core / kpc.tot_vfrac_core;
+    kpc.rho_mantle = kpc.tot_mfrac_mantle / kpc.tot_vfrac_mantle;
+
+    // Normalize volume fractions
+    kpc.materials.iter_mut().for_each(|m| match m.kind {
+        MaterialKind::Core => m.vfrac /= kpc.tot_vfrac_core,
+        MaterialKind::Mantle => m.vfrac /= kpc.tot_vfrac_mantle,
+    });
+
+    if kpc.pcore > 0.0 {
+        kpc.materials.iter_mut().for_each(|m| {
+            if m.kind == MaterialKind::Core {
+                m.vfrac *= 1.0 - kpc.pcore;
+            }
+        });
+        kpc.rho_core *= 1.0 - kpc.pcore;
+    }
+
+    if kpc.pmantle > 0.0 {
+        kpc.materials.iter_mut().for_each(|m| {
+            if m.kind == MaterialKind::Mantle {
+                m.vfrac *= 1.0 - kpc.pmantle;
+            }
+        });
+        kpc.rho_mantle *= 1.0 - kpc.pmantle;
+    }
+
+    // Calculate average density of the whole grain
+    if kpc.nmant == 0 {
+        kpc.rho_av = kpc.rho_core;
+    } else {
+        kpc.rho_av =
+            kpc.rho_core / (1.0 + kpc.tot_mfrac_mantle * (kpc.rho_core / kpc.rho_mantle - 1.0));
+        kpc.tot_vfrac_mantle = kpc.tot_mfrac_mantle * kpc.rho_av / kpc.rho_mantle;
+    }
+
     // Loop for splitting the output into files by grain size
     if kpc.split {
         let mut nsub = kpc.nsubgrains;
@@ -408,34 +509,6 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
 
 /// Pre-process the inputs collected from the command-line
 fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
-    // Sort by `kind = MaterialKind::Core`
-    kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
-        (MaterialKind::Core, MaterialKind::Core) => Ordering::Equal,
-        (MaterialKind::Core, _) => Ordering::Less,
-        (_, MaterialKind::Core) => Ordering::Greater,
-        _ => Ordering::Equal,
-    });
-
-    kpc.nmat = kpc.ncore + kpc.nmant;
-
-    // Make logarithmic wavelength grid
-    match kpc.wavelength_kind {
-        WavelengthKind::CmdLine => {
-            kpc.lam = RVector::logspace(10.0, kpc.lmin, kpc.lmax, kpc.nlam);
-        }
-        WavelengthKind::File => {
-            // already read from file
-        }
-    }
-
-    // Prepare sparse scattering file
-    if kpc.nsparse > 0 {
-        prepare_sparse(kpc);
-    }
-    // Writing wavelength grid file
-    if kpc.write_grid {
-        write_wavelength_grid(kpc)?;
-    }
     // Materials
     if kpc.nmat >= 20 {
         return Err(anyhow!("TooManyMaterials"));
@@ -528,6 +601,35 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
         ));
     }
 
+    // Sort by `kind = MaterialKind::Core`
+    kpc.materials.sort_by(|a, b| match (&a.kind, &b.kind) {
+        (MaterialKind::Core, MaterialKind::Core) => Ordering::Equal,
+        (MaterialKind::Core, _) => Ordering::Less,
+        (_, MaterialKind::Core) => Ordering::Greater,
+        _ => Ordering::Equal,
+    });
+
+    kpc.nmat = kpc.ncore + kpc.nmant;
+
+    // Make logarithmic wavelength grid
+    match kpc.wavelength_kind {
+        WavelengthKind::Other => {
+            kpc.lam = RVector::logspace(10.0, kpc.lmin.log10(), kpc.lmax.log10(), kpc.nlam);
+        }
+        WavelengthKind::File => {
+            // already read from file
+        }
+    }
+
+    // Prepare sparse scattering file
+    if kpc.nsparse > 0 {
+        prepare_sparse(kpc);
+    }
+    // Writing wavelength grid file
+    if kpc.write_grid {
+        write_wavelength_grid(kpc)?;
+    }
+
     Ok(())
 }
 
@@ -547,74 +649,54 @@ fn compute_kappa(
     let mut e1mantle = RVector::zeros(kpc.nlam);
     let e2mantle = RVector::zeros(kpc.nlam);
 
-    // Normalize the mass fractions
-    let (tot, tot_mantle) = kpc
-        .materials
-        .iter()
-        .fold((0.0, 0.0), |(sum, sum_mantle), m| {
-            let sum_mantle = if m.kind == MaterialKind::Mantle {
-                sum_mantle + m.mfrac
-            } else {
-                sum_mantle
-            };
-            (sum + m.mfrac, sum_mantle)
-        });
-
-    let mfrac: RVector = kpc.materials.iter().map(|m| m.mfrac / tot).collect();
-    let mfrac_mantle = tot_mantle / tot;
-
     let aminlog = amin.log10();
     let amaxlog = amax.log10();
     let pow = -kpc.apow;
+
+    let mut tot = 0.0;
 
     if ns == 1 {
         // Just one size
         r[0] = 10.0_f64.powf((aminlog + amaxlog) / 2.0);
         nr[0] = r[0].powf(pow + 1.0); // should be 1/r[0]^3 ???  Not important.
     } else {
-        let mut tot = 0.0;
         // Size distribution
         let nsf = (ns - 1) as f64;
-        Zip::indexed(&mut r)
-            .and(&mut nr)
-            .for_each(|is, r_val, nr_val| {
-                // Calculate size distribution values
-                let isf = is as f64;
-                *r_val = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
-
-                // Apply size distribution and exponential calculation
-                *nr_val = match kpc.sizedis {
-                    // Log-normal or normal size distribution
-                    SizeDistribution::Normal | SizeDistribution::LogNormal => {
-                        if kpc.asigma < 0.0 {
-                            let expo = 0.5 * ((*r_val - kpc.amean) / kpc.asigma).powf(2.0);
-                            if expo > 99.0 {
-                                0.0
-                            } else {
-                                (-expo).exp()
-                            }
+        for (is, (r_val, nr_val)) in r.iter_mut().zip(nr.iter_mut()).enumerate() {
+            let isf = is as f64;
+            *r_val = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+            // Apply size distribution and exponential calculation
+            *nr_val = match kpc.sizedis {
+                // Power law size distribution
+                SizeDistribution::Normal | SizeDistribution::LogNormal => {
+                    if kpc.asigma < 0.0 {
+                        let expo = 0.5 * ((*r_val - kpc.amean) / kpc.asigma).powf(2.0);
+                        if expo > 99.0 {
+                            0.0
                         } else {
-                            let expo = 0.5 * ((*r_val / kpc.amean).ln() / kpc.asigma).powf(2.0);
-                            if expo > 99.0 {
-                                0.0
-                            } else {
-                                (-expo).exp()
-                            }
+                            (-expo).exp()
+                        }
+                    } else {
+                        let expo = 0.5 * ((*r_val / kpc.amean).ln() / kpc.asigma).powf(2.0);
+                        if expo > 99.0 {
+                            0.0
+                        } else {
+                            (-expo).exp()
                         }
                     }
-                    // Power law size distribution
-                    _ => r_val.powf(pow + 1.0),
-                };
-
-                // With the option `-d`m each computation is only a piece of the size grid
-                if *r_val < amin || *r_val > amax {
-                    *nr_val = 0.0;
                 }
-
-                // Volume normalization
-                tot += *nr_val * r_val.powi(3);
-            });
-
+                SizeDistribution::File => {
+                    todo!() // TODO: Move this out of else block
+                }
+                _ => r_val.powf(pow + 1.0),
+            };
+            // With the option `-d`m each computation is only a piece of the size grid
+            if *r_val < amin || *r_val > amax {
+                *nr_val = 0.0;
+            }
+            // Volume normalization
+            tot += *nr_val * r_val.powi(3);
+        }
         // Normalize nr
         nr = 1.0 * nr / tot;
     }
@@ -630,58 +712,6 @@ fn compute_kappa(
         e1.slice_mut(s![.., im]).assign(&kpc.materials[im].re);
         e2.slice_mut(s![.., im]).assign(&kpc.materials[im].im);
     }
-
-    let mut rho_mantle: f64 = 0.0;
-    let mut vfrac_mantle = RVector::zeros(kpc.nmant);
-
-    // Core: Turn mass fractions into volume fractions, compute rho_core
-    let mtot_core = kpc
-        .materials
-        .iter()
-        .filter(|m| m.kind == MaterialKind::Core)
-        .fold(0.0, |sum, m| sum + m.mfrac);
-    let mut vfrac_core = kpc
-        .materials
-        .iter()
-        .filter(|m| m.kind == MaterialKind::Core)
-        .map(|m| m.mfrac / m.rho)
-        .collect::<RVector>();
-    let vtot_core = vfrac_core.iter().sum::<f64>();
-    let mut rho_core = mtot_core / vtot_core;
-    vfrac_core /= vtot_core;
-    if kpc.pcore > 0.0 {
-        vfrac_core *= 1.0 - kpc.pcore;
-        rho_core *= 1.0 - kpc.pcore;
-    }
-
-    // Mantle: Turn mass fractions to volume fractions, compute rho_mantle
-    if kpc.nmant > 0 {
-        let mtot_mantle = kpc
-            .materials
-            .iter()
-            .filter(|m| m.kind == MaterialKind::Mantle)
-            .fold(0.0, |sum, m| sum + m.mfrac);
-        vfrac_mantle = kpc
-            .materials
-            .iter()
-            .filter(|m| m.kind == MaterialKind::Mantle)
-            .map(|m| m.mfrac / m.rho)
-            .collect::<RVector>();
-        let vtot_mantle = vfrac_mantle.iter().sum::<f64>();
-        rho_mantle = mtot_mantle / vtot_mantle;
-        vfrac_mantle /= vtot_mantle;
-        if kpc.pmantle > 0.0 {
-            vfrac_mantle *= 1.0 - kpc.pmantle;
-            rho_mantle *= 1.0 - kpc.pmantle;
-        }
-    }
-
-    let rho_av = if kpc.nmant == 0 {
-        rho_core
-    } else {
-        rho_core / (1.0 + mfrac_mantle * (rho_core / rho_mantle - 1.0))
-    };
-    let vfrac_mantle_f = mfrac_mantle * rho_av / rho_mantle;
 
     let mut e1_blend = RVector::zeros(kpc.nlam);
     let mut e2_blend = RVector::zeros(kpc.nlam);
@@ -699,7 +729,14 @@ fn compute_kappa(
             for im in 0..kpc.ncore {
                 e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
             }
-            let e_out = bruggeman_blend(&vfrac_core.to_vec(), &e_in.to_vec())?;
+            let e_out = bruggeman_blend(
+                &kpc.materials
+                    .iter()
+                    .filter(|m| matches!(m.kind, MaterialKind::Core))
+                    .map(|m| m.vfrac)
+                    .collect::<Vec<_>>(),
+                &e_in.to_vec(),
+            )?;
             e1_blend[il] = e_out.re;
             e2_blend[il] = e_out.im;
         }
@@ -717,14 +754,21 @@ fn compute_kappa(
                 for im in 0..kpc.nmant {
                     e_in[im] = Complex::new(e1[[il, im + kpc.ncore]], e2[[il, im + kpc.ncore]]);
                 }
-                let e_out = bruggeman_blend(&vfrac_mantle.to_vec(), &e_in.to_vec())?;
+                let e_out = bruggeman_blend(
+                    &kpc.materials
+                        .iter()
+                        .filter(|m| matches!(m.kind, MaterialKind::Mantle))
+                        .map(|m| m.vfrac)
+                        .collect::<Vec<_>>(),
+                    &e_in.to_vec(),
+                )?;
                 e1mantle[il] = e_out.re;
                 e1mantle[il] = e_out.im;
             }
             let (e1mg, e2mg) = maxwell_garnet_blend(
                 Complex::new(e1_blend[il], e2_blend[il]),
                 Complex::new(e1mantle[il], e2mantle[il]),
-                vfrac_mantle_f,
+                kpc.tot_vfrac_mantle,
             );
             e1_blend[il] = e1mg;
             e2_blend[il] = e2mg;
@@ -775,7 +819,6 @@ fn compute_kappa(
         e1_blend: &e1_blend,
         e2_blend: &e2_blend,
         mu: &mu,
-        rho_av,
     };
 
     let p = {
@@ -844,14 +887,14 @@ fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
     let mut tot: Complex64 = Complex::new(0.0, 0.0);
     let mut me: Complex64 = Complex::new(0.0, 0.0);
     for _ in 0..100 {
-        tot = e_in
+        tot = ((mvac.powi(2) - mm.powi(2)) / (mvac.powi(2) + 2.0 * mm.powi(2))) * abunvac;
+        tot += e_in
             .iter()
             .zip(abun.iter())
             .map(|(&e_in_j, &abun_j)| {
                 ((e_in_j.powi(2) - mm.powi(2)) / (e_in_j.powi(2) + 2.0 * mm.powi(2))) * abun_j
             })
-            .sum::<Complex64>()
-            + ((mvac.powi(2) - mm.powi(2)) / (mvac.powi(2) + 2.0 * mm.powi(2)) * abunvac);
+            .sum::<Complex64>();
 
         me = mm * ((2.0 * tot + 1.0) / (1.0 - tot)).sqrt();
         mm = me;
@@ -874,6 +917,7 @@ fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
 /// Calculate the opacities for a wavelength value.
 fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<KappaResult> {
     let qabsdqext_min = 1e-4;
+    // dbg!(ilam);
     let wvno = 2.0 * PI / kpc.lam[ilam];
     let mut f11 = RVector::zeros(kpc.nang);
     let mut f12 = RVector::zeros(kpc.nang);
@@ -888,6 +932,12 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
     let mut mass = 0.0;
     let mut vol = 0.0;
     let nangf = kpc.nang as f64;
+    let mut mie_f11 = RVector::zeros(kpc.nang);
+    let mut mie_f12 = RVector::zeros(kpc.nang);
+    let mut mie_f22 = RVector::zeros(kpc.nang);
+    let mut mie_f33 = RVector::zeros(kpc.nang);
+    let mut mie_f34 = RVector::zeros(kpc.nang);
+    let mut mie_f44 = RVector::zeros(kpc.nang);
     for is in 0..kps.ns {
         let r1 = kps.r[is];
         let mut spheres = false;
@@ -916,17 +966,10 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                             numang: kpc.nang / 2,
                             max_angle: kpc.nang,
                         };
-                        let (
-                            csmie,
-                            mut cemie,
-                            mut mie_f11,
-                            mie_f12,
-                            mie_f22,
-                            mie_f33,
-                            mie_f34,
-                            mie_f44,
-                        ) = match toon_ackerman_1981(&dhsc) {
+                        let (csmie, mut cemie) = match toon_ackerman_1981(&dhsc) {
                             Ok(dhsr) => {
+                                // dbg!(&dhsr);
+                                // exit(0);
                                 if spheres {
                                     rad = r1;
                                 } else if too_large {
@@ -935,12 +978,6 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                 let cemie = dhsr.q_ext * PI * rad.powi(2);
                                 let csmie = dhsr.q_sca * PI * rad.powi(2);
                                 let factor = 2.0 * PI / csmie / wvno.powi(2);
-                                let mut mie_f11 = RVector::zeros(kpc.nang);
-                                let mut mie_f12 = RVector::zeros(kpc.nang);
-                                let mut mie_f22 = RVector::zeros(kpc.nang);
-                                let mut mie_f33 = RVector::zeros(kpc.nang);
-                                let mut mie_f34 = RVector::zeros(kpc.nang);
-                                let mut mie_f44 = RVector::zeros(kpc.nang);
                                 for j in 0..(kpc.nang / 2) {
                                     mie_f11[j] = (dhsr.m1[[j, 0]] + dhsr.m0[[j, 0]]) * factor;
                                     mie_f12[j] = (dhsr.m1[[j, 0]] - dhsr.m0[[j, 0]]) * factor;
@@ -960,12 +997,10 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                     mie_f34[kpc.nang - j - 1] = (-dhsr.d10[[j, 1]]) * factor;
                                     mie_f44[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
                                 }
-                                (
-                                    csmie, cemie, mie_f11, mie_f12, mie_f22, mie_f33, mie_f34,
-                                    mie_f44,
-                                )
+                                (csmie, cemie)
                             }
-                            Err(_) => {
+                            Err(e) => {
+                                println!("DHS error: {:?}", e);
                                 rad = r1;
                                 let rmie = rad;
                                 let lmie = kpc.lam[ilam];
@@ -992,12 +1027,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                 let mier = de_rooij_1984(&miec)?;
                                 let cemie = mier.c_ext;
                                 let csmie = mier.c_sca;
-                                let mie_f22 = mier.f_11.clone();
-                                let mie_f44 = mier.f_33.clone();
-                                (
-                                    csmie, cemie, mier.f_11, mier.f_12, mie_f22, mier.f_33,
-                                    mier.f_34, mie_f44,
-                                )
+                                (csmie, cemie)
                             }
                         };
 
@@ -1028,15 +1058,15 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                         cext += kps.wf[ifn] * kps.nr[is] * cemie;
                         csca += kps.wf[ifn] * kps.nr[is] * csmie;
                         cabs += kps.wf[ifn] * kps.nr[is] * camie;
-                        mass += kps.wf[ifn] * kps.nr[is] * kps.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
+                        mass += kps.wf[ifn] * kps.nr[is] * kpc.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
                         vol += kps.wf[ifn] * kps.nr[is] * 4.0 * PI * r1.powi(3) / 3.0;
                     }
                 }
             }
             KappaMethod::MMF => {
-                let m_mono = 4.0 * PI / 3.0 * kpc.mmf_a0.powi(3) * kps.rho_av;
+                let m_mono = 4.0 * PI / 3.0 * kpc.mmf_a0.powi(3) * kpc.rho_av;
                 let v_agg = 4.0 * PI / 3.0 * r1.powi(3);
-                let m_agg = v_agg * kps.rho_av;
+                let m_agg = v_agg * kpc.rho_av;
                 let nmono = m_agg / m_mono;
                 let dfrac = if kpc.mmf_struct > 1.0 {
                     kpc.mmf_struct
@@ -1089,7 +1119,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
             KappaMethod::CDE => {
                 let v = 4.0 * PI * r1.powi(3) / 3.0;
                 vol += kps.nr[is] * v;
-                mass += kps.nr[is] * kps.rho_av * v;
+                mass += kps.nr[is] * kpc.rho_av * v;
                 let m = Complex::new(kps.e1_blend[ilam], kps.e2_blend[ilam]);
                 let dcabs = 2.0 * wvno * v * (m.powi(2) / (m.powi(2) - 1.0) * m.powi(2).ln()).im;
                 let dcsca = if (kps.e2_blend[ilam] / kps.e1_blend[ilam]).abs() < 1e-6 {
