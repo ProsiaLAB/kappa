@@ -1299,6 +1299,7 @@ pub fn regrid_lnk_data(
     loglog: bool,
 ) -> (RVector, RVector) {
     let n = lam.len();
+    let n_actual = l0.len();
     let mut x0 = l0[0];
     let mut y01 = n0[0];
     let mut y02 = k0[0];
@@ -1310,13 +1311,24 @@ pub fn regrid_lnk_data(
     let mut e1: RVector = Array1::zeros(n);
     let mut e2: RVector = Array1::zeros(n);
     let mut i = 0;
-    let mut i0 = 0;
-    while i0 < n {
+
+    while x0 >= lam[i] {
+        e1[i] = y01;
+        e2[i] = y02;
+        i += 1;
+        if i >= n {
+            // All requested lambda are before first data point
+            break;
+        }
+    }
+    // Main interpolation loop
+    for i0 in 0..n_actual {
         let x1 = l0[i0];
         let y11 = n0[i0];
         let y12 = k0[i0];
 
-        while i < n && lam[i] <= x1 && lam[i] > x0 {
+        while lam[i] <= x1 && lam[i] > x0 {
+            // log-log interpolation between points
             let lgy11 = y11.log10();
             let lgy12 = y12.log10();
             let lgy01 = y01.log10();
@@ -1329,36 +1341,33 @@ pub fn regrid_lnk_data(
             e2[i] = 10f64.powf(lgy12 + (lggr - lgx1) * (lgy02 - lgy12) / (lgx0 - lgx1));
 
             i += 1;
+            if i >= n {
+                break;
+            }
         }
+
         x0 = x1;
         y01 = y11;
         y02 = y12;
-        i0 += 1;
     }
 
-    // Extrapolation
+    // Extrapolation to long wavelengths
     if loglog {
-        let m0 = (e1[i - 1], e2[i - 1]);
-        if m0.0.abs() > 2.0 {
-            for j in i..n {
-                let factor = (lam[j] / lam[i - 1]).sqrt();
-                e1[j] = m0.0 * factor;
-                e2[j] = m0.1 * factor;
-            }
-        } else {
-            let slope1 =
-                (n0[n - 1].log10() - n0[n - 2].log10()) / (l0[n - 1].log10() - l0[n - 2].log10());
-            let sect1 = n0[n - 2].log10();
-            let slope2 =
-                (k0[n - 1].log10() - k0[n - 2].log10()) / (l0[n - 1].log10() - l0[n - 2].log10());
-            let sect2 = k0[n - 2].log10();
-            for j in i..n {
-                let dist = (lam[j] / l0[n - 2]).log10();
-                e1[j] = 10f64.powf(slope1 * dist + sect1);
-                e2[j] = 10f64.powf(slope2 * dist + sect2);
-            }
+        // Use log-log extrapolation
+        let slope1 = (n0[n_actual - 1] / n0[n_actual - 2]).log10()
+            / (l0[n_actual - 1] / l0[n_actual - 2]).log10();
+        let sect1 = n0[n_actual - 2].log10();
+        let slope2 = (k0[n_actual - 1] / k0[n_actual - 2]).log10()
+            / (l0[n_actual - 1] / l0[n_actual - 2]).log10();
+        let sect2 = k0[n_actual - 2].log10();
+
+        for j in i..n {
+            let dist = (lam[j] / l0[n_actual - 2]).log10();
+            e1[j] = 10f64.powf(slope1 * dist + sect1);
+            e2[j] = 10f64.powf(slope2 * dist + sect2);
         }
     } else {
+        // Use the dielectric extrapolation, this is the default
         for j in i..n {
             e1[j] = e1[i - 1];
             e2[j] = e2[i - 1] * lam[i - 1] / lam[j];
