@@ -699,7 +699,7 @@ fn compute_kappa(
             for im in 0..kpc.ncore {
                 e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
             }
-            let e_out = bruggeman_blend(&mfrac.to_vec(), &e_in.to_vec())?;
+            let e_out = bruggeman_blend(&vfrac_core.to_vec(), &e_in.to_vec())?;
             e1_blend[il] = e_out.re;
             e2_blend[il] = e_out.im;
         }
@@ -757,9 +757,9 @@ fn compute_kappa(
     // Initialize mu
     let mut mu = RVector::zeros(kpc.nang);
     let nangby2f = (kpc.nang / 2) as f64;
-    for (j, val) in mu.iter_mut().take(kpc.nang / 2 + 1).enumerate() {
+    for (j, val) in mu.iter_mut().take(kpc.nang / 2).enumerate() {
         let jf = j as f64;
-        let theta = (jf - 0.5) / nangby2f * PI / 2.0;
+        let theta = (jf + 0.5) / nangby2f * PI / 2.0;
         *val = theta.cos();
     }
 

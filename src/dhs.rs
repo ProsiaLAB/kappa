@@ -18,6 +18,7 @@ use num_complex::{Complex, Complex64};
 
 use crate::types::{CMatrix, CVector, RMatrix, RVector};
 
+#[derive(Debug)]
 pub struct DHSConfig<'a> {
     pub r_core: f64,
     pub r_shell: f64,
@@ -29,6 +30,7 @@ pub struct DHSConfig<'a> {
     pub max_angle: usize,
 }
 
+#[derive(Debug)]
 pub struct DHSResult {
     pub q_ext: f64,
     pub q_sca: f64,
@@ -67,13 +69,8 @@ pub struct DHSResult {
 pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let ll = 300000;
     let mxang = 1440;
-
     let tol = 1e-6;
-
     let c_i = Complex::new(0.0, 1.0);
-
-    let mut w = CMatrix::zeros((3, ll));
-    let mut acap = CVector::zeros(ll);
 
     let x_shell = dhsc.r_shell * dhsc.wave_number;
     let x_core = dhsc.r_core * dhsc.wave_number;
@@ -87,6 +84,9 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         nmx_1 = 150;
         nmx_2 = 135;
     }
+
+    let mut w = CMatrix::zeros((3, nmx_1 + 1));
+    let mut acap = CVector::zeros(nmx_1 + 1);
 
     if dhsc.wave_number <= 0.0 {
         return Err(anyhow!("InvalidWaveNumber"));
@@ -142,9 +142,9 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
 
     for nn in (0..nmx_1).rev() {
         let nnf = nn as f64;
-        acap[nn] = (nnf + 1.0) * rrfx - (1.0 / ((nnf + 1.0) * rrfx + acap[nn + 1]));
+        acap[nn] = ((nnf + 2.0) * rrfx) - (1.0 / ((nnf + 2.0) * rrfx + acap[nn + 1]));
         for m in 0..3 {
-            w[(m, nn)] = (nnf + 1.0) * z[m + 1] - (1.0 / ((nnf + 1.0) * z[m + 1] + w[(m, nn + 1)]));
+            w[[m, nn]] = (nnf + 2.0) / z[m + 1] - (1.0 / ((nnf + 2.0) / z[m + 1] + w[[m, nn + 1]]));
         }
     }
 
@@ -207,7 +207,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     temp *= (acap[n] + 1.0 / z[0]) / (w[[2, n]] + 1.0 / z[3]);
     let mut tempsq = temp * temp;
 
-    let mut p23_h23 = 0.5 + Complex::new(sin_x3 * sin_x3 - 0.5, cos_x3 * sin_x3) * e_y3;
+    let mut p23_h23 = 0.5 + Complex::new(sin_x3 * sin_x3 - 0.5, cos_x3 * sin_x3) * e_y3 * e_y3;
     let mut p23_h20 =
         0.5 * Complex::new(
             sin_x0 * sin_x3 - cos_x0 * cos_x3,
@@ -259,8 +259,9 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let mut ac = 1.5 * acoe;
     let mut bc = 1.5 * bcoe;
 
-    let mut s0 = CMatrix::zeros((1440, 3));
-    let mut s1 = CMatrix::zeros((1440, 3));
+    let mut s0 = CMatrix::zeros((dhsc.numang, 3));
+    let mut s1 = CMatrix::zeros((dhsc.numang, 3));
+
     for j in 0..dhsc.numang {
         s0[[j, 0]] = ac * pi[[j, 1]] + bc * tau[[j, 1]];
         s0[[j, 1]] = ac * pi[[j, 1]] - bc * tau[[j, 1]];
@@ -268,7 +269,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         s1[[j, 1]] = bc * pi[[j, 1]] - ac * tau[[j, 1]];
     }
 
-    n = 1;
+    n = 2;
 
     t[3] = 1.5;
 
@@ -294,17 +295,17 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         d_h0 = -(nf) / z[0] + 1.0 / (nf / z[0] - d_h0);
         d_h1 = -(nf) / z[1] + 1.0 / (nf / z[1] - d_h1);
         d_h3 = -(nf) / z[3] + 1.0 / (nf / z[3] - d_h3);
-        p23_h23 /= (d_h3 + nf / z[3]) * (w[[2, n]] + nf / z[3]);
-        p23_h20 /= (d_h0 + nf / z[0]) * (w[[2, n]] + nf / z[3]);
-        temp *= (acap[n] + nf / z[0]) / (w[[2, n]] + nf / z[3]);
+        p23_h23 /= (d_h3 + nf / z[3]) * (w[[2, n - 1]] + nf / z[3]);
+        p23_h20 /= (d_h0 + nf / z[0]) * (w[[2, n - 1]] + nf / z[3]);
+        temp *= (acap[n - 1] + nf / z[0]) / (w[[2, n - 1]] + nf / z[3]);
         tempsq = temp * temp;
 
-        u[0] = k3 * acap[n] - k2 * w[[0, n]];
-        u[1] = k3 * acap[n] - k2 * d_h1;
-        u[2] = k2 * acap[n] - k3 * w[[0, n]];
-        u[3] = k2 * acap[n] - k3 * d_h1;
-        u[4] = k1 * w[[2, n]] - k2 * w[[1, n]];
-        u[5] = k2 * w[[2, n]] - k1 * w[[1, n]];
+        u[0] = k3 * acap[n - 1] - k2 * w[[0, n - 1]];
+        u[1] = k3 * acap[n - 1] - k2 * d_h1;
+        u[2] = k2 * acap[n - 1] - k3 * w[[0, n - 1]];
+        u[3] = k2 * acap[n - 1] - k3 * d_h1;
+        u[4] = k1 * w[[2, n - 1]] - k2 * w[[1, n - 1]];
+        u[5] = k2 * w[[2, n - 1]] - k1 * w[[1, n - 1]];
         u[6] = -c_i * (temp * p23_h20 - p23_h23);
         u[7] = ta[2] / wfn[1];
 
@@ -324,7 +325,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         let bm_0_im = bcoem_0.im;
 
         t[3] = (2.0 * (nf) - 1.0) / ((nf) * (nf - 1.0));
-        t[1] = (nf - 1.0) / (nf + 1.0) / (nf);
+        t[1] = (nf - 1.0) * (nf + 1.0) / (nf);
         dgqsc += t[1] * (am_0_re * are + am_0_im * aim + bm_0_re * bre + bm_0_im * bim)
             + t[3] * (am_0_re * bm_0_re + am_0_im * bm_0_im);
 
@@ -335,7 +336,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         rmm = -rmm;
         sback += t[2] * rmm * (acoe - bcoe);
 
-        t[1] = (nf) / (nf + 1.0);
+        t[1] = (nf) * (nf + 1.0);
         t[0] = t[2] / t[1];
 
         ac = t[0] * acoe;

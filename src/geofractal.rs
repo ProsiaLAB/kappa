@@ -72,12 +72,12 @@ pub fn get_geometric_cross_section_tazaki(
                 g = gfit(pn);
                 return Ok(g);
             }
-            let sigmath = mean_overlap_efficiency(&method, &cutoff, k0, df, pnth);
+            let sigmath = mean_overlap_efficiency(method, cutoff, k0, df, pnth);
             (1.0 + (pnth - 1.0) * sigmath) * gfit(pnth)
         }
     };
 
-    let sigma = mean_overlap_efficiency(&method, &cutoff, k0, df, pn);
+    let sigma = mean_overlap_efficiency(method, cutoff, k0, df, pn);
 
     g = a / (1.0 + (pn - 1.0) * sigma);
 

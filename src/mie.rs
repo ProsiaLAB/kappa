@@ -69,7 +69,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         xeff: 0.0,
         numpar: 0.0,
         volume: 0.0,
-        f_0: RMatrix::zeros((3, 3)),
+        f_0: RMatrix::zeros((4, miec.nangle)),
         f_11: RVector::zeros(miec.nangle),
         f_12: RVector::zeros(miec.nangle),
         f_33: RVector::zeros(miec.nangle),
@@ -302,7 +302,7 @@ fn fichid(
     for n in (0..nd).rev() {
         let nf = n as f64;
         let zn_1 = (nf + 1.0) * perz;
-        d[n] = zn_1 - 1.0 / (d[n + 1] + zn_1);
+        d[n] = zn_1 - 1.0 / (d[n] + zn_1);
     }
 
     psi[0] = sinx;
@@ -345,12 +345,12 @@ fn anbn(
     for n in 0..nmax {
         let nf = n as f64;
         let zn = Complex::new(psi[n], chi[n]);
-        let znm_1 = Complex::new(psi[n - 1], chi[n - 1]);
+        let znm_1 = Complex::new(psi[n], chi[n]);
         let xn = nf * perx;
         let save_a = d[n] * perm + xn;
-        an[n] = (save_a * psi[n] - psi[n - 1]) / (save_a * zn - znm_1);
+        an[n] = (save_a * psi[n + 1] - psi[n]) / (save_a * zn - znm_1);
         let save_b = d[n] * m + xn;
-        bn[n] = (save_b * psi[n] - psi[n - 1]) / (save_b * zn - znm_1);
+        bn[n] = (save_b * psi[n + 1] - psi[n]) / (save_b * zn - znm_1);
     }
 
     (an, bn)
@@ -367,7 +367,7 @@ fn pitau(u: f64, nmax: usize) -> (RVector, RVector) {
     tau[0] = u;
     tau[1] = 2.0 * delta - 1.0;
 
-    for n in 1..nmax {
+    for n in 2..(nmax - 1) {
         let nf = n as f64;
         pi[n + 1] = (nf + 1.0) / (nf) * delta + u * pi[n];
         delta = u * pi[n + 1] - pi[n];
