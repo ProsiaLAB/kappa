@@ -1,6 +1,8 @@
 //! Read the `lnk` files
-use std::fs::File;
+
+use std::fs::{self, File};
 use std::io::{BufRead, BufWriter, Write};
+use std::path::Path;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -256,4 +258,35 @@ pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
         writeln!(writer, "{:18.5e}", kpc.lam[i])?;
     }
     Ok(())
+}
+
+pub fn write_opacities(kpc: &KappaConfig) -> Result<()> {
+    let (ext, ml) = if kpc.for_radmc {
+        unimplemented!()
+    } else {
+        ("dat", "F11 F12 F22 F33 F34 F44")
+    };
+
+    let opacity_filename = format!("kappa_opacity.{}", ext);
+
+    let file_opacity = create_output_file(kpc, &opacity_filename)?;
+    let mut writer = BufWriter::new(file_opacity);
+
+    Ok(())
+}
+
+fn create_output_file(kpc: &KappaConfig, filename: &str) -> Result<File> {
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&kpc.outdir)?;
+
+    // Construct full file path
+    let filepath = format!("{}/{}", kpc.outdir, filename);
+
+    // Remove existing file if it exists
+    if Path::new(&filepath).exists() {
+        fs::remove_file(&filepath)?;
+    }
+
+    // Create and return the new file handle
+    File::create(&filepath).map_err(|_| anyhow!("Failed to create file!"))
 }
