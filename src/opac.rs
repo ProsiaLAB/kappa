@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use std::f64::consts::PI;
 use std::mem::swap;
 use std::process::exit;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering as AtomicOrdering;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -23,13 +25,12 @@ use crate::dhs::DHSConfig;
 use crate::fractal::mean_scattering;
 use crate::fractal::FractalConfig;
 use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
-use crate::io::{write_sizedis_file, write_wavelength_grid};
+use crate::io::{write_opacities, write_sizedis_file, write_wavelength_grid};
 use crate::mie::de_rooij_1984;
 use crate::mie::MieConfig;
 use crate::types::{BVector, CVector, RMatrix, RVector};
 use crate::utils::legendre::gauss_legendre;
-use crate::utils::prepare_sparse;
-use crate::utils::regrid_lnk_data;
+use crate::utils::{prepare_sparse, regrid_lnk_data};
 
 #[derive(Debug)]
 pub struct Material {
@@ -481,9 +482,7 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
 
         bar.set_style(
             ProgressStyle::default_bar()
-                .template(
-                    "{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta}) 🚀",
-                )
+                .template("{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
                 .unwrap()
                 .progress_chars("█▓▒░ "),
         );
@@ -501,7 +500,18 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
         bar.finish_with_message("Processing complete!");
         exit(0);
     } else {
-        let _ = compute_kappa(0, kpc.amin, kpc.amax, kpc);
+        let p = compute_kappa(0, kpc.amin, kpc.amax, kpc)?;
+        if !p.is_ok {
+            if kpc.mmf_ss {
+                eprintln!("WARNING: opacities OK, but some F_nn,g_asym may not be accurate");
+            } else {
+                eprintln!("WARNING: opacities OK, but some F_nn,g_asym are set to zero");
+            }
+        }
+
+        // TODO: FITS writer will be implemented later
+
+        write_opacities(kpc)?;
     }
 
     Ok(())
@@ -822,11 +832,28 @@ fn compute_kappa(
     };
 
     let p = {
+        let bar = ProgressBar::new(kpc.nlam as u64);
+        bar.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .progress_chars("█▓▒░ "),
+        );
+        let counter = Arc::new(AtomicUsize::new(0));
         let results: Result<Vec<KappaResult>, _> = if !kpc.split {
-            (0..kpc.nlam)
+            let counter = Arc::clone(&counter);
+            let bar = bar.clone();
+            let res = (0..kpc.nlam)
                 .into_par_iter()
-                .map(|ilam| over_wavelengths(ilam, &kps, kpc))
-                .collect()
+                .map(|ilam| {
+                    let r = over_wavelengths(ilam, &kps, kpc);
+                    let prev = counter.fetch_add(1, AtomicOrdering::SeqCst);
+                    bar.set_position((prev + 1) as u64);
+                    r
+                })
+                .collect();
+            bar.finish_with_message("Processing complete!");
+            res
         } else {
             (0..kpc.nlam)
                 .map(|ilam| over_wavelengths(ilam, &kps, kpc))
@@ -968,8 +995,6 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                         };
                         let (csmie, mut cemie) = match toon_ackerman_1981(&dhsc) {
                             Ok(dhsr) => {
-                                // dbg!(&dhsr);
-                                // exit(0);
                                 if spheres {
                                     rad = r1;
                                 } else if too_large {
