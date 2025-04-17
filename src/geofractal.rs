@@ -34,7 +34,7 @@ pub enum AFactor {
 /// # Arguments
 ///
 /// * `iqapp` - Select a method for solving radial and angular integration
-///             when computing the mean overlapping efficiency.
+///   when computing the mean overlapping efficiency.
 ///
 ///         --------------------------------------------------------
 ///                   |    radial  (x)        |  angular (u)        |

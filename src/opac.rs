@@ -864,6 +864,7 @@ fn compute_kappa(
             let rho = lamrs[0].mass / lamrs[0].vol;
             let k_ext = lamrs.iter().map(|lamr| lamr.k_ext).collect::<RVector>();
             let k_sca = lamrs.iter().map(|lamr| lamr.k_sca).collect::<RVector>();
+            let k_abs = lamrs.iter().map(|lamr| lamr.k_abs).collect::<RVector>();
             let g = lamrs.iter().map(|lamr| lamr.g).collect::<RVector>();
             let trust = lamrs.iter().map(|lamr| lamr.trust).collect::<BVector>();
             let mueller = lamrs

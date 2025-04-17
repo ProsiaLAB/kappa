@@ -349,8 +349,8 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
 
         if n % 2 == 0 {
             for j in 0..dhsc.numang {
-                s0[[j, 1]] -= ac * pi[[j, 2]] + bc * tau[[j, 2]];
-                s1[[j, 1]] -= bc * pi[[j, 2]] + ac * tau[[j, 2]];
+                s0[[j, 1]] += bc * tau[[j, 2]] - ac * pi[[j, 2]];
+                s1[[j, 1]] += ac * tau[[j, 2]] - bc * pi[[j, 2]];
             }
         } else {
             for j in 0..dhsc.numang {
@@ -376,7 +376,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     }
 
     for j in 0..dhsc.numang {
-        for k in 0..1 {
+        for k in 0..2 {
             dhsr.m0[[j, k]] = (s0[[j, k]].re).powi(2) + (s0[[j, k]].im).powi(2);
             dhsr.m1[[j, k]] = (s1[[j, k]].re).powi(2) + (s1[[j, k]].im).powi(2);
             dhsr.s10[[j, k]] = s0[[j, k]].re * s1[[j, k]].re + s0[[j, k]].im * s1[[j, k]].im;
