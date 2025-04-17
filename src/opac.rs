@@ -360,6 +360,7 @@ struct KappaResult {
     vol: f64,
     k_ext: f64,
     k_sca: f64,
+    k_abs: f64,
     g: f64,
     trust: bool,
 }
@@ -511,7 +512,7 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
 
         // TODO: FITS writer will be implemented later
 
-        write_opacities(kpc)?;
+        write_opacities(kpc, &p)?;
     }
 
     Ok(())
@@ -884,6 +885,7 @@ fn compute_kappa(
 
             Particle {
                 rho,
+                k_abs,
                 k_ext,
                 k_sca,
                 g,
@@ -945,7 +947,6 @@ fn maxwell_garnet_blend(m1: Complex64, m2: Complex64, vf_m: f64) -> (f64, f64) {
 /// Calculate the opacities for a wavelength value.
 fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<KappaResult> {
     let qabsdqext_min = 1e-4;
-    // dbg!(ilam);
     let wvno = 2.0 * PI / kpc.lam[ilam];
     let mut f11 = RVector::zeros(kpc.nang);
     let mut f12 = RVector::zeros(kpc.nang);
@@ -1023,6 +1024,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                     mie_f34[kpc.nang - j - 1] = (-dhsr.d10[[j, 1]]) * factor;
                                     mie_f44[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
                                 }
+                                // exit(0);
                                 (csmie, cemie)
                             }
                             Err(e) => {
@@ -1280,6 +1282,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
         vol,
         k_ext,
         k_sca,
+        k_abs,
         g,
         trust: test_scat,
     };
