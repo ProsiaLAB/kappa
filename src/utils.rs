@@ -243,7 +243,7 @@ pub mod legendre {
         let eps = 1.0e-14;
 
         let mut pp = 0.0;
-        let m = (n + 1) / 2;
+        let m = n.div_ceil(2);
         let xm = 0.5 * (x2 + x1);
         let xl = 0.5 * (x2 - x1);
 
@@ -1282,10 +1282,6 @@ pub mod special {
         hg
     }
 
-    pub fn geometric_cross_secrtion() {
-        todo!()
-    }
-
     pub fn optic_limit() {
         todo!()
     }
@@ -1402,5 +1398,60 @@ pub fn prepare_sparse(kpc: &mut KappaConfig) {
                 kpc.sparse_indices.insert(il + 1);
             }
         }
+    }
+}
+
+/// Compute the moments of the size distribution
+///
+/// The results are returned in `ameans`, an array of length 3:
+/// $$
+///                [\langle a \rangle,\quad \langle a^2 \rangle^{1/2},\quad \langle a^3 \rangle^{1/3}]
+/// $$
+/// If both mn and sig are nonzero and the product is positive, we use
+/// the log-normal size distribution.  If not, we use the powerlaw.
+pub fn get_sizedis_moments(kpc: &KappaConfig) -> [f64; 3] {
+    let ns = 1000;
+
+    let aminlog = kpc.amin.log10();
+    let amaxlog = kpc.amax.log10();
+    let pow = -kpc.apow;
+
+    if ((kpc.amax - kpc.amin) / kpc.amin).abs() < 1e-6 {
+        [kpc.amin, kpc.amin, kpc.amin]
+    } else {
+        let mut tot = [0.0; 3];
+        let mut totn = 0.0;
+        let mut ameans = [0.0; 3];
+        for is in 0..ns {
+            let isf = is as f64;
+            let nsf = ns as f64;
+            let r = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+            let nr = if (kpc.amean * kpc.asigma).abs() > 0.0 {
+                // normal or log-normal size distribution
+                let expo = if kpc.asigma > 0.0 {
+                    0.5 * ((r - kpc.amean) / kpc.asigma).powi(2)
+                } else {
+                    0.5 * ((r / kpc.amean).ln() / kpc.asigma).powi(2)
+                };
+                if expo > 99.0 {
+                    0.0
+                } else {
+                    -expo.exp()
+                }
+            } else {
+                r.powf(pow + 1.0)
+            };
+            totn += nr;
+            tot[0] += nr * r;
+            tot[1] += nr * r.powi(2);
+            tot[2] += nr * r.powi(3);
+        }
+        if totn == 0.0 {
+            totn = 1.0;
+        }
+        ameans[0] = tot[0] / totn;
+        ameans[1] = (tot[1] / totn).sqrt();
+        ameans[2] = (tot[2] / totn).powf(1.0 / 3.0);
+        ameans
     }
 }

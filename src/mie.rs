@@ -175,7 +175,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     let mut nhalf: usize = 0;
     if symmetric {
         if nangle % 2 == 1 {
-            nhalf = (nangle + 1) / 2;
+            nhalf = nangle.div_ceil(2);
             fac_90 = 0.5;
         } else {
             nhalf = nangle / 2;
