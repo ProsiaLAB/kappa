@@ -7,9 +7,10 @@ use std::path::Path;
 use anyhow::anyhow;
 use anyhow::Result;
 
-use crate::opac::Component;
-use crate::opac::KappaConfig;
+use crate::opac::{Component, Particle, SizeDistribution};
+use crate::opac::{KappaConfig, KappaMethod};
 use crate::types::RVector;
+use crate::utils::get_sizedis_moments;
 
 pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     let file = std::fs::File::open(file)?;
@@ -260,8 +261,8 @@ pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
     Ok(())
 }
 
-pub fn write_opacities(kpc: &KappaConfig) -> Result<()> {
-    let (ext, ml) = if kpc.for_radmc {
+pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
+    let (ext, _ml) = if kpc.for_radmc {
         unimplemented!()
     } else {
         ("dat", "F11 F12 F22 F33 F34 F44")
@@ -271,6 +272,174 @@ pub fn write_opacities(kpc: &KappaConfig) -> Result<()> {
 
     let file_opacity = create_output_file(kpc, &opacity_filename)?;
     let mut writer = BufWriter::new(file_opacity);
+
+    // Write header
+    let cc = "#";
+    let ameans = get_sizedis_moments(kpc);
+    writeln!(
+        writer,
+        "{}============================================================================",
+        cc
+    )?;
+    let a_vals = match kpc.sizedis {
+        SizeDistribution::File => kpc.ameans_file,
+        _ => ameans,
+    };
+    writeln!(
+        writer,
+        "{} Opacities computed by kappa        <a^n>= {:11.4e} {:11.4e} {:11.4e}",
+        cc, a_vals[0], a_vals[1], a_vals[2]
+    )?;
+    match kpc.method {
+        KappaMethod::MMF => {
+            let s_struct = if kpc.mmf_struct > 1.0 {
+                "(fractal dimension)"
+            } else {
+                "(filling factor)"
+            };
+            writeln!(
+                writer,
+                "{} Method:   {:?}  a0={:7.3}  Struct={:7.3}{}",
+                cc, kpc.method, kpc.mmf_a0, kpc.mmf_struct, s_struct
+            )?;
+        }
+        KappaMethod::CDE => {
+            writeln!(writer, "{} Method:   {:?}", cc, kpc.method)?;
+        }
+        _ => {
+            writeln!(
+                writer,
+                "{} Method:   {:?}  fmax={:7.3}",
+                cc, kpc.method, kpc.fmax
+            )?;
+        }
+    }
+    writeln!(writer, "{} Parameters:", cc)?;
+    match kpc.sizedis {
+        SizeDistribution::File => {
+            // writeln!(
+            //     writer,
+            //     "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}    file={}",
+            //     cc,
+            //     kpc.amin,
+            //     kpc.amax,
+            //     kpc.na,
+            //     kpc.
+            // )?;
+            todo!()
+        }
+        SizeDistribution::LogNormal | SizeDistribution::Normal => {
+            writeln!(
+                writer,
+                "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}    {:?}={:.4}:{:.4}",
+                cc, kpc.amin, kpc.amax, kpc.na, kpc.sizedis, kpc.amean, kpc.asigma
+            )?;
+        }
+        _ => {
+            writeln!(
+                writer,
+                "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}     apow={:10.2}",
+                cc, kpc.amin, kpc.amax, kpc.na, kpc.apow
+            )?;
+        }
+    }
+    writeln!(
+        writer,
+        "{}   lmin [um]={:11.3} lmax [um]={:11.3}  nlam={:5}     nang={:6}",
+        cc, kpc.lmin, kpc.lmax, kpc.nlam, kpc.nang
+    )?;
+    writeln!(
+        writer,
+        "{}   porosity ={:11.3} p_mantle ={:11.3}  fmax={:9.2} chop=  {:4.1}",
+        cc, kpc.pcore, kpc.pmantle, kpc.fmax, kpc.chop_angle
+    )?;
+
+    writeln!(writer, "{} Composition:", cc)?;
+    writeln!(writer, "{}  Where   mfrac  rho   Material", cc)?;
+    writeln!(
+        writer,
+        "{}  -----   -----  ----  -----------------------------------------------------",
+        cc
+    )?;
+
+    let total_mfrac: f64 = kpc.materials.iter().map(|m| m.mfrac).sum();
+    for mat in &kpc.materials {
+        writeln!(
+            writer,
+            "{}  {:?} {:7.3} {:6.2}  {}",
+            cc,
+            mat.kind,
+            mat.mfrac / total_mfrac,
+            mat.rho,
+            mat.key,
+        )?;
+    }
+
+    if kpc.rho_av > 0.0 {
+        writeln!(
+            writer,
+            "{}  - - -   - - -  -  -  - - - - - - - - - - - - - - - - - - - - - - - - - - -",
+            cc
+        )?;
+        let label = if (kpc.pcore + kpc.pmantle) > 0.0 {
+            "materials and vacuum"
+        } else {
+            "materials"
+        };
+        writeln!(
+            writer,
+            "{}  {:<6} {:7.3} {:6.2}  mixture of {:3} {}",
+            cc,
+            "grain",
+            1.0,
+            kpc.rho_av,
+            kpc.materials.len(),
+            label
+        )?;
+    }
+
+    writeln!(
+        writer,
+        "{}----------------------------------------------------------------------------",
+        cc
+    )?;
+    // writeln!(writer, "{} Command: {}", cc, kpc.)?;
+    writeln!(
+        writer,
+        "{}============================================================================",
+        cc
+    )?;
+    // end of header
+
+    // write the output
+    let header_line = if kpc.for_radmc {
+        "# Output file formatted for RADMC-3D, dustkappa, no scattering matrix"
+    } else {
+        "# Standard output file, no scattering matrix"
+    };
+    writeln!(writer, "{}", header_line)?;
+    writeln!(writer, "#    iformat")?;
+    writeln!(writer, "#    nlambda")?;
+    writeln!(
+        writer,
+        "#    lambda[um]  kabs [cm^2/g]  ksca [cm^2/g]    g_asymmetry"
+    )?;
+    writeln!(
+        writer,
+        "#============================================================================"
+    )?;
+    writeln!(writer, "{}", 3)?; // iformat
+    writeln!(writer, "{}", kpc.nlam)?; // nlambda
+
+    for i in 0..kpc.nlam {
+        writeln!(
+            writer,
+            "{:15.6e} {:15.6e} {:15.6e} {:15.6e}",
+            kpc.lam[i], p.k_abs[i], p.k_sca[i], p.g[i]
+        )?;
+    }
+
+    writer.flush()?;
 
     Ok(())
 }
