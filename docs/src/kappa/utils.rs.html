@@ -259,7 +259,7 @@
 <a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>eps = <span class="number">1.0e-14</span>;
 <a href=#244 id=244 data-nosnippet>244</a>
 <a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span><span class="kw-2">mut </span>pp = <span class="number">0.0</span>;
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>m = (n + <span class="number">1</span>) / <span class="number">2</span>;
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>m = n.div_ceil(<span class="number">2</span>);
 <a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>xm = <span class="number">0.5 </span>* (x2 + x1);
 <a href=#248 id=248 data-nosnippet>248</a>        <span class="kw">let </span>xl = <span class="number">0.5 </span>* (x2 - x1);
 <a href=#249 id=249 data-nosnippet>249</a>
@@ -1298,125 +1298,176 @@
 <a href=#1282 id=1282 data-nosnippet>1282</a>        hg
 <a href=#1283 id=1283 data-nosnippet>1283</a>    }
 <a href=#1284 id=1284 data-nosnippet>1284</a>
-<a href=#1285 id=1285 data-nosnippet>1285</a>    <span class="kw">pub fn </span>geometric_cross_secrtion() {
+<a href=#1285 id=1285 data-nosnippet>1285</a>    <span class="kw">pub fn </span>optic_limit() {
 <a href=#1286 id=1286 data-nosnippet>1286</a>        <span class="macro">todo!</span>()
 <a href=#1287 id=1287 data-nosnippet>1287</a>    }
-<a href=#1288 id=1288 data-nosnippet>1288</a>
-<a href=#1289 id=1289 data-nosnippet>1289</a>    <span class="kw">pub fn </span>optic_limit() {
-<a href=#1290 id=1290 data-nosnippet>1290</a>        <span class="macro">todo!</span>()
-<a href=#1291 id=1291 data-nosnippet>1291</a>    }
-<a href=#1292 id=1292 data-nosnippet>1292</a>}
-<a href=#1293 id=1293 data-nosnippet>1293</a>
-<a href=#1294 id=1294 data-nosnippet>1294</a><span class="kw">pub fn </span>regrid_lnk_data(
-<a href=#1295 id=1295 data-nosnippet>1295</a>    l0: <span class="kw-2">&amp;</span>[f64],
-<a href=#1296 id=1296 data-nosnippet>1296</a>    n0: <span class="kw-2">&amp;</span>[f64],
-<a href=#1297 id=1297 data-nosnippet>1297</a>    k0: <span class="kw-2">&amp;</span>[f64],
-<a href=#1298 id=1298 data-nosnippet>1298</a>    lam: <span class="kw-2">&amp;</span>RVector,
-<a href=#1299 id=1299 data-nosnippet>1299</a>    loglog: bool,
-<a href=#1300 id=1300 data-nosnippet>1300</a>) -&gt; (RVector, RVector) {
-<a href=#1301 id=1301 data-nosnippet>1301</a>    <span class="kw">let </span>n = lam.len();
-<a href=#1302 id=1302 data-nosnippet>1302</a>    <span class="kw">let </span>n_actual = l0.len();
-<a href=#1303 id=1303 data-nosnippet>1303</a>    <span class="kw">let </span><span class="kw-2">mut </span>x0 = l0[<span class="number">0</span>];
-<a href=#1304 id=1304 data-nosnippet>1304</a>    <span class="kw">let </span><span class="kw-2">mut </span>y01 = n0[<span class="number">0</span>];
-<a href=#1305 id=1305 data-nosnippet>1305</a>    <span class="kw">let </span><span class="kw-2">mut </span>y02 = k0[<span class="number">0</span>];
-<a href=#1306 id=1306 data-nosnippet>1306</a>    <span class="comment">// let wp = (1.0 - y01) / x0.powi(2);
-<a href=#1307 id=1307 data-nosnippet>1307</a>    // let gamma = y02 / x0.powi(3);
-<a href=#1308 id=1308 data-nosnippet>1308</a>
-<a href=#1309 id=1309 data-nosnippet>1309</a>    // The first block is space in grid that is before the first specified
-<a href=#1310 id=1310 data-nosnippet>1310</a>    // wavelength. Simple extrapolation: keep same value
-<a href=#1311 id=1311 data-nosnippet>1311</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>e1: RVector = Array1::zeros(n);
-<a href=#1312 id=1312 data-nosnippet>1312</a>    <span class="kw">let </span><span class="kw-2">mut </span>e2: RVector = Array1::zeros(n);
-<a href=#1313 id=1313 data-nosnippet>1313</a>    <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
-<a href=#1314 id=1314 data-nosnippet>1314</a>
-<a href=#1315 id=1315 data-nosnippet>1315</a>    <span class="kw">while </span>x0 &gt;= lam[i] {
-<a href=#1316 id=1316 data-nosnippet>1316</a>        e1[i] = y01;
-<a href=#1317 id=1317 data-nosnippet>1317</a>        e2[i] = y02;
-<a href=#1318 id=1318 data-nosnippet>1318</a>        i += <span class="number">1</span>;
-<a href=#1319 id=1319 data-nosnippet>1319</a>        <span class="kw">if </span>i &gt;= n {
-<a href=#1320 id=1320 data-nosnippet>1320</a>            <span class="comment">// All requested lambda are before first data point
-<a href=#1321 id=1321 data-nosnippet>1321</a>            </span><span class="kw">break</span>;
-<a href=#1322 id=1322 data-nosnippet>1322</a>        }
-<a href=#1323 id=1323 data-nosnippet>1323</a>    }
-<a href=#1324 id=1324 data-nosnippet>1324</a>    <span class="comment">// Main interpolation loop
-<a href=#1325 id=1325 data-nosnippet>1325</a>    </span><span class="kw">for </span>i0 <span class="kw">in </span><span class="number">0</span>..n_actual {
-<a href=#1326 id=1326 data-nosnippet>1326</a>        <span class="kw">let </span>x1 = l0[i0];
-<a href=#1327 id=1327 data-nosnippet>1327</a>        <span class="kw">let </span>y11 = n0[i0];
-<a href=#1328 id=1328 data-nosnippet>1328</a>        <span class="kw">let </span>y12 = k0[i0];
-<a href=#1329 id=1329 data-nosnippet>1329</a>
-<a href=#1330 id=1330 data-nosnippet>1330</a>        <span class="kw">while </span>lam[i] &lt;= x1 &amp;&amp; lam[i] &gt; x0 {
-<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="comment">// log-log interpolation between points
-<a href=#1332 id=1332 data-nosnippet>1332</a>            </span><span class="kw">let </span>lgy11 = y11.log10();
-<a href=#1333 id=1333 data-nosnippet>1333</a>            <span class="kw">let </span>lgy12 = y12.log10();
-<a href=#1334 id=1334 data-nosnippet>1334</a>            <span class="kw">let </span>lgy01 = y01.log10();
-<a href=#1335 id=1335 data-nosnippet>1335</a>            <span class="kw">let </span>lgy02 = y02.log10();
-<a href=#1336 id=1336 data-nosnippet>1336</a>            <span class="kw">let </span>lgx0 = x0.log10();
-<a href=#1337 id=1337 data-nosnippet>1337</a>            <span class="kw">let </span>lgx1 = x1.log10();
-<a href=#1338 id=1338 data-nosnippet>1338</a>            <span class="kw">let </span>lggr = lam[i].log10();
-<a href=#1339 id=1339 data-nosnippet>1339</a>
-<a href=#1340 id=1340 data-nosnippet>1340</a>            e1[i] = <span class="number">10f64</span>.powf(lgy11 + (lggr - lgx1) * (lgy01 - lgy11) / (lgx0 - lgx1));
-<a href=#1341 id=1341 data-nosnippet>1341</a>            e2[i] = <span class="number">10f64</span>.powf(lgy12 + (lggr - lgx1) * (lgy02 - lgy12) / (lgx0 - lgx1));
-<a href=#1342 id=1342 data-nosnippet>1342</a>
-<a href=#1343 id=1343 data-nosnippet>1343</a>            i += <span class="number">1</span>;
-<a href=#1344 id=1344 data-nosnippet>1344</a>            <span class="kw">if </span>i &gt;= n {
-<a href=#1345 id=1345 data-nosnippet>1345</a>                <span class="kw">break</span>;
-<a href=#1346 id=1346 data-nosnippet>1346</a>            }
-<a href=#1347 id=1347 data-nosnippet>1347</a>        }
-<a href=#1348 id=1348 data-nosnippet>1348</a>
-<a href=#1349 id=1349 data-nosnippet>1349</a>        x0 = x1;
-<a href=#1350 id=1350 data-nosnippet>1350</a>        y01 = y11;
-<a href=#1351 id=1351 data-nosnippet>1351</a>        y02 = y12;
-<a href=#1352 id=1352 data-nosnippet>1352</a>    }
-<a href=#1353 id=1353 data-nosnippet>1353</a>
-<a href=#1354 id=1354 data-nosnippet>1354</a>    <span class="comment">// Extrapolation to long wavelengths
-<a href=#1355 id=1355 data-nosnippet>1355</a>    </span><span class="kw">if </span>loglog {
-<a href=#1356 id=1356 data-nosnippet>1356</a>        <span class="comment">// Use log-log extrapolation
-<a href=#1357 id=1357 data-nosnippet>1357</a>        </span><span class="kw">let </span>slope1 = (n0[n_actual - <span class="number">1</span>] / n0[n_actual - <span class="number">2</span>]).log10()
-<a href=#1358 id=1358 data-nosnippet>1358</a>            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
-<a href=#1359 id=1359 data-nosnippet>1359</a>        <span class="kw">let </span>sect1 = n0[n_actual - <span class="number">2</span>].log10();
-<a href=#1360 id=1360 data-nosnippet>1360</a>        <span class="kw">let </span>slope2 = (k0[n_actual - <span class="number">1</span>] / k0[n_actual - <span class="number">2</span>]).log10()
-<a href=#1361 id=1361 data-nosnippet>1361</a>            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
-<a href=#1362 id=1362 data-nosnippet>1362</a>        <span class="kw">let </span>sect2 = k0[n_actual - <span class="number">2</span>].log10();
-<a href=#1363 id=1363 data-nosnippet>1363</a>
-<a href=#1364 id=1364 data-nosnippet>1364</a>        <span class="kw">for </span>j <span class="kw">in </span>i..n {
-<a href=#1365 id=1365 data-nosnippet>1365</a>            <span class="kw">let </span>dist = (lam[j] / l0[n_actual - <span class="number">2</span>]).log10();
-<a href=#1366 id=1366 data-nosnippet>1366</a>            e1[j] = <span class="number">10f64</span>.powf(slope1 * dist + sect1);
-<a href=#1367 id=1367 data-nosnippet>1367</a>            e2[j] = <span class="number">10f64</span>.powf(slope2 * dist + sect2);
-<a href=#1368 id=1368 data-nosnippet>1368</a>        }
-<a href=#1369 id=1369 data-nosnippet>1369</a>    } <span class="kw">else </span>{
-<a href=#1370 id=1370 data-nosnippet>1370</a>        <span class="comment">// Use the dielectric extrapolation, this is the default
-<a href=#1371 id=1371 data-nosnippet>1371</a>        </span><span class="kw">for </span>j <span class="kw">in </span>i..n {
-<a href=#1372 id=1372 data-nosnippet>1372</a>            e1[j] = e1[i - <span class="number">1</span>];
-<a href=#1373 id=1373 data-nosnippet>1373</a>            e2[j] = e2[i - <span class="number">1</span>] * lam[i - <span class="number">1</span>] / lam[j];
-<a href=#1374 id=1374 data-nosnippet>1374</a>        }
-<a href=#1375 id=1375 data-nosnippet>1375</a>    }
-<a href=#1376 id=1376 data-nosnippet>1376</a>
-<a href=#1377 id=1377 data-nosnippet>1377</a>    (e1, e2)
-<a href=#1378 id=1378 data-nosnippet>1378</a>}
-<a href=#1379 id=1379 data-nosnippet>1379</a>
-<a href=#1380 id=1380 data-nosnippet>1380</a><span class="kw">pub fn </span>prepare_sparse(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) {
-<a href=#1381 id=1381 data-nosnippet>1381</a>    <span class="kw">let </span>f = kpc.lam[kpc.nlam - <span class="number">1</span>] / kpc.lam[kpc.nlam - <span class="number">2</span>];
-<a href=#1382 id=1382 data-nosnippet>1382</a>
-<a href=#1383 id=1383 data-nosnippet>1383</a>    <span class="kw">for </span>(valmin, valmax) <span class="kw">in </span>kpc.scatlammin.iter_mut().zip(kpc.scatlammax.iter_mut()) {
-<a href=#1384 id=1384 data-nosnippet>1384</a>        <span class="kw">if </span><span class="kw-2">*</span>valmax / <span class="kw-2">*</span>valmin &lt; f {
-<a href=#1385 id=1385 data-nosnippet>1385</a>            <span class="kw-2">*</span>valmin /= f.sqrt() / <span class="number">1.0001</span>;
-<a href=#1386 id=1386 data-nosnippet>1386</a>            <span class="kw-2">*</span>valmax <span class="kw-2">*</span>= f.sqrt() / <span class="number">1.0001</span>;
-<a href=#1387 id=1387 data-nosnippet>1387</a>        }
-<a href=#1388 id=1388 data-nosnippet>1388</a>    }
-<a href=#1389 id=1389 data-nosnippet>1389</a>
-<a href=#1390 id=1390 data-nosnippet>1390</a>    <span class="kw">for </span>(il, <span class="kw-2">&amp;</span>lam_val) <span class="kw">in </span>kpc.lam.iter().enumerate() {
-<a href=#1391 id=1391 data-nosnippet>1391</a>        <span class="kw">if </span>kpc
-<a href=#1392 id=1392 data-nosnippet>1392</a>            .scatlammin
-<a href=#1393 id=1393 data-nosnippet>1393</a>            .iter()
-<a href=#1394 id=1394 data-nosnippet>1394</a>            .zip(kpc.scatlammax.iter())
-<a href=#1395 id=1395 data-nosnippet>1395</a>            .any(|(<span class="kw-2">&amp;</span>min_val, <span class="kw-2">&amp;</span>max_val)| lam_val &gt;= min_val &amp;&amp; lam_val &lt;= max_val)
-<a href=#1396 id=1396 data-nosnippet>1396</a>        {
-<a href=#1397 id=1397 data-nosnippet>1397</a>            kpc.sparse_indices.insert(il);
-<a href=#1398 id=1398 data-nosnippet>1398</a>            <span class="kw">if </span>il &gt; <span class="number">0 </span>{
-<a href=#1399 id=1399 data-nosnippet>1399</a>                kpc.sparse_indices.insert(il - <span class="number">1</span>);
-<a href=#1400 id=1400 data-nosnippet>1400</a>            }
-<a href=#1401 id=1401 data-nosnippet>1401</a>            <span class="kw">if </span>il + <span class="number">1 </span>&lt; kpc.nlam {
-<a href=#1402 id=1402 data-nosnippet>1402</a>                kpc.sparse_indices.insert(il + <span class="number">1</span>);
-<a href=#1403 id=1403 data-nosnippet>1403</a>            }
-<a href=#1404 id=1404 data-nosnippet>1404</a>        }
-<a href=#1405 id=1405 data-nosnippet>1405</a>    }
-<a href=#1406 id=1406 data-nosnippet>1406</a>}</code></pre></div></section></main></body></html>
+<a href=#1288 id=1288 data-nosnippet>1288</a>}
+<a href=#1289 id=1289 data-nosnippet>1289</a>
+<a href=#1290 id=1290 data-nosnippet>1290</a><span class="kw">pub fn </span>regrid_lnk_data(
+<a href=#1291 id=1291 data-nosnippet>1291</a>    l0: <span class="kw-2">&amp;</span>[f64],
+<a href=#1292 id=1292 data-nosnippet>1292</a>    n0: <span class="kw-2">&amp;</span>[f64],
+<a href=#1293 id=1293 data-nosnippet>1293</a>    k0: <span class="kw-2">&amp;</span>[f64],
+<a href=#1294 id=1294 data-nosnippet>1294</a>    lam: <span class="kw-2">&amp;</span>RVector,
+<a href=#1295 id=1295 data-nosnippet>1295</a>    loglog: bool,
+<a href=#1296 id=1296 data-nosnippet>1296</a>) -&gt; (RVector, RVector) {
+<a href=#1297 id=1297 data-nosnippet>1297</a>    <span class="kw">let </span>n = lam.len();
+<a href=#1298 id=1298 data-nosnippet>1298</a>    <span class="kw">let </span>n_actual = l0.len();
+<a href=#1299 id=1299 data-nosnippet>1299</a>    <span class="kw">let </span><span class="kw-2">mut </span>x0 = l0[<span class="number">0</span>];
+<a href=#1300 id=1300 data-nosnippet>1300</a>    <span class="kw">let </span><span class="kw-2">mut </span>y01 = n0[<span class="number">0</span>];
+<a href=#1301 id=1301 data-nosnippet>1301</a>    <span class="kw">let </span><span class="kw-2">mut </span>y02 = k0[<span class="number">0</span>];
+<a href=#1302 id=1302 data-nosnippet>1302</a>    <span class="comment">// let wp = (1.0 - y01) / x0.powi(2);
+<a href=#1303 id=1303 data-nosnippet>1303</a>    // let gamma = y02 / x0.powi(3);
+<a href=#1304 id=1304 data-nosnippet>1304</a>
+<a href=#1305 id=1305 data-nosnippet>1305</a>    // The first block is space in grid that is before the first specified
+<a href=#1306 id=1306 data-nosnippet>1306</a>    // wavelength. Simple extrapolation: keep same value
+<a href=#1307 id=1307 data-nosnippet>1307</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>e1: RVector = Array1::zeros(n);
+<a href=#1308 id=1308 data-nosnippet>1308</a>    <span class="kw">let </span><span class="kw-2">mut </span>e2: RVector = Array1::zeros(n);
+<a href=#1309 id=1309 data-nosnippet>1309</a>    <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
+<a href=#1310 id=1310 data-nosnippet>1310</a>
+<a href=#1311 id=1311 data-nosnippet>1311</a>    <span class="kw">while </span>x0 &gt;= lam[i] {
+<a href=#1312 id=1312 data-nosnippet>1312</a>        e1[i] = y01;
+<a href=#1313 id=1313 data-nosnippet>1313</a>        e2[i] = y02;
+<a href=#1314 id=1314 data-nosnippet>1314</a>        i += <span class="number">1</span>;
+<a href=#1315 id=1315 data-nosnippet>1315</a>        <span class="kw">if </span>i &gt;= n {
+<a href=#1316 id=1316 data-nosnippet>1316</a>            <span class="comment">// All requested lambda are before first data point
+<a href=#1317 id=1317 data-nosnippet>1317</a>            </span><span class="kw">break</span>;
+<a href=#1318 id=1318 data-nosnippet>1318</a>        }
+<a href=#1319 id=1319 data-nosnippet>1319</a>    }
+<a href=#1320 id=1320 data-nosnippet>1320</a>    <span class="comment">// Main interpolation loop
+<a href=#1321 id=1321 data-nosnippet>1321</a>    </span><span class="kw">for </span>i0 <span class="kw">in </span><span class="number">0</span>..n_actual {
+<a href=#1322 id=1322 data-nosnippet>1322</a>        <span class="kw">let </span>x1 = l0[i0];
+<a href=#1323 id=1323 data-nosnippet>1323</a>        <span class="kw">let </span>y11 = n0[i0];
+<a href=#1324 id=1324 data-nosnippet>1324</a>        <span class="kw">let </span>y12 = k0[i0];
+<a href=#1325 id=1325 data-nosnippet>1325</a>
+<a href=#1326 id=1326 data-nosnippet>1326</a>        <span class="kw">while </span>lam[i] &lt;= x1 &amp;&amp; lam[i] &gt; x0 {
+<a href=#1327 id=1327 data-nosnippet>1327</a>            <span class="comment">// log-log interpolation between points
+<a href=#1328 id=1328 data-nosnippet>1328</a>            </span><span class="kw">let </span>lgy11 = y11.log10();
+<a href=#1329 id=1329 data-nosnippet>1329</a>            <span class="kw">let </span>lgy12 = y12.log10();
+<a href=#1330 id=1330 data-nosnippet>1330</a>            <span class="kw">let </span>lgy01 = y01.log10();
+<a href=#1331 id=1331 data-nosnippet>1331</a>            <span class="kw">let </span>lgy02 = y02.log10();
+<a href=#1332 id=1332 data-nosnippet>1332</a>            <span class="kw">let </span>lgx0 = x0.log10();
+<a href=#1333 id=1333 data-nosnippet>1333</a>            <span class="kw">let </span>lgx1 = x1.log10();
+<a href=#1334 id=1334 data-nosnippet>1334</a>            <span class="kw">let </span>lggr = lam[i].log10();
+<a href=#1335 id=1335 data-nosnippet>1335</a>
+<a href=#1336 id=1336 data-nosnippet>1336</a>            e1[i] = <span class="number">10f64</span>.powf(lgy11 + (lggr - lgx1) * (lgy01 - lgy11) / (lgx0 - lgx1));
+<a href=#1337 id=1337 data-nosnippet>1337</a>            e2[i] = <span class="number">10f64</span>.powf(lgy12 + (lggr - lgx1) * (lgy02 - lgy12) / (lgx0 - lgx1));
+<a href=#1338 id=1338 data-nosnippet>1338</a>
+<a href=#1339 id=1339 data-nosnippet>1339</a>            i += <span class="number">1</span>;
+<a href=#1340 id=1340 data-nosnippet>1340</a>            <span class="kw">if </span>i &gt;= n {
+<a href=#1341 id=1341 data-nosnippet>1341</a>                <span class="kw">break</span>;
+<a href=#1342 id=1342 data-nosnippet>1342</a>            }
+<a href=#1343 id=1343 data-nosnippet>1343</a>        }
+<a href=#1344 id=1344 data-nosnippet>1344</a>
+<a href=#1345 id=1345 data-nosnippet>1345</a>        x0 = x1;
+<a href=#1346 id=1346 data-nosnippet>1346</a>        y01 = y11;
+<a href=#1347 id=1347 data-nosnippet>1347</a>        y02 = y12;
+<a href=#1348 id=1348 data-nosnippet>1348</a>    }
+<a href=#1349 id=1349 data-nosnippet>1349</a>
+<a href=#1350 id=1350 data-nosnippet>1350</a>    <span class="comment">// Extrapolation to long wavelengths
+<a href=#1351 id=1351 data-nosnippet>1351</a>    </span><span class="kw">if </span>loglog {
+<a href=#1352 id=1352 data-nosnippet>1352</a>        <span class="comment">// Use log-log extrapolation
+<a href=#1353 id=1353 data-nosnippet>1353</a>        </span><span class="kw">let </span>slope1 = (n0[n_actual - <span class="number">1</span>] / n0[n_actual - <span class="number">2</span>]).log10()
+<a href=#1354 id=1354 data-nosnippet>1354</a>            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
+<a href=#1355 id=1355 data-nosnippet>1355</a>        <span class="kw">let </span>sect1 = n0[n_actual - <span class="number">2</span>].log10();
+<a href=#1356 id=1356 data-nosnippet>1356</a>        <span class="kw">let </span>slope2 = (k0[n_actual - <span class="number">1</span>] / k0[n_actual - <span class="number">2</span>]).log10()
+<a href=#1357 id=1357 data-nosnippet>1357</a>            / (l0[n_actual - <span class="number">1</span>] / l0[n_actual - <span class="number">2</span>]).log10();
+<a href=#1358 id=1358 data-nosnippet>1358</a>        <span class="kw">let </span>sect2 = k0[n_actual - <span class="number">2</span>].log10();
+<a href=#1359 id=1359 data-nosnippet>1359</a>
+<a href=#1360 id=1360 data-nosnippet>1360</a>        <span class="kw">for </span>j <span class="kw">in </span>i..n {
+<a href=#1361 id=1361 data-nosnippet>1361</a>            <span class="kw">let </span>dist = (lam[j] / l0[n_actual - <span class="number">2</span>]).log10();
+<a href=#1362 id=1362 data-nosnippet>1362</a>            e1[j] = <span class="number">10f64</span>.powf(slope1 * dist + sect1);
+<a href=#1363 id=1363 data-nosnippet>1363</a>            e2[j] = <span class="number">10f64</span>.powf(slope2 * dist + sect2);
+<a href=#1364 id=1364 data-nosnippet>1364</a>        }
+<a href=#1365 id=1365 data-nosnippet>1365</a>    } <span class="kw">else </span>{
+<a href=#1366 id=1366 data-nosnippet>1366</a>        <span class="comment">// Use the dielectric extrapolation, this is the default
+<a href=#1367 id=1367 data-nosnippet>1367</a>        </span><span class="kw">for </span>j <span class="kw">in </span>i..n {
+<a href=#1368 id=1368 data-nosnippet>1368</a>            e1[j] = e1[i - <span class="number">1</span>];
+<a href=#1369 id=1369 data-nosnippet>1369</a>            e2[j] = e2[i - <span class="number">1</span>] * lam[i - <span class="number">1</span>] / lam[j];
+<a href=#1370 id=1370 data-nosnippet>1370</a>        }
+<a href=#1371 id=1371 data-nosnippet>1371</a>    }
+<a href=#1372 id=1372 data-nosnippet>1372</a>
+<a href=#1373 id=1373 data-nosnippet>1373</a>    (e1, e2)
+<a href=#1374 id=1374 data-nosnippet>1374</a>}
+<a href=#1375 id=1375 data-nosnippet>1375</a>
+<a href=#1376 id=1376 data-nosnippet>1376</a><span class="kw">pub fn </span>prepare_sparse(kpc: <span class="kw-2">&amp;mut </span>KappaConfig) {
+<a href=#1377 id=1377 data-nosnippet>1377</a>    <span class="kw">let </span>f = kpc.lam[kpc.nlam - <span class="number">1</span>] / kpc.lam[kpc.nlam - <span class="number">2</span>];
+<a href=#1378 id=1378 data-nosnippet>1378</a>
+<a href=#1379 id=1379 data-nosnippet>1379</a>    <span class="kw">for </span>(valmin, valmax) <span class="kw">in </span>kpc.scatlammin.iter_mut().zip(kpc.scatlammax.iter_mut()) {
+<a href=#1380 id=1380 data-nosnippet>1380</a>        <span class="kw">if </span><span class="kw-2">*</span>valmax / <span class="kw-2">*</span>valmin &lt; f {
+<a href=#1381 id=1381 data-nosnippet>1381</a>            <span class="kw-2">*</span>valmin /= f.sqrt() / <span class="number">1.0001</span>;
+<a href=#1382 id=1382 data-nosnippet>1382</a>            <span class="kw-2">*</span>valmax <span class="kw-2">*</span>= f.sqrt() / <span class="number">1.0001</span>;
+<a href=#1383 id=1383 data-nosnippet>1383</a>        }
+<a href=#1384 id=1384 data-nosnippet>1384</a>    }
+<a href=#1385 id=1385 data-nosnippet>1385</a>
+<a href=#1386 id=1386 data-nosnippet>1386</a>    <span class="kw">for </span>(il, <span class="kw-2">&amp;</span>lam_val) <span class="kw">in </span>kpc.lam.iter().enumerate() {
+<a href=#1387 id=1387 data-nosnippet>1387</a>        <span class="kw">if </span>kpc
+<a href=#1388 id=1388 data-nosnippet>1388</a>            .scatlammin
+<a href=#1389 id=1389 data-nosnippet>1389</a>            .iter()
+<a href=#1390 id=1390 data-nosnippet>1390</a>            .zip(kpc.scatlammax.iter())
+<a href=#1391 id=1391 data-nosnippet>1391</a>            .any(|(<span class="kw-2">&amp;</span>min_val, <span class="kw-2">&amp;</span>max_val)| lam_val &gt;= min_val &amp;&amp; lam_val &lt;= max_val)
+<a href=#1392 id=1392 data-nosnippet>1392</a>        {
+<a href=#1393 id=1393 data-nosnippet>1393</a>            kpc.sparse_indices.insert(il);
+<a href=#1394 id=1394 data-nosnippet>1394</a>            <span class="kw">if </span>il &gt; <span class="number">0 </span>{
+<a href=#1395 id=1395 data-nosnippet>1395</a>                kpc.sparse_indices.insert(il - <span class="number">1</span>);
+<a href=#1396 id=1396 data-nosnippet>1396</a>            }
+<a href=#1397 id=1397 data-nosnippet>1397</a>            <span class="kw">if </span>il + <span class="number">1 </span>&lt; kpc.nlam {
+<a href=#1398 id=1398 data-nosnippet>1398</a>                kpc.sparse_indices.insert(il + <span class="number">1</span>);
+<a href=#1399 id=1399 data-nosnippet>1399</a>            }
+<a href=#1400 id=1400 data-nosnippet>1400</a>        }
+<a href=#1401 id=1401 data-nosnippet>1401</a>    }
+<a href=#1402 id=1402 data-nosnippet>1402</a>}
+<a href=#1403 id=1403 data-nosnippet>1403</a>
+<a href=#1404 id=1404 data-nosnippet>1404</a><span class="doccomment">/// Compute the moments of the size distribution
+<a href=#1405 id=1405 data-nosnippet>1405</a>///
+<a href=#1406 id=1406 data-nosnippet>1406</a>/// The results are returned in `ameans`, an array of length 3:
+<a href=#1407 id=1407 data-nosnippet>1407</a>/// $$
+<a href=#1408 id=1408 data-nosnippet>1408</a>///                [\langle a \rangle,\quad \langle a^2 \rangle^{1/2},\quad \langle a^3 \rangle^{1/3}]
+<a href=#1409 id=1409 data-nosnippet>1409</a>/// $$
+<a href=#1410 id=1410 data-nosnippet>1410</a>/// If both mn and sig are nonzero and the product is positive, we use
+<a href=#1411 id=1411 data-nosnippet>1411</a>/// the log-normal size distribution.  If not, we use the powerlaw.
+<a href=#1412 id=1412 data-nosnippet>1412</a></span><span class="kw">pub fn </span>get_sizedis_moments(kpc: <span class="kw-2">&amp;</span>KappaConfig) -&gt; [f64; <span class="number">3</span>] {
+<a href=#1413 id=1413 data-nosnippet>1413</a>    <span class="kw">let </span>ns = <span class="number">1000</span>;
+<a href=#1414 id=1414 data-nosnippet>1414</a>
+<a href=#1415 id=1415 data-nosnippet>1415</a>    <span class="kw">let </span>aminlog = kpc.amin.log10();
+<a href=#1416 id=1416 data-nosnippet>1416</a>    <span class="kw">let </span>amaxlog = kpc.amax.log10();
+<a href=#1417 id=1417 data-nosnippet>1417</a>    <span class="kw">let </span>pow = -kpc.apow;
+<a href=#1418 id=1418 data-nosnippet>1418</a>
+<a href=#1419 id=1419 data-nosnippet>1419</a>    <span class="kw">if </span>((kpc.amax - kpc.amin) / kpc.amin).abs() &lt; <span class="number">1e-6 </span>{
+<a href=#1420 id=1420 data-nosnippet>1420</a>        [kpc.amin, kpc.amin, kpc.amin]
+<a href=#1421 id=1421 data-nosnippet>1421</a>    } <span class="kw">else </span>{
+<a href=#1422 id=1422 data-nosnippet>1422</a>        <span class="kw">let </span><span class="kw-2">mut </span>tot = [<span class="number">0.0</span>; <span class="number">3</span>];
+<a href=#1423 id=1423 data-nosnippet>1423</a>        <span class="kw">let </span><span class="kw-2">mut </span>totn = <span class="number">0.0</span>;
+<a href=#1424 id=1424 data-nosnippet>1424</a>        <span class="kw">let </span><span class="kw-2">mut </span>ameans = [<span class="number">0.0</span>; <span class="number">3</span>];
+<a href=#1425 id=1425 data-nosnippet>1425</a>        <span class="kw">for </span>is <span class="kw">in </span><span class="number">0</span>..ns {
+<a href=#1426 id=1426 data-nosnippet>1426</a>            <span class="kw">let </span>isf = is <span class="kw">as </span>f64;
+<a href=#1427 id=1427 data-nosnippet>1427</a>            <span class="kw">let </span>nsf = ns <span class="kw">as </span>f64;
+<a href=#1428 id=1428 data-nosnippet>1428</a>            <span class="kw">let </span>r = <span class="number">10.0f64</span>.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+<a href=#1429 id=1429 data-nosnippet>1429</a>            <span class="kw">let </span>nr = <span class="kw">if </span>(kpc.amean * kpc.asigma).abs() &gt; <span class="number">0.0 </span>{
+<a href=#1430 id=1430 data-nosnippet>1430</a>                <span class="comment">// normal or log-normal size distribution
+<a href=#1431 id=1431 data-nosnippet>1431</a>                </span><span class="kw">let </span>expo = <span class="kw">if </span>kpc.asigma &gt; <span class="number">0.0 </span>{
+<a href=#1432 id=1432 data-nosnippet>1432</a>                    <span class="number">0.5 </span>* ((r - kpc.amean) / kpc.asigma).powi(<span class="number">2</span>)
+<a href=#1433 id=1433 data-nosnippet>1433</a>                } <span class="kw">else </span>{
+<a href=#1434 id=1434 data-nosnippet>1434</a>                    <span class="number">0.5 </span>* ((r / kpc.amean).ln() / kpc.asigma).powi(<span class="number">2</span>)
+<a href=#1435 id=1435 data-nosnippet>1435</a>                };
+<a href=#1436 id=1436 data-nosnippet>1436</a>                <span class="kw">if </span>expo &gt; <span class="number">99.0 </span>{
+<a href=#1437 id=1437 data-nosnippet>1437</a>                    <span class="number">0.0
+<a href=#1438 id=1438 data-nosnippet>1438</a>                </span>} <span class="kw">else </span>{
+<a href=#1439 id=1439 data-nosnippet>1439</a>                    -expo.exp()
+<a href=#1440 id=1440 data-nosnippet>1440</a>                }
+<a href=#1441 id=1441 data-nosnippet>1441</a>            } <span class="kw">else </span>{
+<a href=#1442 id=1442 data-nosnippet>1442</a>                r.powf(pow + <span class="number">1.0</span>)
+<a href=#1443 id=1443 data-nosnippet>1443</a>            };
+<a href=#1444 id=1444 data-nosnippet>1444</a>            totn += nr;
+<a href=#1445 id=1445 data-nosnippet>1445</a>            tot[<span class="number">0</span>] += nr * r;
+<a href=#1446 id=1446 data-nosnippet>1446</a>            tot[<span class="number">1</span>] += nr * r.powi(<span class="number">2</span>);
+<a href=#1447 id=1447 data-nosnippet>1447</a>            tot[<span class="number">2</span>] += nr * r.powi(<span class="number">3</span>);
+<a href=#1448 id=1448 data-nosnippet>1448</a>        }
+<a href=#1449 id=1449 data-nosnippet>1449</a>        <span class="kw">if </span>totn == <span class="number">0.0 </span>{
+<a href=#1450 id=1450 data-nosnippet>1450</a>            totn = <span class="number">1.0</span>;
+<a href=#1451 id=1451 data-nosnippet>1451</a>        }
+<a href=#1452 id=1452 data-nosnippet>1452</a>        ameans[<span class="number">0</span>] = tot[<span class="number">0</span>] / totn;
+<a href=#1453 id=1453 data-nosnippet>1453</a>        ameans[<span class="number">1</span>] = (tot[<span class="number">1</span>] / totn).sqrt();
+<a href=#1454 id=1454 data-nosnippet>1454</a>        ameans[<span class="number">2</span>] = (tot[<span class="number">2</span>] / totn).powf(<span class="number">1.0 </span>/ <span class="number">3.0</span>);
+<a href=#1455 id=1455 data-nosnippet>1455</a>        ameans
+<a href=#1456 id=1456 data-nosnippet>1456</a>    }
+<a href=#1457 id=1457 data-nosnippet>1457</a>}</code></pre></div></section></main></body></html>
