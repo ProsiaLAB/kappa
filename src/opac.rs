@@ -757,7 +757,7 @@ fn compute_kappa(
             // We do have a mantle to add
             if (kpc.nmant == 1) && (kpc.pmantle == 0.0) {
                 // No Blending needed inside the mantle - just copy e1 and e2
-                // Since it is onyl one material, we know it is index nm
+                // Since it is only one material, we know it is index nm
                 e1_blend[il] = e1[[kpc.nmat, il]];
                 e2_blend[il] = e2[[kpc.nmat, il]];
             } else {
@@ -777,8 +777,8 @@ fn compute_kappa(
                 e1mantle[il] = e_out.im;
             }
             let (e1mg, e2mg) = maxwell_garnet_blend(
-                Complex::new(e1_blend[il], e2_blend[il]),
-                Complex::new(e1mantle[il], e2mantle[il]),
+                Complex::new(e1_blend[il], e2_blend[il]), // Core
+                Complex::new(e1mantle[il], e2mantle[il]), // Mantle
                 kpc.tot_vfrac_mantle,
             );
             e1_blend[il] = e1mg;
