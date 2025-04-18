@@ -773,7 +773,7 @@
 <a href=#757 id=757 data-nosnippet>757</a>            <span class="comment">// We do have a mantle to add
 <a href=#758 id=758 data-nosnippet>758</a>            </span><span class="kw">if </span>(kpc.nmant == <span class="number">1</span>) &amp;&amp; (kpc.pmantle == <span class="number">0.0</span>) {
 <a href=#759 id=759 data-nosnippet>759</a>                <span class="comment">// No Blending needed inside the mantle - just copy e1 and e2
-<a href=#760 id=760 data-nosnippet>760</a>                // Since it is onyl one material, we know it is index nm
+<a href=#760 id=760 data-nosnippet>760</a>                // Since it is only one material, we know it is index nm
 <a href=#761 id=761 data-nosnippet>761</a>                </span>e1_blend[il] = e1[[kpc.nmat, il]];
 <a href=#762 id=762 data-nosnippet>762</a>                e2_blend[il] = e2[[kpc.nmat, il]];
 <a href=#763 id=763 data-nosnippet>763</a>            } <span class="kw">else </span>{
@@ -793,9 +793,9 @@
 <a href=#777 id=777 data-nosnippet>777</a>                e1mantle[il] = e_out.im;
 <a href=#778 id=778 data-nosnippet>778</a>            }
 <a href=#779 id=779 data-nosnippet>779</a>            <span class="kw">let </span>(e1mg, e2mg) = maxwell_garnet_blend(
-<a href=#780 id=780 data-nosnippet>780</a>                Complex::new(e1_blend[il], e2_blend[il]),
-<a href=#781 id=781 data-nosnippet>781</a>                Complex::new(e1mantle[il], e2mantle[il]),
-<a href=#782 id=782 data-nosnippet>782</a>                kpc.tot_vfrac_mantle,
+<a href=#780 id=780 data-nosnippet>780</a>                Complex::new(e1_blend[il], e2_blend[il]), <span class="comment">// Core
+<a href=#781 id=781 data-nosnippet>781</a>                </span>Complex::new(e1mantle[il], e2mantle[il]), <span class="comment">// Mantle
+<a href=#782 id=782 data-nosnippet>782</a>                </span>kpc.tot_vfrac_mantle,
 <a href=#783 id=783 data-nosnippet>783</a>            );
 <a href=#784 id=784 data-nosnippet>784</a>            e1_blend[il] = e1mg;
 <a href=#785 id=785 data-nosnippet>785</a>            e2_blend[il] = e2mg;
