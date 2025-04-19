@@ -49,6 +49,8 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
 
     let mut args = env::args().skip(1).peekable();
     if args.peek().is_none() {
+        // If no arguments are given, use the DIANA composition
+        kpc = KappaConfig::diana();
         return Ok(kpc);
     }
 
