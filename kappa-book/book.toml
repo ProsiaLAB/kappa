@@ -1,0 +1,11 @@
+[book]
+authors = ["kmaitreys"]
+language = "en"
+src = "src"
+title = "Kappa: A Primer on Dust Opacities in the ISM"
+
+[build]
+build-dir = "../docs/book"
+
+[output.html]
+site-url = "/kappa/book"
