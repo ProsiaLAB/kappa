@@ -3,6 +3,9 @@
 //! derived from Michiel Min’s DHS OpacityTool and also implements Ryo Tazaki’s MMF
 //! theory for highly porous aggregates.
 //!
+//! For a brief overview behind the details of the implementation from a theoretical
+//! perspective, read the [book](https://prosialab.github.io/kappa/book/index.html).
+//!
 //! ## Capabilities
 //! - stand-alone tool, fully command line driven, no input files need to be edited
 //! - full scattering matrix output in several formats, including for RADMC-3D
