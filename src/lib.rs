@@ -1,5 +1,5 @@
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/ProsiaLAB/assets/refs/heads/main/prosialab.jpeg"
+    html_logo_url = "https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg"
 )]
 //! # Introduction
 //! This tool produces complex dust particle opacities right from the command line. It is
