@@ -390,6 +390,42 @@ pub struct Component {
     pub k0: RVector,
 }
 
+/// Converts a [`crate::components::StaticComponent`] by value into a [`Component`].
+///
+/// This consumes the input [`crate::components::StaticComponent`], moving its data into the new [`Component`].
+impl From<crate::components::StaticComponent> for Component {
+    fn from(sc: crate::components::StaticComponent) -> Self {
+        Component {
+            name: sc.name.to_string(),
+            class: sc.class.to_string(),
+            state: sc.state.to_string(),
+            rho: sc.rho,
+            size: sc.size,
+            l0: RVector::from(sc.l0.to_vec()),
+            n0: RVector::from(sc.n0.to_vec()),
+            k0: RVector::from(sc.k0.to_vec()),
+        }
+    }
+}
+
+/// Converts a reference to a [`crate::components::StaticComponent`] into a [`Component`].
+///
+/// This clones data from the borrowed [`crate::components::StaticComponent`], allowing reuse of the original.
+impl From<&crate::components::StaticComponent> for Component {
+    fn from(sc: &crate::components::StaticComponent) -> Self {
+        Component {
+            name: sc.name.to_string(),
+            class: sc.class.to_string(),
+            state: sc.state.to_string(),
+            rho: sc.rho,
+            size: sc.size,
+            l0: RVector::from(sc.l0.to_vec()),
+            n0: RVector::from(sc.n0.to_vec()),
+            k0: RVector::from(sc.k0.to_vec()),
+        }
+    }
+}
+
 /// Run the simulation.
 pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
