@@ -12,13 +12,13 @@ permissions:
   id-token: write
 
 jobs:
-  build-and-deploy-docs:
+  build-and-upload-docs:
     runs-on: ubuntu-latest
     env:
-      RUSTDOC_OUTPUT_DIR: target/doc # Where rustdoc generates its output
-      MDBOOK_SOURCE_DIR: book       # Your mdBook source directory
-      MDBOOK_OUTPUT_DIR: book/book  # Where mdBook builds its output (default is book/book)
-      GITHUB_PAGES_OUTPUT_DIR: ./docs # This is now your source 'docs' folder!
+      RUSTDOC_OUTPUT_DIR: target/doc
+      MDBOOK_SOURCE_DIR: book
+      MDBOOK_OUTPUT_DIR: book/book
+      GITHUB_PAGES_OUTPUT_DIR: ./docs # This is your source 'docs' folder!
       CRATE_NAME: kappa
 
     steps:
@@ -30,19 +30,15 @@ jobs:
         with:
           toolchain: stable
 
-      # --- No need to create GITHUB_PAGES_OUTPUT_DIR explicitly, it's 'docs/'
-      # --- No need to copy index.html or images, they are already in 'docs/'
-
       # --- Rustdoc Documentation (will go to prosialab.github.io/kappa/rustdoc/) ---
       - name: Generate Rustdoc
         run: cargo doc --no-deps
 
       - name: Prepare Rustdoc for deployment
         run: |
-          # Create the specific subdirectory for rustdoc within the 'docs' folder
+          # Clean existing Rustdoc output first
+          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
           mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc
-          # Move the *contents* of your specific crate's documentation
-          # directly into the 'rustdoc' subdirectory.
           mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/rustdoc/
 
       # --- mdBook Documentation (will go to prosialab.github.io/kappa/book/) ---
@@ -56,23 +52,13 @@ jobs:
 
       - name: Copy mdBook to GitHub Pages output
         run: |
-          # Create the specific subdirectory for mdbook within the 'docs' folder
+          # Clean existing mdBook output first
+          rm -rf ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
           mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
           mv ${{ env.MDBOOK_OUTPUT_DIR }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book/
 
-      # --- Deploy to GitHub Pages ---
+      # --- Upload artifact for GitHub Pages ---
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ env.GITHUB_PAGES_OUTPUT_DIR }} # Upload the 'docs' folder itself
-
-  deploy-pages:
-    needs: build-and-deploy-docs
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          path: ${{ env.GITHUB_PAGES_OUTPUT_DIR }}
