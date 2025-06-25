@@ -1,0 +1,79 @@
+name: Deploy Kappa Documentation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy-docs:
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOC_OUTPUT_DIR: target/doc
+      MDBOOK_SOURCE_DIR: book
+      MDBOOK_OUTPUT_DIR: book/book
+      GITHUB_PAGES_OUTPUT_DIR: ./.github_pages_site
+      CRATE_NAME: kappa
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Create GitHub Pages staging directory
+        run: mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}
+
+      - name: Create Landing Page index.html
+        run: |
+          echo "<h1>Welcome to Kappa!</h1>" > ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/index.html
+          echo "<p>Visit our <a href=\"./docs/\">Rust documentation</a>.</p>" >> ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/index.html
+          echo "<p>Read our <a href=\"./book/\">mdBook reference</a>.</p>" >> ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/index.html
+          echo "<p>This is the landing page for ProsiaLAB/kappa.</p>" >> ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/index.html
+
+      - name: Generate Rustdoc
+        run: cargo doc --no-deps
+
+      - name: Prepare Rustdoc for deployment with redirect
+        run: |
+          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/docs
+          mv ${{ env.RUSTDOC_OUTPUT_DIR }}/${{ env.CRATE_NAME }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/docs/
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=./${{ env.CRATE_NAME }}/index.html\">" > ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/docs/index.html
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+
+      - name: Build mdBook
+        run: mdbook build ${{ env.MDBOOK_SOURCE_DIR }}
+
+      - name: Copy mdBook to GitHub Pages output
+        run: |
+          mkdir -p ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book
+          mv ${{ env.MDBOOK_OUTPUT_DIR }}/* ${{ env.GITHUB_PAGES_OUTPUT_DIR }}/book/
+
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.GITHUB_PAGES_OUTPUT_DIR }}
+
+  deploy-pages:
+    needs: build-and-deploy-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
