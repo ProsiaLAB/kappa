@@ -29,9 +29,9 @@ jobs:
 
       - name: Prepare publish directory
         run: |
-          mkdir -p publish/citrus
-          cp -r target/doc/* publish/citrus/
-          cp static/index.html publish/
+          mkdir -p publish/docs 
+          cp -r target/doc/* publish/docs/ 
+          cp static/index.html publish/ 
           touch publish/.nojekyll
 
       - name: Deploy to GitHub Pages
