@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_F64_ACC","LN_2_SQRT_E_OVER_PI","LN_PI","TWO_SQRT_E_OVER_PI"]};

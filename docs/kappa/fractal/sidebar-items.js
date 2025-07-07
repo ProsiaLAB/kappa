@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["FractalCutoff","FractalGeometry","FractalSolver"],"fn":["mean_scattering"],"struct":["FractalConfig","FractalResult"]};

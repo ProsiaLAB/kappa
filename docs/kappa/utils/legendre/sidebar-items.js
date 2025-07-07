@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["gauss_legendre","lpmns","lpn"]};

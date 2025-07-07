@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["get_sizedis_moments","prepare_sparse","regrid_lnk_data"],"mod":["bessel","constants","gamma","legendre","linalg","special","spline"]};
