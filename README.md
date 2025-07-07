@@ -14,7 +14,7 @@ Dust opacity calculator (implementation of `optool` in the Rust programming lang
 
 Detailed technical documentation generated from the Rust source is available at the following link.
 
-[![API Docs](https://img.shields.io/badge/docs-kappa-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/kappa/kappa/)
+[![API Docs](https://img.shields.io/badge/docs-kappa-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/kappa/docs/kappa/)
 
 ---
 
@@ -22,4 +22,4 @@ Detailed technical documentation generated from the Rust source is available at 
 
 An primer on dust opacities in the ISM written using mdBook, covering the theoretical background and implementation details of `kappa`.
 
-[![Primer](https://img.shields.io/badge/book-mdBook-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/kappa/book/)
+[![Primer](https://img.shields.io/badge/book-mdBook-informational?style=for-the-badge&labelColor=20232a&color=4e7ca1)](https://prosialab.github.io/books/kappa/)
