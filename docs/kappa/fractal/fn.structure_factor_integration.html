@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="This subroutine performs integration of the static structure factor by Botet et al. (1995) based on  `df`-dependent cut-off function for two-point correlation function. The statis structure factor `S(q)` is given by"><title>structure_factor_integration in kappa::fractal - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kappa" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "$", right: "$", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ]
+        });
+    });
+</script>
+
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../kappa/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../kappa/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt="logo"></a><h2><a href="../../kappa/index.html">kappa</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">structure_<wbr>factor_<wbr>integration</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#arguments" title="Arguments">Arguments</a></li><li><a href="#returns" title="Returns">Returns</a></li><li><a href="#caution" title="Caution">Caution</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In kappa::<wbr>fractal</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">kappa</a>::<wbr><a href="index.html">fractal</a></div><h1>Function <span class="fn">structure_factor_integration</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/kappa/fractal.rs.html#488-520">Source</a> </span></div><pre class="rust item-decl"><code>fn structure_factor_integration(d: <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.f64.html">f64</a>, q: <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.f64.html">f64</a>, r_g: <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.f64.html">f64</a>) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.f64.html">f64</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>This subroutine performs integration of the static structure factor by
+Botet et al. (1995) based on  <code>df</code>-dependent cut-off function for two-point
+correlation function.
+The statis structure factor <code>S(q)</code> is given by</p>
+<p>$$
+S(q) = \frac{c \cdot df}{q R_g} \int_0^{x_{\max}} dx , x^{df-2} \sin(q R_g x) e^{-c x^{df}}
+$$</p>
+<p>where <code>x = u/Rg</code>; where <code>Rg</code> is the radius of gyration and <code>u</code> is the
+distance between two monomers; <code>q</code> is the magnitude of scattering
+vector, <code>df</code> is the fractal dimension, <code>c=0.5</code> is normalization factor.</p>
+<p>Since we have a steep cut-off function for <code>x&gt;1</code>, it would be enough
+to take <code>x_max</code> slightly larger than unity.
+Here we determine xmax so that <code>eta=c*x^df</code> becomes 25.</p>
+<p>We use Simpson’s rule for the numerical integration, and then,
+the integration range <code>[0,xmax]</code> will be divided by <code>2*m</code> points.</p>
+<h2 id="arguments"><a class="doc-anchor" href="#arguments">§</a>Arguments</h2>
+<ul>
+<li><code>d</code>: Fractal dimension.</li>
+<li><code>q</code>: Magnitude of scattering vector.</li>
+<li><code>r_g</code>: Radius of gyration.</li>
+</ul>
+<h2 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h2>
+<ul>
+<li>Value of the static structure factor.</li>
+</ul>
+<h2 id="caution"><a class="doc-anchor" href="#caution">§</a>Caution</h2>
+<p>For large <code>df(&gt;2)</code> and large <code>qRg</code>, the numerical integration sometimes
+returns a negative value of <code>S(q)</code>. Since <code>S(q)</code> is a power spectrum,
+it must be positive. I also noticed that the same problem arises with
+the code written by Pascal Rannou. Because of this ill behavior, I
+prefer to use Gausian-cut-off model, which is more stable.</p>
+<p>A not-too-bad tentative prescription is simply set <code>S(q)=0</code> when <code>S(q)&lt;0</code>,
+which means scattered waves from each monomer is incoherent. This is
+what I did in if-sentence at the end of this subroutine.</p>
+</div></details></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FractalCutoff","FractalGeometry","FractalSolver"],"fn":["mean_scattering"],"struct":["FractalConfig","FractalResult"]};
+window.SIDEBAR_ITEMS = {"enum":["FractalCutoff","FractalGeometry","FractalSolver"],"fn":["get_geometric_cross_section_okuzumi","lorenz_mie","maxwell_garnett_mixing","mean_field","mean_scattering","renormalize","structure_factor_fn","structure_factor_integration"],"struct":["FractalConfig","FractalResult"]};

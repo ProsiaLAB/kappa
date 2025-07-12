@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["de_rooij_1984"],"struct":["MieConfig","MieResult"]};
+window.SIDEBAR_ITEMS = {"fn":["anbn","de_rooij_1984","fichid","get_scattering_matrix","pitau","test_symmetry"],"struct":["MieConfig","MieResult"]};

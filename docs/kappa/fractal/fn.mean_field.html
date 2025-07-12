@@ -1,0 +1,57 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Solves the mean field theory."><title>mean_field in kappa::fractal - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-1a91846b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kappa" data-themes="" data-resource-suffix="" data-rustdoc-version="1.88.0 (6b00bc388 2025-06-23)" data-channel="1.88.0" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.css" integrity="sha384-9eLZqc9ds8eNjO3TmqPeYcDj8n+Qfa4nuSiGYa6DjLNcv9BtN69ZIulL9+8CqC9Y" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js"                  integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.10.0/dist/contrib/auto-render.min.js"    integrity="sha384-kmZOZB5ObwgQnS/DuDg6TScgOiWWBiVt0plIRkZCmE6rDZGrEOQeHM5PcHi+nyqe" crossorigin="anonymous"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "$", right: "$", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ]
+        });
+    });
+</script>
+
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../kappa/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../kappa/index.html"><img src="https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg" alt="logo"></a><h2><a href="../../kappa/index.html">kappa</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">mean_<wbr>field</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#part-i" title="PART I.">PART I.</a></li><li><a href="#part-ii" title="PART II.">PART II.</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In kappa::<wbr>fractal</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">kappa</a>::<wbr><a href="index.html">fractal</a></div><h1>Function <span class="fn">mean_field</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/kappa/fractal.rs.html#710-805">Source</a> </span></div><pre class="rust item-decl"><code>fn mean_field(
+    fracc: &amp;<a class="struct" href="struct.FractalConfig.html" title="struct kappa::fractal::FractalConfig">FractalConfig</a>,
+    ad: &amp;<a class="type" href="../types/type.CMatrix.html" title="type kappa::types::CMatrix">CMatrix</a>,
+    x_g: <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.f64.html">f64</a>,
+    nmax: <a class="primitive" href="https://doc.rust-lang.org/1.88.0/std/primitive.usize.html">usize</a>,
+) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.95/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="type" href="../types/type.CVector.html" title="type kappa::types::CVector">CVector</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Solves the mean field theory.</p>
+<h2 id="part-i"><a class="doc-anchor" href="#part-i">§</a>PART I.</h2>
+<p>Calculate a(nu,n,p) and b(nu,n,p):</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>               <span class="number">2p </span>+ <span class="number">1  </span>/+<span class="number">1
+   </span>a(nu,n,p) = -------- | dx P_nu^<span class="number">1</span>(x) * P_n^<span class="number">1</span>(x) * P_p(x),
+                  <span class="number">2     </span>/-<span class="number">1
+ 
+                2p </span>+ <span class="number">1  </span>/+<span class="number">1                         </span>dP_p(x)
+   b(nu,n,p) = -------- | dx P_nu^<span class="number">1</span>(x) * P_n^<span class="number">1</span>(x) * -------,
+                  <span class="number">2     </span>/-<span class="number">1                            </span>dx</code></pre></div>
+<p>where <code>P_n^m</code> is the associated Legendre function (<code>n</code>: degree, <code>m</code>: order),
+<code>P_n</code> is the Legendre polynominal function
+(see Equations (29, 30) in Tazaki &amp; Tanaka 2018).
+The integration is performed with the Gauss-Legendre quadrature.</p>
+<h2 id="part-ii"><a class="doc-anchor" href="#part-ii">§</a>PART II.</h2>
+<p>Calculate translation matrix coefficients</p>
+<p>Translation coefficients: A and B (Equation # from Tazaki &amp; Tanaka 2018)
+T(1,nu,n) : \bar{A}<em>{1,n}^{1,nu} defined in Equation (14)
+T(2,nu,n) : \bar{A}</em>{1,n}^{1,nu} defined in Equation (15)
+anunp     : a(nu,n,p)            defined in Equation (29)
+bnunp     : b(nu,n,p)            defined in Equation (30)</p>
+<p>Note about the rule of rum with respect to the index p
+(RT and Botet, in private communication, 2017).</p>
+<p>Just before Equation (4) in Botet et al. (1997), it is written that
+p should have the same parity as n+nu. However, this is only true
+true for a(nu,n,p), and not for b(nu,n,p)
+Thus, in this code, index p runs ALL integers between |nu-n| and nu+n.</p>
+<p>Tips for efficient computation.
+The parity of the integrand of a and b leads following properties:</p>
+<ul>
+<li>a(nu,n,p) .ne. 0 and b(nu,n,p) = 0 when p has the same parity as n+nu</li>
+<li>b(nu,n,p) .ne. 0 and a(nu,n,p) = 0 when p has the opposite parity to n+nu</li>
+</ul>
+<hr />
+</div></details></section></div></main></body></html>

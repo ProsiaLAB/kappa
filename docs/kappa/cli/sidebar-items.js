@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["launch","list_materials"]};
+window.SIDEBAR_ITEMS = {"enum":["SizeArg","WavelengthArg"],"fn":["launch","list_materials","print_long_help","print_short_help","process_grain_size","process_material","process_wavelength"]};

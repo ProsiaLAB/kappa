@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["complex_matrix_inverse"]};
+window.SIDEBAR_ITEMS = {"fn":["complex_matrix_inverse","lu_backsubstitution","lu_decomposition"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AFactor","IntegrationMethod"],"fn":["get_geometric_cross_section_tazaki"]};
+window.SIDEBAR_ITEMS = {"enum":["AFactor","IntegrationMethod"],"fn":["angular_integrand","angular_integration","get_geometric_cross_section_tazaki","gfit","mean_overlap_efficiency","radial_integrand"]};
