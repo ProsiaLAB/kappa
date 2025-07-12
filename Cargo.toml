@@ -12,7 +12,6 @@ ndarray = "0.16.1"
 num-complex = "0.4.6"
 rayon = "1.10.0"
 
-
 [profile.release]
 lto = true        # Link-time optimization
 codegen-units = 1 # Slower build times, but more optimization
