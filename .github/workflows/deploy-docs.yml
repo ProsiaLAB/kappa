@@ -25,7 +25,7 @@ jobs:
           override: true
 
       - name: Build docs
-        run: RUSTDOCFLAGS="--html-in-header katex-header.html" cargo doc --no-deps --document-private-items
+        run: RUSTDOCFLAGS="--html-in-header static/katex-header.html" cargo doc --no-deps --document-private-items
 
       - name: Prepare publish directory
         run: |
