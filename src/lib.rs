@@ -7,7 +7,7 @@
 //! theory for highly porous aggregates.
 //!
 //! For a brief overview behind the details of the implementation from a theoretical
-//! perspective, read the [book](https://prosialab.github.io/kappa/book/index.html).
+//! perspective, read the [book](https://prosialab.github.io/books/kappa).
 //!
 //! ## Capabilities
 //! - stand-alone tool, fully command line driven, no input files need to be edited
