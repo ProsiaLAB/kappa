@@ -668,7 +668,7 @@ where
         material.cmd = RefractiveIndexKind::CmdLine;
         let parts: Vec<&str> = material_arg.split(':').collect();
         if parts.len() != 3 {
-            return Err(anyhow!("Invalid material format").into());
+            Err(anyhow!("Invalid material format").into())
         } else {
             material.n = parts[0]
                 .parse::<f64>()
