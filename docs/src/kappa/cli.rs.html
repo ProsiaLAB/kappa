@@ -684,7 +684,7 @@
 <a href=#668 id=668 data-nosnippet>668</a>        </span>material.cmd = RefractiveIndexKind::CmdLine;
 <a href=#669 id=669 data-nosnippet>669</a>        <span class="kw">let </span>parts: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = material_arg.split(<span class="string">':'</span>).collect();
 <a href=#670 id=670 data-nosnippet>670</a>        <span class="kw">if </span>parts.len() != <span class="number">3 </span>{
-<a href=#671 id=671 data-nosnippet>671</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Invalid material format"</span>).into());
+<a href=#671 id=671 data-nosnippet>671</a>            <span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Invalid material format"</span>).into())
 <a href=#672 id=672 data-nosnippet>672</a>        } <span class="kw">else </span>{
 <a href=#673 id=673 data-nosnippet>673</a>            material.n = parts[<span class="number">0</span>]
 <a href=#674 id=674 data-nosnippet>674</a>                .parse::&lt;f64&gt;()
