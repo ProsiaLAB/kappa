@@ -211,7 +211,6 @@ pub mod geofractal;
 pub mod io;
 pub mod mie;
 pub mod opac;
-pub mod types;
 pub mod utils;
 
 #[allow(unused_imports)]

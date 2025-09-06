@@ -1,7 +1,7 @@
+use extensions::types::RVector;
 use ndarray::Array1;
 
 use crate::opac::KappaConfig;
-use crate::types::RVector;
 
 pub mod constants {
     //! Defines mathematical expressions commonly used when computing distribution
@@ -30,9 +30,9 @@ pub mod constants {
 pub mod spline {
     use anyhow::bail;
     use anyhow::Result;
+    use extensions::types::RVector;
     use ndarray::Array1;
 
-    use crate::types::RVector;
     /// Given the arrays `xv` and `yv` of lengh `n` containing a tabulated
     /// function, i.e., `yv[i] = f(xv[i])`, with `xv[0] < xv[1] < ... < xv[n-1]`,
     /// and given the first derivative values `yp1` and `ypn` for the first
@@ -138,9 +138,8 @@ pub mod legendre {
 
     use anyhow::bail;
     use anyhow::Result;
+    use extensions::types::RVector;
     use ndarray::Array1;
-
-    use crate::types::RVector;
 
     pub fn lpmns(m: usize, n: usize, x: f64) -> Result<(RVector, RVector)> {
         let mut pm: RVector = Array1::zeros(n);
@@ -281,12 +280,12 @@ pub mod legendre {
 pub mod bessel {
     use anyhow::bail;
     use anyhow::Result;
+    use extensions::types::{CVector, RVector};
     use ndarray::Array1;
     use num_complex::{Complex, Complex64};
 
     use crate::fractal::FractalGeometry;
     use crate::fractal::{FractalConfig, FractalCutoff};
-    use crate::types::{CVector, RVector};
 
     use super::special::two_point_correlation;
 
@@ -575,10 +574,9 @@ pub mod bessel {
 
 pub mod linalg {
     use anyhow::{bail, Result};
+    use extensions::types::{CMatrix, CVector, RMatrix, RVector, UVector};
     use ndarray::{Array1, Array2};
     use num_complex::Complex64;
-
-    use crate::types::{CMatrix, CVector, RMatrix, RVector, UVector};
 
     fn lu_decomposition(a: &mut RMatrix, n: usize) -> Result<UVector> {
         let mut d = 1.0;

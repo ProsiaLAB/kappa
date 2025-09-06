@@ -11,6 +11,9 @@ indicatif = "0.17.11"
 ndarray = "0.16.1"
 num-complex = "0.4.6"
 rayon = "1.10.0"
+extensions = { git = "https://github.com/ProsiaLAB/extensions", features = [
+    "complex",
+] }
 
 [profile.release]
 lto = true        # Link-time optimization

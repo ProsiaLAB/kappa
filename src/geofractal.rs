@@ -2,9 +2,9 @@ use std::f64::consts::PI;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use extensions::types::RVector;
 
 use crate::fractal::FractalCutoff;
-use crate::types::RVector;
 use crate::utils::gamma::{gamma, gamma_ur};
 
 /// Method for solving radial and angular integration

@@ -7,6 +7,7 @@ use std::process::exit;
 use anyhow::anyhow;
 use anyhow::Result;
 use colored::{Color, Colorize};
+use extensions::types::RVector;
 
 use crate::components::MATERIAL_KEYS;
 use crate::io::read_wavelength_grid;
@@ -15,7 +16,6 @@ use crate::opac::RefractiveIndexKind;
 use crate::opac::{KappaConfig, KappaError, KappaMethod, SpecialConfigs};
 use crate::opac::{Material, MaterialKind};
 use crate::opac::{SizeDistribution, WavelengthKind};
-use crate::types::RVector;
 use crate::utils::regrid_lnk_data;
 
 enum SizeArg {

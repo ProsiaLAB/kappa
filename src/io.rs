@@ -6,10 +6,10 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use extensions::types::RVector;
 
 use crate::opac::{Component, Particle, SizeDistribution};
 use crate::opac::{KappaConfig, KappaMethod};
-use crate::types::RVector;
 use crate::utils::get_sizedis_moments;
 
 pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {

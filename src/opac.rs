@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use extensions::types::{BVector, CVector, RMatrix, RVector};
 use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::s;
 use num_complex::ComplexFloat;
@@ -28,7 +29,6 @@ use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
 use crate::io::{write_opacities, write_sizedis_file, write_wavelength_grid};
 use crate::mie::de_rooij_1984;
 use crate::mie::MieConfig;
-use crate::types::{BVector, CVector, RMatrix, RVector};
 use crate::utils::legendre::gauss_legendre;
 use crate::utils::{prepare_sparse, regrid_lnk_data};
 

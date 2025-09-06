@@ -10,9 +10,8 @@ use std::f64::consts::PI;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use extensions::types::{CVector, RMatrix, RVector};
 use num_complex::{Complex, Complex64, ComplexFloat};
-
-use crate::types::{CVector, RMatrix, RVector};
 
 pub struct MieConfig {
     pub nangle: usize,
