@@ -509,7 +509,7 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     // Loop for splitting the output into files by grain size
     if kpc.split {
         let mut nsub = kpc.nsubgrains;
-        if nsub % 2 == 0 {
+        if nsub.is_multiple_of(2) {
             nsub += 1;
         }
         let afact = (kpc.amax / kpc.amin).powf(1.0 / kpc.na as f64);

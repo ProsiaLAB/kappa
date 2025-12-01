@@ -1,6 +1,8 @@
 //! This module defines structs, variables and other statically defined
 //! data structures for built-in materials in `kappa`.
 
+#![allow(clippy::approx_constant)]
+
 pub const MATERIAL_KEYS: &[&str] = &[
     // Pyroxenes
     "pyr", // alias for pyr-mg70
