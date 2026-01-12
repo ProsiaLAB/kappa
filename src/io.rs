@@ -4,8 +4,8 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufWriter, Write};
 use std::path::Path;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use extensions::types::RVector;
 
 use crate::opac::{Component, Particle, SizeDistribution};
@@ -152,13 +152,13 @@ pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
             continue;
         }
         let mut parts = trimmed.split_whitespace();
-        if let (Some(a), Some(b)) = (parts.next(), parts.next()) {
-            if let (Ok(r), Ok(nr)) = (a.parse::<f64>(), b.parse::<f64>()) {
-                totn += nr;
-                tot[0] += nr * r;
-                tot[1] += nr * r.powi(2);
-                tot[2] += nr * r.powi(3);
-            }
+        if let (Some(a), Some(b)) = (parts.next(), parts.next())
+            && let (Ok(r), Ok(nr)) = (a.parse::<f64>(), b.parse::<f64>())
+        {
+            totn += nr;
+            tot[0] += nr * r;
+            tot[1] += nr * r.powi(2);
+            tot[2] += nr * r.powi(3);
         }
     }
 

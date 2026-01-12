@@ -535,11 +535,7 @@ fn structure_factor_fn(x: f64, c: f64, d: f64, q: f64, r_g: f64) -> f64 {
         0.0
     } else {
         let val = (q * r_g * x).sin() * (-c * c.powf(d)).exp() * x.powf(d - 2.0);
-        if val.abs() <= 1e-30 {
-            0.0
-        } else {
-            val
-        }
+        if val.abs() <= 1e-30 { 0.0 } else { val }
     }
 }
 
