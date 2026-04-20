@@ -7,12 +7,12 @@ use std::collections::HashSet;
 use std::f64::consts::PI;
 use std::mem::swap;
 use std::process::exit;
+use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::Arc;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use extensions::types::{BVector, CVector, RMatrix, RVector};
 use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::s;
@@ -21,14 +21,14 @@ use num_complex::{Complex, Complex64};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::components::get_lnk_data;
-use crate::dhs::toon_ackerman_1981;
 use crate::dhs::DHSConfig;
-use crate::fractal::mean_scattering;
+use crate::dhs::toon_ackerman_1981;
 use crate::fractal::FractalConfig;
+use crate::fractal::mean_scattering;
 use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
 use crate::io::{write_opacities, write_sizedis_file, write_wavelength_grid};
-use crate::mie::de_rooij_1984;
 use crate::mie::MieConfig;
+use crate::mie::de_rooij_1984;
 use crate::utils::legendre::gauss_legendre;
 use crate::utils::{prepare_sparse, regrid_lnk_data};
 
@@ -77,6 +77,7 @@ pub enum RefractiveIndexKind {
     Other,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug)]
 pub struct KappaConfig {
     pub amin: f64,
@@ -427,6 +428,19 @@ impl From<&crate::components::StaticComponent> for Component {
 }
 
 /// Run the simulation.
+///
+/// # Panics
+/// - If the number of materials exceeds 20.
+/// - If the porosity values are not in the range [0, 1).
+/// - If the grain size distribution parameters are invalid.
+/// - If the wavelength grid parameters are invalid.
+/// - If the DHS `fmax` parameter is not in the range [0, 1).
+/// # Errors
+/// - `TooManyMaterials`: The number of materials exceeds 20.
+/// - `InvalidPorosity`: The porosity values are not in the range [0, 1).
+/// - `InvalidSizeInput`: The grain size distribution parameters are invalid.
+/// - `InvalidWavelengthInput`: The wavelength grid parameters are invalid.
+/// - `SamplingRequired`: More than one wavelength is required when `lmin` and `lmax` are different.
 pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     prepare_inputs(kpc)?;
 
@@ -579,7 +593,7 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     if kpc.na == 0 {
         kpc.na = (((kpc.amax.log10() - kpc.amin.log10()) * 15.0 + 1.0) as usize).max(5);
     }
-    if kpc.amin == kpc.amax && kpc.na != 1 {
+    if (kpc.amin - kpc.amax).abs() < f64::EPSILON && kpc.na != 1 {
         kpc.na = 1;
     }
     match kpc.sizedis.validate(kpc) {
@@ -597,11 +611,11 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     if kpc.lmin > kpc.lmax {
         swap(&mut kpc.lmin, &mut kpc.lmax);
     }
-    if kpc.nlam <= 1 && kpc.lmin != kpc.lmax {
+    if kpc.nlam <= 1 && (kpc.lmin - kpc.lmax).abs() > f64::EPSILON {
         return Err(anyhow!("SamplingRequired"));
     }
-    if kpc.lmin == kpc.lmax && kpc.nlam != 1 {
-        kpc.nlam = 1
+    if (kpc.lmin - kpc.lmax).abs() < f64::EPSILON && kpc.nlam != 1 {
+        kpc.nlam = 1;
     }
     if kpc.nsparse > 0 {
         println!("Creating sparse scattering matrix file");
@@ -704,7 +718,7 @@ fn compute_kappa(
 
     if ns == 1 {
         // Just one size
-        r[0] = 10.0_f64.powf((aminlog + amaxlog) / 2.0);
+        r[0] = 10.0_f64.powf(f64::midpoint(aminlog, amaxlog));
         nr[0] = r[0].powf(pow + 1.0); // should be 1/r[0]^3 ???  Not important.
     } else {
         // Size distribution
@@ -718,24 +732,16 @@ fn compute_kappa(
                 SizeDistribution::Normal | SizeDistribution::LogNormal => {
                     if kpc.asigma < 0.0 {
                         let expo = 0.5 * ((*r_val - kpc.amean) / kpc.asigma).powf(2.0);
-                        if expo > 99.0 {
-                            0.0
-                        } else {
-                            (-expo).exp()
-                        }
+                        if expo > 99.0 { 0.0 } else { (-expo).exp() }
                     } else {
                         let expo = 0.5 * ((*r_val / kpc.amean).ln() / kpc.asigma).powf(2.0);
-                        if expo > 99.0 {
-                            0.0
-                        } else {
-                            (-expo).exp()
-                        }
+                        if expo > 99.0 { 0.0 } else { (-expo).exp() }
                     }
                 }
                 SizeDistribution::File => {
                     todo!() // TODO: Move this out of else block
                 }
-                _ => r_val.powf(pow + 1.0),
+                SizeDistribution::Apow => r_val.powf(pow + 1.0),
             };
             // With the option `-d`m each computation is only a piece of the size grid
             if *r_val < amin || *r_val > amax {
@@ -877,7 +883,11 @@ fn compute_kappa(
                 .progress_chars("█▓▒░ "),
         );
         let counter = Arc::new(AtomicUsize::new(0));
-        let results: Result<Vec<KappaResult>, _> = if !kpc.split {
+        let results: Result<Vec<KappaResult>, _> = if kpc.split {
+            (0..kpc.nlam)
+                .map(|ilam| over_wavelengths(ilam, &kps, kpc))
+                .collect()
+        } else {
             let counter = Arc::clone(&counter);
             let bar = bar.clone();
             let res = (0..kpc.nlam)
@@ -891,10 +901,6 @@ fn compute_kappa(
                 .collect();
             bar.finish_with_message("Processing complete!");
             res
-        } else {
-            (0..kpc.nlam)
-                .map(|ilam| over_wavelengths(ilam, &kps, kpc))
-                .collect()
         };
 
         results.map(|lamrs| {
@@ -916,7 +922,7 @@ fn compute_kappa(
                 if !trust[ilam] {
                     is_ok = false;
                     is_ok_lmin = kpc.lam[ilam];
-                };
+                }
             }
 
             Particle {
@@ -1021,7 +1027,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                         let rcore = rad * kps.f[ifn].powf(1.0 / 3.0);
                         let mconj = Complex::new(kps.e1_blend[ilam], -kps.e2_blend[ilam]);
                         let wvno_1 = wvno.min(kpc.xlim_dhs / rad);
-                        let dhsc = DHSConfig {
+                        let dhs_cfg = DHSConfig {
                             r_core: rcore,
                             r_shell: rad,
                             wave_number: wvno_1,
@@ -1031,40 +1037,43 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                             numang: kpc.nang / 2,
                             max_angle: kpc.nang,
                         };
-                        let (csmie, mut cemie) = match toon_ackerman_1981(&dhsc) {
-                            Ok(dhsr) => {
+                        let (scat_mie, mut ext_mie) = match toon_ackerman_1981(&dhs_cfg) {
+                            Ok(dhs_result) => {
                                 if spheres {
                                     rad = r1;
                                 } else if too_large {
                                     rad = r1 / (1.0 - kps.f[kps.ifmn]).powf(1.0 / 3.0);
-                                };
-                                let cemie = dhsr.q_ext * PI * rad.powi(2);
-                                let csmie = dhsr.q_sca * PI * rad.powi(2);
-                                let factor = 2.0 * PI / csmie / wvno.powi(2);
+                                }
+                                let ext_mie_factor = dhs_result.q_ext * PI * rad.powi(2);
+                                let scat_mie_factor = dhs_result.q_sca * PI * rad.powi(2);
+                                let factor = 2.0 * PI / scat_mie_factor / wvno.powi(2);
                                 for j in 0..(kpc.nang / 2) {
-                                    mie_f11[j] = (dhsr.m1[[j, 0]] + dhsr.m0[[j, 0]]) * factor;
-                                    mie_f12[j] = (dhsr.m1[[j, 0]] - dhsr.m0[[j, 0]]) * factor;
-                                    mie_f22[j] = (dhsr.m1[[j, 0]] + dhsr.m0[[j, 0]]) * factor;
-                                    mie_f33[j] = (dhsr.s10[[j, 0]]) * factor;
-                                    mie_f34[j] = (-dhsr.d10[[j, 0]]) * factor;
-                                    mie_f44[j] = (dhsr.s10[[j, 0]]) * factor;
+                                    mie_f11[j] =
+                                        (dhs_result.m1[[j, 0]] + dhs_result.m0[[j, 0]]) * factor;
+                                    mie_f12[j] =
+                                        (dhs_result.m1[[j, 0]] - dhs_result.m0[[j, 0]]) * factor;
+                                    mie_f22[j] =
+                                        (dhs_result.m1[[j, 0]] + dhs_result.m0[[j, 0]]) * factor;
+                                    mie_f33[j] = (dhs_result.s10[[j, 0]]) * factor;
+                                    mie_f34[j] = (-dhs_result.d10[[j, 0]]) * factor;
+                                    mie_f44[j] = (dhs_result.s10[[j, 0]]) * factor;
                                     // Here we use the assumption that the grid is regular.  An adapted
                                     // grid is not possible if it is not symmetric around pi/2.
                                     mie_f11[kpc.nang - j - 1] =
-                                        (dhsr.m1[[j, 1]] + dhsr.m0[[j, 1]]) * factor;
+                                        (dhs_result.m1[[j, 1]] + dhs_result.m0[[j, 1]]) * factor;
                                     mie_f12[kpc.nang - j - 1] =
-                                        (dhsr.m1[[j, 1]] - dhsr.m0[[j, 1]]) * factor;
+                                        (dhs_result.m1[[j, 1]] - dhs_result.m0[[j, 1]]) * factor;
                                     mie_f22[kpc.nang - j - 1] =
-                                        (dhsr.m1[[j, 1]] + dhsr.m0[[j, 1]]) * factor;
-                                    mie_f33[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
-                                    mie_f34[kpc.nang - j - 1] = (-dhsr.d10[[j, 1]]) * factor;
-                                    mie_f44[kpc.nang - j - 1] = (dhsr.s10[[j, 1]]) * factor;
+                                        (dhs_result.m1[[j, 1]] + dhs_result.m0[[j, 1]]) * factor;
+                                    mie_f33[kpc.nang - j - 1] = (dhs_result.s10[[j, 1]]) * factor;
+                                    mie_f34[kpc.nang - j - 1] = (-dhs_result.d10[[j, 1]]) * factor;
+                                    mie_f44[kpc.nang - j - 1] = (dhs_result.s10[[j, 1]]) * factor;
                                 }
                                 // exit(0);
-                                (csmie, cemie)
+                                (scat_mie_factor, ext_mie_factor)
                             }
                             Err(e) => {
-                                println!("DHS error: {:?}", e);
+                                println!("DHS error: {e:?}");
                                 rad = r1;
                                 let rmie = rad;
                                 let lmie = kpc.lam[ilam];
@@ -1088,10 +1097,10 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                     cmm: Complex::new(e1_mie, e2_mie),
                                     rad: radius,
                                 };
-                                let mier = de_rooij_1984(&miec)?;
-                                let cemie = mier.c_ext;
-                                let csmie = mier.c_sca;
-                                (csmie, cemie)
+                                let mie_result = de_rooij_1984(&miec)?;
+                                let ext_mie = mie_result.c_ext;
+                                let scat_mie = mie_result.c_sca;
+                                (scat_mie, ext_mie)
                             }
                         };
 
@@ -1107,20 +1116,20 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                             mie_f11[0] = 0.0;
                         }
                         for j in 0..kpc.nang {
-                            f11[j] += kps.wf[ifn] * kps.nr[is] * mie_f11[j] * csmie;
-                            f12[j] += kps.wf[ifn] * kps.nr[is] * mie_f12[j] * csmie;
-                            f22[j] += kps.wf[ifn] * kps.nr[is] * mie_f22[j] * csmie;
-                            f33[j] += kps.wf[ifn] * kps.nr[is] * mie_f33[j] * csmie;
-                            f34[j] += kps.wf[ifn] * kps.nr[is] * mie_f34[j] * csmie;
-                            f44[j] += kps.wf[ifn] * kps.nr[is] * mie_f44[j] * csmie;
+                            f11[j] += kps.wf[ifn] * kps.nr[is] * mie_f11[j] * scat_mie;
+                            f12[j] += kps.wf[ifn] * kps.nr[is] * mie_f12[j] * scat_mie;
+                            f22[j] += kps.wf[ifn] * kps.nr[is] * mie_f22[j] * scat_mie;
+                            f33[j] += kps.wf[ifn] * kps.nr[is] * mie_f33[j] * scat_mie;
+                            f34[j] += kps.wf[ifn] * kps.nr[is] * mie_f34[j] * scat_mie;
+                            f44[j] += kps.wf[ifn] * kps.nr[is] * mie_f44[j] * scat_mie;
                         }
-                        let mut camie = cemie - csmie;
-                        if camie < cemie * qabsdqext_min {
+                        let mut camie = ext_mie - scat_mie;
+                        if camie < ext_mie * qabsdqext_min {
                             camie *= 1e-4;
-                            cemie = camie + csmie;
+                            ext_mie = camie + scat_mie;
                         }
-                        cext += kps.wf[ifn] * kps.nr[is] * cemie;
-                        csca += kps.wf[ifn] * kps.nr[is] * csmie;
+                        cext += kps.wf[ifn] * kps.nr[is] * ext_mie;
+                        csca += kps.wf[ifn] * kps.nr[is] * scat_mie;
                         cabs += kps.wf[ifn] * kps.nr[is] * camie;
                         mass += kps.wf[ifn] * kps.nr[is] * kpc.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
                         vol += kps.wf[ifn] * kps.nr[is] * 4.0 * PI * r1.powi(3) / 3.0;
@@ -1155,28 +1164,40 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                     refrel: Complex::new(kps.e1_blend[ilam], kps.e2_blend[ilam]),
                     ..Default::default()
                 };
-                let fracr = mean_scattering(&fracc)?;
-                if fracr.dphi > 1.0 {
+                let frac_result = mean_scattering(&fracc)?;
+                if frac_result.dphi > 1.0 {
                     smat_nbad += 1;
                 }
                 let factor = 4.0 * PI / wvno.powi(2);
                 for j in 0..kpc.nang {
-                    f11[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[0, j]] + fracr.smat[[0, j + 1]]) * factor;
-                    f12[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[1, j]] + fracr.smat[[1, j + 1]]) * factor;
-                    f22[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[0, j]] + fracr.smat[[0, j + 1]]) * factor;
-                    f33[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[2, j]] + fracr.smat[[2, j + 1]]) * factor;
-                    f34[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[3, j]] + fracr.smat[[3, j + 1]]) * factor;
-                    f44[j] +=
-                        kps.nr[is] * 0.5 * (fracr.smat[[2, j]] + fracr.smat[[2, j + 1]]) * factor;
+                    f11[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[0, j]] + frac_result.smat[[0, j + 1]])
+                        * factor;
+                    f12[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[1, j]] + frac_result.smat[[1, j + 1]])
+                        * factor;
+                    f22[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[0, j]] + frac_result.smat[[0, j + 1]])
+                        * factor;
+                    f33[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[2, j]] + frac_result.smat[[2, j + 1]])
+                        * factor;
+                    f34[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[3, j]] + frac_result.smat[[3, j + 1]])
+                        * factor;
+                    f44[j] += kps.nr[is]
+                        * 0.5
+                        * (frac_result.smat[[2, j]] + frac_result.smat[[2, j + 1]])
+                        * factor;
                 }
-                cext += kps.nr[is] * fracr.c_ext;
-                csca += kps.nr[is] * fracr.c_sca;
-                cabs += kps.nr[is] * fracr.c_abs;
+                cext += kps.nr[is] * frac_result.c_ext;
+                csca += kps.nr[is] * frac_result.c_sca;
+                cabs += kps.nr[is] * frac_result.c_abs;
                 mass += kps.nr[is] * m_agg;
                 vol += kps.nr[is] * v_agg;
             }
@@ -1218,15 +1239,15 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                         cmm: Complex::new(e1_mie, e2_mie),
                         rad: rmie,
                     };
-                    let mier = de_rooij_1984(&miec)?;
-                    let mie_f22 = mier.f_11.clone();
-                    let mie_f44 = mier.f_33.clone();
+                    let mie_result = de_rooij_1984(&miec)?;
+                    let mie_f22 = mie_result.f_11.clone();
+                    let mie_f44 = mie_result.f_33.clone();
                     for j in 0..kpc.nang {
-                        f11[j] = mier.f_11[j] * csca;
-                        f12[j] = mier.f_12[j] * csca;
+                        f11[j] = mie_result.f_11[j] * csca;
+                        f12[j] = mie_result.f_12[j] * csca;
                         f22[j] = mie_f22[j] * csca;
-                        f33[j] = mier.f_33[j] * csca;
-                        f34[j] = mier.f_34[j] * csca;
+                        f33[j] = mie_result.f_33[j] * csca;
+                        f34[j] = mie_result.f_34[j] * csca;
                         f44[j] = mie_f44[j] * csca;
                     }
                 }

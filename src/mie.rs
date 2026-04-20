@@ -8,8 +8,8 @@
 
 use std::f64::consts::PI;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use extensions::types::{CVector, RMatrix, RVector};
 use num_complex::{Complex, Complex64, ComplexFloat};
 
@@ -48,16 +48,25 @@ pub struct MieResult {
 //     ScatteringAnglesOverflow,
 // }
 
-pub fn de_rooij_1984(miec: &MieConfig) -> Result<MieResult> {
-    let m = miec.cmm.conj();
-    let mier = get_scattering_matrix(miec, m)?;
-    Ok(mier)
+/// Calculate Mie scattering coefficients using the method of De Rooij & Van der Stap (1984).
+///
+/// # Errors
+/// - `ScatteringAnglesOverflow`: The number of scattering angles exceeds the maximum allowed (6000).
+/// - `MieSumNotConverged`: The Mie sum did not converge for the given parameters, and the apriori estimate of the number of terms will be used instead.
+/// - `InvalidMieConfig`: The provided Mie configuration is invalid (e.g., negative radius, non-positive wavelength).
+pub fn de_rooij_1984(mie_cfg: &MieConfig) -> Result<MieResult> {
+    let m = mie_cfg.cmm.conj();
+    let mie_result = get_scattering_matrix(mie_cfg, m)?;
+    Ok(mie_result)
 }
 
-fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
-    let mut mier = MieResult {
-        u: RVector::zeros(miec.nangle),
-        wth: RVector::zeros(miec.nangle),
+#[allow(clippy::similar_names)]
+fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult> {
+    const RAD_FAC: f64 = PI / 180.0;
+
+    let mut mie_result = MieResult {
+        u: RVector::zeros(mie_cfg.nangle),
+        wth: RVector::zeros(mie_cfg.nangle),
         c_sca: 0.0,
         c_ext: 0.0,
         q_sca: 0.0,
@@ -68,21 +77,19 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         xeff: 0.0,
         numpar: 0.0,
         volume: 0.0,
-        f_0: RMatrix::zeros((4, miec.nangle)),
-        f_11: RVector::zeros(miec.nangle),
-        f_12: RVector::zeros(miec.nangle),
-        f_33: RVector::zeros(miec.nangle),
-        f_34: RVector::zeros(miec.nangle),
+        f_0: RMatrix::zeros((4, mie_cfg.nangle)),
+        f_11: RVector::zeros(mie_cfg.nangle),
+        f_12: RVector::zeros(mie_cfg.nangle),
+        f_33: RVector::zeros(mie_cfg.nangle),
+        f_34: RVector::zeros(mie_cfg.nangle),
     };
 
     let mut fac_90 = 0.0;
     let ci = Complex::new(0.0, 1.0);
 
-    let symmetric = test_symmetry(miec.thmin, miec.thmax, miec.step);
+    let symmetric = test_symmetry(mie_cfg.thmin, mie_cfg.thmax, mie_cfg.step);
 
-    const RAD_FAC: f64 = PI / 180.0;
-
-    let lambda = miec.lam;
+    let lambda = mie_cfg.lam;
 
     let rtox = 2.0 * PI / lambda;
     let fakt = lambda * lambda / (2.0 * PI);
@@ -90,7 +97,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     let nfac = 0;
 
     let w = 1.0;
-    let r = miec.rad;
+    let r = mie_cfg.rad;
     let nwithr = 1.0;
 
     let sw = nwithr * w;
@@ -106,7 +113,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
     let mut facb = RVector::zeros(size);
 
     let (fi, chi, d) = fichid(m, x, nfi, nmax, nd);
-    let (an, bn) = anbn(m, x, fi, chi, d, nmax);
+    let (an, bn) = anbn(m, x, &fi, &chi, &d, nmax);
 
     if nmax > nfac {
         for n in nfac + 1..nmax {
@@ -129,7 +136,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         aux = (2.0 * nf + 1.0) * (an[n].norm() + bn[n].norm()).abs();
         c_sca_sum += aux;
         c_ext_sum += (2.0 * nf + 1.0) * (an[n] + bn[n]).re;
-        if aux < miec.delta {
+        if aux < mie_cfg.delta {
             nstop = n;
             break;
         }
@@ -139,37 +146,34 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
 
     if nfou > nmax {
         eprintln!("WARNING: `mie` sum not converged for scattering cross-section");
-        eprintln!("         with radius = {} and size parameter = {}", r, x);
+        eprintln!("         with radius = {r} and size parameter = {x}");
         eprintln!("         size distribution `nr` = {}", 0);
         eprintln!("         Re(m) = {} and Im(m) = {}", m.re, m.im);
-        eprintln!(
-            "         apriori estimate of number of `mie` terms = {}",
-            nmax
-        );
-        eprintln!("         Term {} for `c_sca` was {}", nmax, aux);
+        eprintln!("         apriori estimate of number of `mie` terms = {nmax}");
+        eprintln!("         Term {nmax} for `c_sca` was {aux}");
         eprintln!(
             "         should have been less than `delta` = {}",
-            miec.delta
+            mie_cfg.delta
         );
         eprintln!("         the apriori estimate will be used instead.");
     }
 
-    let nangle = ((miec.thmax - miec.thmin) / miec.step) as usize + 1;
+    let nangle = ((mie_cfg.thmax - mie_cfg.thmin) / mie_cfg.step) as usize + 1;
     if nangle > 6000 {
         return Err(anyhow!("ScatteringAnglesOverflow"));
     }
-    mier.u = RVector::zeros(nangle);
-    mier.wth = RVector::zeros(nangle);
+    mie_result.u = RVector::zeros(nangle);
+    mie_result.wth = RVector::zeros(nangle);
     let wfac = 2.0 / nangle as f64;
     for iang in 0..nangle {
         let iangf = iang as f64;
-        let th = miec.thmin + iangf * miec.step;
-        mier.u[nangle - 1 - iang] = (RAD_FAC * th).cos();
-        mier.wth[iang] = wfac;
+        let th = mie_cfg.thmin + iangf * mie_cfg.step;
+        mie_result.u[nangle - 1 - iang] = (RAD_FAC * th).cos();
+        mie_result.wth[iang] = wfac;
     }
 
-    mier.numpar += sw;
-    mier.g += sw * r.powi(3);
+    mie_result.numpar += sw;
+    mie_result.g += sw * r.powi(3);
 
     let mut nhalf: usize = 0;
     if symmetric {
@@ -181,7 +185,7 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
         }
 
         for j in 0..nhalf {
-            let (pi, tau) = pitau(mier.u[j], nmax);
+            let (pi, tau) = pitau(mie_result.u[j], nmax);
             let mut s_plus_f = Complex::new(0.0, 0.0);
             let mut s_min_f = Complex::new(0.0, 0.0);
             let mut s_plus_b = Complex::new(0.0, 0.0);
@@ -201,20 +205,22 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
             let k = nangle - 1 - j;
 
             // Forward scattering elements
-            mier.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
-            mier.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
-            mier.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
-            mier.f_0[[3, j]] += (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
+            mie_result.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
+            mie_result.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
+            mie_result.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
+            mie_result.f_0[[3, j]] +=
+                (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
 
             // Backward scattering elements
-            mier.f_0[[0, k]] += sw * (s_plus_b * conj_s_plus_b + s_min_b * conj_s_min_b).re;
-            mier.f_0[[1, k]] -= sw * (s_min_b * conj_s_plus_b + s_plus_b * conj_s_min_b).re;
-            mier.f_0[[2, k]] += sw * (s_plus_b * conj_s_plus_b - s_min_b * conj_s_min_b).re;
-            mier.f_0[[3, k]] += (ci * sw * (s_min_b * conj_s_plus_b - s_plus_b * conj_s_min_b)).re;
+            mie_result.f_0[[0, k]] += sw * (s_plus_b * conj_s_plus_b + s_min_b * conj_s_min_b).re;
+            mie_result.f_0[[1, k]] -= sw * (s_min_b * conj_s_plus_b + s_plus_b * conj_s_min_b).re;
+            mie_result.f_0[[2, k]] += sw * (s_plus_b * conj_s_plus_b - s_min_b * conj_s_min_b).re;
+            mie_result.f_0[[3, k]] +=
+                (ci * sw * (s_min_b * conj_s_plus_b - s_plus_b * conj_s_min_b)).re;
         }
     } else {
         for j in 0..nangle {
-            let (pi, tau) = pitau(mier.u[j], nmax);
+            let (pi, tau) = pitau(mie_result.u[j], nmax);
             let mut s_plus_f = Complex::new(0.0, 0.0);
             let mut s_min_f = Complex::new(0.0, 0.0);
 
@@ -226,46 +232,47 @@ fn get_scattering_matrix(miec: &MieConfig, m: Complex64) -> Result<MieResult> {
             let conj_s_min_f = s_min_f.conj();
 
             // Forward scattering elements
-            mier.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
-            mier.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
-            mier.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
-            mier.f_0[[3, j]] += (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
+            mie_result.f_0[[0, j]] += sw * (s_plus_f * conj_s_plus_f + s_min_f * conj_s_min_f).re;
+            mie_result.f_0[[1, j]] -= sw * (s_min_f * conj_s_plus_f + s_plus_f * conj_s_min_f).re;
+            mie_result.f_0[[2, j]] += sw * (s_plus_f * conj_s_plus_f - s_min_f * conj_s_min_f).re;
+            mie_result.f_0[[3, j]] +=
+                (ci * sw * (s_min_f * conj_s_plus_f - s_plus_f * conj_s_min_f)).re;
         }
     }
 
-    mier.c_sca += sw * c_sca_sum;
-    mier.c_ext += sw * c_ext_sum;
+    mie_result.c_sca += sw * c_sca_sum;
+    mie_result.c_ext += sw * c_ext_sum;
 
     for j in 0..nangle {
         for k in 0..4 {
-            mier.f_0[[k, j]] /= 2.0 * mier.c_sca;
+            mie_result.f_0[[k, j]] /= 2.0 * mie_result.c_sca;
         }
     }
 
     if symmetric {
         for k in 0..4 {
-            mier.f_0[[k, nhalf - 1]] *= fac_90;
+            mie_result.f_0[[k, nhalf - 1]] *= fac_90;
         }
     }
 
-    mier.g *= PI;
-    mier.c_sca *= fakt;
-    mier.c_ext *= fakt;
-    mier.q_sca = mier.c_sca / mier.g;
-    mier.q_ext = mier.c_ext / mier.g;
-    mier.albedo = mier.c_sca / mier.c_ext;
-    mier.volume = (4.0 / 3.0) * PI * mier.reff;
-    mier.reff = PI * mier.reff / mier.g;
-    mier.xeff = rtox * mier.reff;
+    mie_result.g *= PI;
+    mie_result.c_sca *= fakt;
+    mie_result.c_ext *= fakt;
+    mie_result.q_sca = mie_result.c_sca / mie_result.g;
+    mie_result.q_ext = mie_result.c_ext / mie_result.g;
+    mie_result.albedo = mie_result.c_sca / mie_result.c_ext;
+    mie_result.volume = (4.0 / 3.0) * PI * mie_result.reff;
+    mie_result.reff = PI * mie_result.reff / mie_result.g;
+    mie_result.xeff = rtox * mie_result.reff;
 
-    for i in 0..miec.nangle {
-        mier.f_11[i] = mier.f_0[[0, miec.nangle - 1]];
-        mier.f_12[i] = mier.f_0[[1, miec.nangle - 1]];
-        mier.f_33[i] = mier.f_0[[2, miec.nangle - 1]];
-        mier.f_34[i] = mier.f_0[[3, miec.nangle - 1]];
+    for i in 0..mie_cfg.nangle {
+        mie_result.f_11[i] = mie_result.f_0[[0, mie_cfg.nangle - 1]];
+        mie_result.f_12[i] = mie_result.f_0[[1, mie_cfg.nangle - 1]];
+        mie_result.f_33[i] = mie_result.f_0[[2, mie_cfg.nangle - 1]];
+        mie_result.f_34[i] = mie_result.f_0[[3, mie_cfg.nangle - 1]];
     }
 
-    Ok(mier)
+    Ok(mie_result)
 }
 
 fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
@@ -275,6 +282,7 @@ fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
     ((180.0 - thmin - thmax).abs() < eps) && ((thmax - thmin + heps).rem_euclid(step) < eps)
 }
 
+#[allow(clippy::similar_names)]
 fn fichid(
     m: Complex64,
     x: f64,
@@ -327,12 +335,13 @@ fn fichid(
     (psi, chi, d)
 }
 
+#[allow(clippy::similar_names)]
 fn anbn(
     m: Complex64,
     x: f64,
-    psi: RVector,
-    chi: RVector,
-    d: CVector,
+    psi: &RVector,
+    chi: &RVector,
+    d: &CVector,
     nmax: usize,
 ) -> (CVector, CVector) {
     let perm = 1.0 / m;

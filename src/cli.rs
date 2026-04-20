@@ -4,8 +4,8 @@ use std::iter::Peekable;
 use std::path::Path;
 use std::process::exit;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use colored::{Color, Colorize};
 use extensions::types::RVector;
 
@@ -44,6 +44,11 @@ enum WavelengthArg {
     File(String),
 }
 
+/// Parses command line arguments and returns a [`KappaConfig`] struct
+///
+/// # Errors
+/// Returns a [`KappaError`] if there is an issue with parsing the arguments,
+/// such as missing required arguments, invalid argument formats, or unknown options.
 pub fn launch() -> Result<KappaConfig, KappaError> {
     let mut kpc = KappaConfig::default();
 
@@ -60,7 +65,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 if let Some(material_arg) = args.next() {
                     match process_material(
                         &kpc,
-                        &material_arg.to_string(),
+                        &material_arg.clone(),
                         &mut args,
                         MaterialKind::Core,
                     ) {
@@ -86,7 +91,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                 if let Some(material_arg) = args.next() {
                     match process_material(
                         &kpc,
-                        &material_arg.to_string(),
+                        &material_arg.clone(),
                         &mut args,
                         MaterialKind::Mantle,
                     ) {
@@ -340,7 +345,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             // Other options
             "-o" => {
                 if let Some(next_arg) = args.next() {
-                    kpc.outdir = next_arg.to_string();
+                    kpc.outdir.clone_from(&next_arg);
                 } else {
                     kpc.outdir = "output".to_string();
                 }
@@ -441,7 +446,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
             }
             // Unknown option
             _ if arg.starts_with('-') => {
-                println!("Unknown option: {}", arg);
+                println!("Unknown option: {arg}");
                 return Ok(kpc);
             }
             // Positional arguments
@@ -535,8 +540,6 @@ where
                         apow: Some(apow),
                         na,
                     });
-                } else {
-                    return Err(anyhow!("Could not parse powerlaw or lognormal arguments").into());
                 }
             }
             Ok(SizeArg::PowerLaw {
@@ -651,7 +654,10 @@ where
             // Move on to the next material
             Ok(material)
         }
-    } else if material_arg.ends_with(".lnk") {
+    } else if Path::new(material_arg)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lnk"))
+    {
         // Positional argument is a file path
         // Placeholder for now
         let rho_in = Option::<f64>::None;
@@ -667,9 +673,7 @@ where
         // This is n:k:rho format
         material.cmd = RefractiveIndexKind::CmdLine;
         let parts: Vec<&str> = material_arg.split(':').collect();
-        if parts.len() != 3 {
-            Err(anyhow!("Invalid material format").into())
-        } else {
+        if parts.len() == 3 {
             material.n = parts[0]
                 .parse::<f64>()
                 .map_err(|_| anyhow!("Invalid value type for argument `n`"))?;
@@ -687,6 +691,8 @@ where
             material.re = material.n * RVector::ones(kpc.nlam);
             material.im = material.k * RVector::ones(kpc.nlam);
             Ok(material)
+        } else {
+            Err(anyhow!("Invalid material format").into())
         }
     } else {
         Err(anyhow!("Invalid material key").into())

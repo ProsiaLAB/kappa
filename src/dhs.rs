@@ -11,8 +11,8 @@
 
 use std::f64::consts::PI;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use extensions::types::{CMatrix, CVector, RMatrix, RVector};
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
@@ -65,17 +65,35 @@ pub struct DHSResult {
 /// The refractive index entering into this routine use
 /// a convention where the imaginary part has a different singn than
 /// what is used in modern books.
-pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
+///
+/// # Errors
+/// This function returns an error if any of the following conditions are met:
+/// - `wave_number` is not positive.
+/// - `r_shell` is not positive.
+/// - `r_core` is not positive or is greater than `r_shell`.
+/// - The real part of `r_indsh` is not positive or the imaginary part is
+///   positive.
+/// - The real part of `r_indco` is not positive or the imaginary part is
+///   positive.
+/// - `numang` is greater than `mxang` or `max_angle`.
+/// - Any element of `mu` is outside the range [-tol, 1.0
+/// + tol].
+/// - `nmx_1 + 1` is greater than `ll`.
+/// - `n` exceeds `nmx_2` during the computation.
+///   
+/// In any of these cases, the function will return an `Err` with a descriptive error message.
+#[allow(clippy::similar_names)]
+pub fn toon_ackerman_1981(dhs_cfg: &DHSConfig) -> Result<DHSResult> {
     let ll = 300000;
     let mxang = 1440;
     let tol = 1e-6;
     let c_i = Complex::new(0.0, 1.0);
 
-    let x_shell = dhsc.r_shell * dhsc.wave_number;
-    let x_core = dhsc.r_core * dhsc.wave_number;
+    let x_shell = dhs_cfg.r_shell * dhs_cfg.wave_number;
+    let x_core = dhs_cfg.r_core * dhs_cfg.wave_number;
 
     let mut t = RVector::zeros(5);
-    t[0] = x_shell * dhsc.r_indsh.abs();
+    t[0] = x_shell * dhs_cfg.r_indsh.abs();
     let mut nmx_1 = (1.1 * t[0]) as usize;
     let mut nmx_2 = t[0] as usize;
 
@@ -87,47 +105,47 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let mut w = CMatrix::zeros((3, nmx_1 + 1));
     let mut acap = CVector::zeros(nmx_1 + 1);
 
-    if dhsc.wave_number <= 0.0 {
+    if dhs_cfg.wave_number <= 0.0 {
         return Err(anyhow!("InvalidWaveNumber"));
     }
 
-    if dhsc.r_shell <= 0.0 {
+    if dhs_cfg.r_shell <= 0.0 {
         return Err(anyhow!("InvalidShellRadius"));
     }
 
-    if dhsc.r_core <= 0.0 || dhsc.r_core > dhsc.r_shell {
+    if dhs_cfg.r_core <= 0.0 || dhs_cfg.r_core > dhs_cfg.r_shell {
         return Err(anyhow!("InvalidCoreRadius"));
     }
 
-    if dhsc.r_indsh.re <= 0.0 || dhsc.r_indsh.im > 0.0 {
+    if dhs_cfg.r_indsh.re <= 0.0 || dhs_cfg.r_indsh.im > 0.0 {
         return Err(anyhow!("InvalidRefractiveIndex"));
     }
-    if dhsc.r_indco.re <= 0.0 || dhsc.r_indco.im > 0.0 {
+    if dhs_cfg.r_indco.re <= 0.0 || dhs_cfg.r_indco.im > 0.0 {
         return Err(anyhow!("InvalidRefractiveIndex"));
     }
 
-    if dhsc.numang > mxang || dhsc.numang > dhsc.max_angle {
+    if dhs_cfg.numang > mxang || dhs_cfg.numang > dhs_cfg.max_angle {
         return Err(anyhow!("`numang` is too large."));
     }
     if nmx_1 + 1 > ll {
         return Err(anyhow!("`nmx_1` is too large."));
     }
 
-    for j in 0..dhsc.numang {
-        if dhsc.mu[j] < -tol || dhsc.mu[j] > 1.0 + tol {
+    for j in 0..dhs_cfg.numang {
+        if dhs_cfg.mu[j] < -tol || dhs_cfg.mu[j] > 1.0 + tol {
             return Err(anyhow!("`mu` is out of bounds."));
         }
     }
 
-    let k1 = dhsc.r_indco * dhsc.wave_number;
-    let k2 = dhsc.r_indsh * dhsc.wave_number;
-    let k3 = Complex::new(1.0, 0.0) * dhsc.wave_number;
+    let k1 = dhs_cfg.r_indco * dhs_cfg.wave_number;
+    let k2 = dhs_cfg.r_indsh * dhs_cfg.wave_number;
+    let k3 = Complex::new(1.0, 0.0) * dhs_cfg.wave_number;
 
     let mut z = CVector::zeros(4);
-    z[0] = dhsc.r_indsh * x_shell;
+    z[0] = dhs_cfg.r_indsh * x_shell;
     z[1] = Complex::new(1.0, 0.0) * x_shell;
-    z[2] = dhsc.r_indco * x_core;
-    z[3] = dhsc.r_indsh * x_core;
+    z[2] = dhs_cfg.r_indco * x_core;
+    z[3] = dhs_cfg.r_indsh * x_core;
 
     let x0 = z[0].re;
     let y0 = z[0].im;
@@ -137,7 +155,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
 
     let rx = 1.0 / x_shell;
 
-    let rrfx = 1.0 / (dhsc.r_indsh * x_shell);
+    let rrfx = 1.0 / (dhs_cfg.r_indsh * x_shell);
 
     for nn in (0..nmx_1).rev() {
         let nnf = nn as f64;
@@ -147,16 +165,16 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         }
     }
 
-    let mut si2tht = RVector::zeros(dhsc.numang);
-    let mut pi = RMatrix::zeros((dhsc.numang, 3));
-    let mut tau = RMatrix::zeros((dhsc.numang, 3));
+    let mut si2tht = RVector::zeros(dhs_cfg.numang);
+    let mut pi = RMatrix::zeros((dhs_cfg.numang, 3));
+    let mut tau = RMatrix::zeros((dhs_cfg.numang, 3));
 
-    for j in 0..dhsc.numang {
-        si2tht[j] = 1.0 - dhsc.mu[j] * dhsc.mu[j];
+    for j in 0..dhs_cfg.numang {
+        si2tht[j] = 1.0 - dhs_cfg.mu[j] * dhs_cfg.mu[j];
         pi[[j, 0]] = 0.0;
         pi[[j, 1]] = 1.0;
         tau[[j, 0]] = 0.0;
-        tau[[j, 1]] = dhsc.mu[j];
+        tau[[j, 1]] = dhs_cfg.mu[j];
     }
 
     t[0] = x_shell.cos();
@@ -173,15 +191,15 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     ta[2] = wfn[1].re;
     ta[3] = wfn[1].im;
 
-    let mut dhsr = DHSResult {
+    let mut dhs_result = DHSResult {
         q_ext: 0.0,
         q_sca: 0.0,
         q_bs: 0.0,
         g_qsc: 0.0,
-        m0: RMatrix::zeros((dhsc.numang, 2)),
-        m1: RMatrix::zeros((dhsc.numang, 2)),
-        s10: RMatrix::zeros((dhsc.numang, 2)),
-        d10: RMatrix::zeros((dhsc.numang, 2)),
+        m0: RMatrix::zeros((dhs_cfg.numang, 2)),
+        m1: RMatrix::zeros((dhs_cfg.numang, 2)),
+        s10: RMatrix::zeros((dhs_cfg.numang, 2)),
+        d10: RMatrix::zeros((dhs_cfg.numang, 2)),
     };
 
     let mut n = 0;
@@ -258,10 +276,10 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
     let mut ac = 1.5 * acoe;
     let mut bc = 1.5 * bcoe;
 
-    let mut s0 = CMatrix::zeros((dhsc.numang, 3));
-    let mut s1 = CMatrix::zeros((dhsc.numang, 3));
+    let mut s0 = CMatrix::zeros((dhs_cfg.numang, 3));
+    let mut s1 = CMatrix::zeros((dhs_cfg.numang, 3));
 
-    for j in 0..dhsc.numang {
+    for j in 0..dhs_cfg.numang {
         s0[[j, 0]] = ac * pi[[j, 1]] + bc * tau[[j, 1]];
         s0[[j, 1]] = ac * pi[[j, 1]] - bc * tau[[j, 1]];
         s1[[j, 0]] = bc * pi[[j, 1]] + ac * tau[[j, 1]];
@@ -277,9 +295,9 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         t[0] = 2.0 * nf - 1.0;
         t[1] = nf - 1.0;
 
-        for j in 0..dhsc.numang {
-            pi[[j, 2]] = (t[0] * pi[[j, 1]] * dhsc.mu[j] - nf * pi[[j, 0]]) / t[1];
-            tau[[j, 2]] = dhsc.mu[j] * (pi[[j, 2]] - pi[[j, 0]]) - t[0] * si2tht[j] * pi[[j, 1]]
+        for j in 0..dhs_cfg.numang {
+            pi[[j, 2]] = (t[0] * pi[[j, 1]] * dhs_cfg.mu[j] - nf * pi[[j, 0]]) / t[1];
+            tau[[j, 2]] = dhs_cfg.mu[j] * (pi[[j, 2]] - pi[[j, 0]]) - t[0] * si2tht[j] * pi[[j, 1]]
                 + tau[[j, 0]];
         }
 
@@ -341,18 +359,18 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         ac = t[0] * acoe;
         bc = t[0] * bcoe;
 
-        for j in 0..dhsc.numang {
+        for j in 0..dhs_cfg.numang {
             s0[[j, 0]] += ac * pi[[j, 2]] + bc * tau[[j, 2]];
             s1[[j, 0]] += bc * pi[[j, 2]] + ac * tau[[j, 2]];
         }
 
         if n % 2 == 0 {
-            for j in 0..dhsc.numang {
+            for j in 0..dhs_cfg.numang {
                 s0[[j, 1]] += bc * tau[[j, 2]] - ac * pi[[j, 2]];
                 s1[[j, 1]] += ac * tau[[j, 2]] - bc * pi[[j, 2]];
             }
         } else {
-            for j in 0..dhsc.numang {
+            for j in 0..dhs_cfg.numang {
                 s0[[j, 1]] += ac * pi[[j, 2]] - bc * tau[[j, 2]];
                 s1[[j, 1]] += bc * pi[[j, 2]] - ac * tau[[j, 2]];
             }
@@ -363,7 +381,7 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
             return Err(anyhow!("InsufficentDimensions"));
         }
 
-        for j in 0..dhsc.numang {
+        for j in 0..dhs_cfg.numang {
             pi[[j, 0]] = pi[[j, 1]];
             pi[[j, 1]] = pi[[j, 2]];
             tau[[j, 0]] = tau[[j, 1]];
@@ -374,21 +392,21 @@ pub fn toon_ackerman_1981(dhsc: &DHSConfig) -> Result<DHSResult> {
         bcoem_0 = bcoe;
     }
 
-    for j in 0..dhsc.numang {
+    for j in 0..dhs_cfg.numang {
         for k in 0..2 {
-            dhsr.m0[[j, k]] = (s0[[j, k]].re).powi(2) + (s0[[j, k]].im).powi(2);
-            dhsr.m1[[j, k]] = (s1[[j, k]].re).powi(2) + (s1[[j, k]].im).powi(2);
-            dhsr.s10[[j, k]] = s0[[j, k]].re * s1[[j, k]].re + s0[[j, k]].im * s1[[j, k]].im;
-            dhsr.d10[[j, k]] = s1[[j, k]].re * s0[[j, k]].im - s0[[j, k]].re * s1[[j, k]].im;
+            dhs_result.m0[[j, k]] = (s0[[j, k]].re).powi(2) + (s0[[j, k]].im).powi(2);
+            dhs_result.m1[[j, k]] = (s1[[j, k]].re).powi(2) + (s1[[j, k]].im).powi(2);
+            dhs_result.s10[[j, k]] = s0[[j, k]].re * s1[[j, k]].re + s0[[j, k]].im * s1[[j, k]].im;
+            dhs_result.d10[[j, k]] = s1[[j, k]].re * s0[[j, k]].im - s0[[j, k]].re * s1[[j, k]].im;
         }
     }
 
     t[0] = 2.0 * rx * rx;
-    dhsr.q_ext = t[0] * dqext;
-    dhsr.q_sca = t[0] * dqsca;
-    dhsr.g_qsc = 2.0 * t[0] * dgqsc;
+    dhs_result.q_ext = t[0] * dqext;
+    dhs_result.q_sca = t[0] * dqsca;
+    dhs_result.g_qsc = 2.0 * t[0] * dgqsc;
     sback *= 0.5;
-    dhsr.q_bs = ((sback.re).powi(2) + (sback.im).powi(2)) / (PI * x_shell * x_shell);
+    dhs_result.q_bs = ((sback.re).powi(2) + (sback.im).powi(2)) / (PI * x_shell * x_shell);
 
-    Ok(dhsr)
+    Ok(dhs_result)
 }

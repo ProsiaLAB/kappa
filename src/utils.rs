@@ -28,8 +28,8 @@ pub mod constants {
     pub const DEFAULT_F64_ACC: f64 = 0.0000000000000011102230246251565;
 }
 pub mod spline {
-    use anyhow::bail;
     use anyhow::Result;
+    use anyhow::bail;
     use extensions::types::RVector;
     use ndarray::Array1;
 
@@ -47,6 +47,7 @@ pub mod spline {
     /// # Reference
     /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
     ///   Press et al., 2007
+    #[must_use]
     pub fn spline(xv: &[f64], yv: &[f64], n: usize, yp1: f64, ypn: f64) -> RVector {
         let mut y2: RVector = Array1::zeros(n);
         let mut u: RVector = Array1::zeros(n - 1);
@@ -104,12 +105,15 @@ pub mod spline {
     /// # Reference
     /// - Numerical Recipes: The Art of Scientific Computing, 3rd ed.
     ///   Press et al., 2007
+    ///
+    /// # Errors
+    /// - `BadXvInput`: The input `x` is out of the range of `xa`
     pub fn splint(xa: &[f64], ya: &[f64], y2a: &[f64], n: usize, x: f64) -> Result<f64> {
         let mut klo = 0;
         let mut khi = n - 1;
 
         while khi - klo > 1 {
-            let k = (khi + klo) / 2;
+            let k = usize::midpoint(khi, klo);
             if xa[k] > x {
                 khi = k;
             } else {
@@ -136,18 +140,22 @@ pub mod spline {
 pub mod legendre {
     use std::f64::consts::PI;
 
-    use anyhow::bail;
     use anyhow::Result;
+    use anyhow::bail;
     use extensions::types::RVector;
     use ndarray::Array1;
 
+    /// Computes the associated Legendre polynomials P_m^n(x) and their derivatives
+    ///
+    /// # Errors
+    /// - `m` must be 0, 1, or 2
     pub fn lpmns(m: usize, n: usize, x: f64) -> Result<(RVector, RVector)> {
         let mut pm: RVector = Array1::zeros(n);
         let mut pd: RVector = Array1::zeros(n);
 
         let mf = m as f64;
 
-        if x.abs() == 1.0 {
+        if (x.abs() - 1.0).abs() < f64::EPSILON {
             for k in 0..n {
                 let kf = k as f64;
                 match m {
@@ -211,6 +219,7 @@ pub mod legendre {
         Ok((pm, pd))
     }
 
+    #[must_use]
     pub fn lpn(n: usize, x: f64) -> (RVector, RVector) {
         let mut pn: RVector = Array1::zeros(n);
         let mut pd: RVector = Array1::zeros(n);
@@ -227,7 +236,7 @@ pub mod legendre {
             let kf = k as f64;
             let pf = (2.0 * kf - 1.0) * kf * x * p1 - (kf - 1.0) / kf * p0;
             pn[k] = pf;
-            if x.abs() == 1.0 {
+            if (x.abs() - 1.0).abs() < f64::EPSILON {
                 pd[k] = 0.5 * x.powf(kf + 1.0) * kf * (kf + 1.0);
             } else {
                 pd[k] = kf * (p1 - x * pf) / (1.0 - x * x);
@@ -238,6 +247,7 @@ pub mod legendre {
         (pn, pd)
     }
 
+    #[must_use]
     pub fn gauss_legendre(x1: f64, x2: f64, n: usize) -> (RVector, RVector) {
         let eps = 1.0e-14;
 
@@ -278,8 +288,8 @@ pub mod legendre {
 }
 
 pub mod bessel {
-    use anyhow::bail;
     use anyhow::Result;
+    use anyhow::bail;
     use extensions::types::{CVector, RVector};
     use ndarray::Array1;
     use num_complex::{Complex, Complex64};
@@ -324,7 +334,7 @@ pub mod bessel {
     ///  This subroutine performs integration of S_p(kRg) (Equation 31):
     ///  $$
     ///         S_p(k R_g) = \frac{\pi^2}{k^3} \int_0^{\infty} du \, u \, J_{p+1/2}(u) \, H_{p+1/2}^{(1)}(u) \, g(u/k)
-    ///  $$   
+    ///  $$
     ///  where g(u) is the two-point correlation function (Equations 18 and 19):
     ///  $$
     ///         g(u) = \frac{1}{4 \pi R_g^3} \left( \frac{u}{R_g} \right)^{d_f - 3} \cdot fc \left( \frac{u}{R_g} \right)
@@ -386,6 +396,12 @@ pub mod bessel {
     /// # Remarks
     /// [`BoundaryCondition::TazakiTanaka`] is used for the boundary condition and is
     /// recommended; although [`BoundaryCondition::Jablonski`] is also available.
+    ///
+    /// # Errors
+    /// - `Error in sph_bessel (jp)`: An error occurred while computing the spherical Bessel function j_p(u)
+    /// - `Error in sph_bessel (yp)`: An error occurred while computing the spherical Hankel function h_p^(1)(u)
+    /// - `Error in int_sph_bessel`: The unitary condition of the two-point correlation function is not satisfied within the acceptable error margin
+    #[allow(clippy::similar_names)]
     pub fn int_sph_bessel(fracc: &FractalConfig, x_g: f64, p: usize) -> Result<Complex64> {
         let pf = p as f64;
 
@@ -505,7 +521,7 @@ pub mod bessel {
                     let mut xi = 1.0;
                     let mut wa = 0.0;
                     for i in 1..imax {
-                        let ir = i as f64;
+                        let ir = f64::from(i);
                         xi = -x * x * xi / (2.0 * ir * (2.0 * ir + 2.0 * nf + 1.0));
                         wa += xi;
                         if (xi / wa).abs() <= floor_val {
@@ -573,7 +589,7 @@ pub mod bessel {
 }
 
 pub mod linalg {
-    use anyhow::{bail, Result};
+    use anyhow::{Result, bail};
     use extensions::types::{CMatrix, CVector, RMatrix, RVector, UVector};
     use ndarray::{Array1, Array2};
     use num_complex::Complex64;
@@ -670,6 +686,12 @@ pub mod linalg {
         }
     }
 
+    /// Solves the linear equation \( T r = p \) for \( r \), where
+    /// \( T \) is a complex matrix and \( p \) is a complex vector. The function
+    /// uses LU decomposition and back substitution to find the solution.
+    ///
+    /// # Errors
+    /// - If the matrix \( T \) is singular, an error will be returned.
     pub fn complex_matrix_inverse(
         n: usize,
         np: usize,
@@ -718,8 +740,8 @@ pub mod gamma {
     #![allow(clippy::excessive_precision)]
     use std::f64::consts::{E, PI};
 
-    use anyhow::anyhow;
     use anyhow::Result;
+    use anyhow::anyhow;
     use approx::ulps_eq;
 
     use super::constants::{DEFAULT_F64_ACC, LN_2_SQRT_E_OVER_PI, LN_PI, TWO_SQRT_E_OVER_PI};
@@ -748,6 +770,7 @@ pub mod gamma {
     /// The implementation is derived from
     /// "An Analysis of the Lanczos Gamma Approximation",
     /// Glendon Ralph Pugh, 2004 p. 116
+    #[must_use]
     pub fn ln_gamma(x: f64) -> f64 {
         if x < 0.5 {
             let s = GAMMA_DK
@@ -776,6 +799,7 @@ pub mod gamma {
     /// of 16 floating point digits. The implementation
     /// is derived from "An Analysis of the Lanczos Gamma Approximation",
     /// Glendon Ralph Pugh, 2004 p. 116
+    #[must_use]
     pub fn gamma(x: f64) -> f64 {
         if x < 0.5 {
             let s = GAMMA_DK
@@ -804,6 +828,7 @@ pub mod gamma {
     /// # Panics
     ///
     /// if `a` or `x` are not in `(0, +inf)`
+    #[must_use]
     pub fn gamma_ui(a: f64, x: f64) -> f64 {
         checked_gamma_ui(a, x).unwrap()
     }
@@ -829,6 +854,7 @@ pub mod gamma {
     /// # Panics
     ///
     /// if `a` or `x` are not in `(0, +inf)`
+    #[must_use]
     pub fn gamma_li(a: f64, x: f64) -> f64 {
         checked_gamma_li(a, x).unwrap()
     }
@@ -858,6 +884,7 @@ pub mod gamma {
     /// # Panics
     ///
     /// if `a` or `x` are not in `(0, +inf)`
+    #[must_use]
     pub fn gamma_ur(a: f64, x: f64) -> f64 {
         checked_gamma_ur(a, x).unwrap()
     }
@@ -952,6 +979,7 @@ pub mod gamma {
     /// # Panics
     ///
     /// if `a` or `x` are not in `(0, +inf)`
+    #[must_use]
     pub fn gamma_lr(a: f64, x: f64) -> f64 {
         checked_gamma_lr(a, x).unwrap()
     }
@@ -1061,6 +1089,7 @@ pub mod gamma {
     /// the log of the gamma function. The implementation is based on
     /// "Algorithm AS 103", Jose Bernardo, Applied Statistics, Volume 25, Number 3
     /// 1976, pages 315 - 317
+    #[must_use]
     pub fn digamma(x: f64) -> f64 {
         let c = 12.0;
         let d1 = -0.57721566490153286;
@@ -1102,6 +1131,7 @@ pub mod gamma {
         result
     }
 
+    #[must_use]
     pub fn inv_digamma(x: f64) -> f64 {
         if x.is_nan() {
             return f64::NAN;
@@ -1125,11 +1155,7 @@ pub mod gamma {
     // by inv_digamma, may consider extracting into a public
     // method
     fn signum(x: f64) -> f64 {
-        if x == 0.0 {
-            0.0
-        } else {
-            x.signum()
-        }
+        if x == 0.0 { 0.0 } else { x.signum() }
     }
 }
 
@@ -1151,6 +1177,7 @@ pub mod special {
     ///
     /// The original code can be found here:
     /// <https://github.com/statrs-dev/statrs/blob/master/src/prec.rs>
+    #[must_use]
     pub fn almost_eq(a: f64, b: f64, acc: f64) -> bool {
         if a.is_infinite() && b.is_infinite() {
             return a == b;
@@ -1158,6 +1185,7 @@ pub mod special {
         a.abs_diff_eq(&b, acc)
     }
 
+    #[must_use]
     pub fn two_point_correlation(fracc: &FractalConfig, u: f64, x: f64) -> f64 {
         match fracc.cutoff {
             FractalCutoff::Gaussian => {
@@ -1179,30 +1207,31 @@ pub mod special {
         todo!()
     }
 
+    #[must_use]
     pub fn confluent_hypergeometric(mut a: f64, b: f64, mut x: f64) -> f64 {
         let mut a0 = a;
         let x0 = x;
         let mut y0 = 0.0;
         let mut y1 = 0.0;
         let mut hg = 0.0;
-        if b == 0.0 || b == -(b.floor().abs()) {
+        if b == 0.0 || (b - -(b.floor().abs())).abs() < f64::EPSILON {
             hg = 1e300;
         } else if a == 0.0 || x == 0.0 {
             hg = 1.0;
-        } else if a == -1.0 {
+        } else if (a - -1.0).abs() < f64::EPSILON {
             hg = 1.0 - x / b;
-        } else if a == b {
+        } else if (a - b).abs() < f64::EPSILON {
             hg = x.exp();
-        } else if (a - b) == 1.0 {
+        } else if ((a - b) - 1.0).abs() < f64::EPSILON {
             hg = (1.0 + x / b) * x.exp();
-        } else if a == 1.0 && b == 2.0 {
+        } else if (a - 1.0).abs() < f64::EPSILON && (b - 2.0).abs() < f64::EPSILON {
             hg = (x.exp() - 1.0) * x.exp();
-        } else if a == a.floor() && a < 0.0 {
+        } else if (a - a.floor()).abs() < f64::EPSILON && a < 0.0 {
             let m = -a.floor() as i32;
             let mut r = 1.0;
             hg = 1.0;
             for k in 0..m {
-                let kf = k as f64;
+                let kf = f64::from(k);
                 r *= (a + kf) / kf / (b + kf) * x;
                 hg += r;
             }
@@ -1217,7 +1246,7 @@ pub mod special {
             x = x.abs();
         }
 
-        let nl = if a < 2.0 { 0 } else { 1 };
+        let nl = i32::from(a >= 2.0);
         let la = if a >= 2.0 { a as usize } else { 0 };
         let laf = la as f64;
         if a >= 2.0 {
@@ -1232,7 +1261,7 @@ pub mod special {
                 hg = 1.0;
                 let mut rg = 1.0;
                 for j in 0..500 {
-                    let jf = j as f64;
+                    let jf = f64::from(j);
                     rg *= (a + jf) / (jf * (b + jf)) * x;
                     hg += rg;
                     if (hg / rg).abs() < 1e-15 {
@@ -1249,7 +1278,7 @@ pub mod special {
                 let mut r1 = 1.0;
                 let mut r2 = 1.0;
                 for i in 0..8 {
-                    let ir = i as f64;
+                    let ir = f64::from(i);
                     r1 = -r1 * (a + ir) * (a - b + ir + 1.0) / (x * (ir + 1.0));
                     r2 = -r2 * (b - a) * (a - ir - 1.0) / (x * (ir + 1.0));
                     sum1 += r1;
@@ -1274,7 +1303,7 @@ pub mod special {
             }
         }
         if x0 < 0.0 {
-            hg *= x0.exp()
+            hg *= x0.exp();
         }
 
         hg
@@ -1285,6 +1314,7 @@ pub mod special {
     }
 }
 
+#[must_use]
 pub fn regrid_lnk_data(
     l0: &[f64],
     n0: &[f64],
@@ -1407,6 +1437,7 @@ pub fn prepare_sparse(kpc: &mut KappaConfig) {
 /// $$
 /// If both mn and sig are nonzero and the product is positive, we use
 /// the log-normal size distribution.  If not, we use the powerlaw.
+#[must_use]
 pub fn get_sizedis_moments(kpc: &KappaConfig) -> [f64; 3] {
     let ns = 1000;
 
@@ -1421,8 +1452,8 @@ pub fn get_sizedis_moments(kpc: &KappaConfig) -> [f64; 3] {
         let mut totn = 0.0;
         let mut ameans = [0.0; 3];
         for is in 0..ns {
-            let isf = is as f64;
-            let nsf = ns as f64;
+            let isf = f64::from(is);
+            let nsf = f64::from(ns);
             let r = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
             let nr = if (kpc.amean * kpc.asigma).abs() > 0.0 {
                 // normal or log-normal size distribution
@@ -1431,11 +1462,7 @@ pub fn get_sizedis_moments(kpc: &KappaConfig) -> [f64; 3] {
                 } else {
                     0.5 * ((r / kpc.amean).ln() / kpc.asigma).powi(2)
                 };
-                if expo > 99.0 {
-                    0.0
-                } else {
-                    -expo.exp()
-                }
+                if expo > 99.0 { 0.0 } else { -expo.exp() }
             } else {
                 r.powf(pow + 1.0)
             };

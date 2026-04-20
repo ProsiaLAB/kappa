@@ -2,6 +2,7 @@
 //! data structures for built-in materials in `kappa`.
 
 #![allow(clippy::approx_constant)]
+#![allow(clippy::doc_markdown)]
 
 pub const MATERIAL_KEYS: &[&str] = &[
     // Pyroxenes
@@ -66,6 +67,11 @@ pub const MATERIAL_KEYS: &[&str] = &[
     "ch3oh-c",
 ];
 
+/// Returns a reference to the [`StaticComponent`] corresponding to the given `key`.
+///
+/// # Panics
+/// Panics if the `key` does not correspond to any known component.
+#[must_use]
 pub fn get_lnk_data(key: &str) -> &StaticComponent {
     match key {
         "astrosil" => &ASTROSIL,
@@ -78,7 +84,7 @@ pub fn get_lnk_data(key: &str) -> &StaticComponent {
         // "pyr-mg60" => &PYR_MG60,
         // "pyr-mg50" => &PYR_MG50,
         // "pyr-mg40" => &PYR_MG40,
-        _ => panic!("No data for key {}", key),
+        _ => panic!("No data for key {key}"),
     }
 }
 
@@ -2626,7 +2632,7 @@ static K0_ASTROSIL: &[f64; 837] = &[
 
 /// Astronomical Silicate
 ///
-/// Material is basically MgFeSiO4, but constants are smoothed
+/// Material is basically ``MgFeSiO4``, but constants are smoothed
 /// and partially constructed.
 ///
 /// - Reference: Draine 2003, ApJ 598, 1017

@@ -1,3 +1,12 @@
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unreadable_literal)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::many_single_char_names)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::inconsistent_struct_constructor)]
+#![allow(clippy::cast_possible_wrap)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/ProsiaLAB/prosialab.github.io/refs/heads/main/images/prosialab.jpeg"
 )]

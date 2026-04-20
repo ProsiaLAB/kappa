@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use extensions::types::RVector;
 
 use crate::fractal::FractalCutoff;
@@ -45,6 +45,9 @@ pub enum AFactor {
 ///         --------------------------------------------------------
 ///
 ///
+/// # Errors
+/// - `NotEnoughMonomers`: The number of monomers in the aggregate is too small
+/// - `ExceedsMaxFractalDimension`: The fractal dimension exceeds the maximum value (3.0).
 pub fn get_geometric_cross_section_tazaki(
     method: &IntegrationMethod,
     afac: &AFactor,

@@ -55,6 +55,7 @@ impl Default for FractalConfig {
 }
 
 impl FractalConfig {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -145,6 +146,15 @@ pub enum FractalGeometry {
 /// - `iqcor = 3`: [Botet et al. (1995), JPhA, 28, 297](https://iopscience.iop.org/article/10.1088/0305-4470/28/2/008)
 /// - `iqgeo = 2`: [Okuzumi et al. (2009), ApJ, 707, 1247](https://iopscience.iop.org/article/10.1088/0004-637X/698/2/1122/meta)
 /// - `iqgeo = 3`: [Tazaki (2021), MNRAS, 504, 2811](https://ui.adsabs.harvard.edu/abs/2021MNRAS.504.2811T/abstract)
+///
+/// # Errors
+/// - `LowScatteringAngleResolution`: The number of angles for the scattering phase function is too small (<=1).
+/// - `NotEnoughMonomers`: The number of monomers in the aggregate is too small (<1).
+/// - `ExceedsMaxFractalDimension`: The fractal dimension exceeds the maximum value (3.0).
+/// - `IllegalMatrixElement`: The scattering matrix element is negative, which is unphysical.
+/// - `UnnormalizedPhaseFunction`: The phase function is not normalized, which is unphysical.
+/// - `MieOverflow`: The truncation order for the Lorenz-Mie coefficients exceeds the maximum value (150,000).
+#[allow(clippy::similar_names)]
 pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
     let k = 2.0 * PI / fracc.lmd; // Wavenumber
     let r_g = fracc.r0 * (fracc.pn / fracc.k0).powf(1.0 / fracc.df); // Radius of gyration of the aggregate
@@ -231,7 +241,7 @@ pub fn mean_scattering(fracc: &FractalConfig) -> Result<FractalResult> {
         let s34 = (s2[j] * s1[j].conj()).im;
         let sq = match fracc.cutoff {
             FractalCutoff::Gaussian => {
-                if fracc.df == 3.0 {
+                if (fracc.df - 3.0).abs() < f64::EPSILON {
                     if q * q * r_g * r_g >= eta {
                         0.0
                     } else {
@@ -498,9 +508,9 @@ fn structure_factor_integration(d: f64, q: f64, r_g: f64) -> f64 {
         s_q = 1.0;
     } else {
         s_q = 0.0;
-        let h = xmax / (2.0 * integration_grid_size as f64);
+        let h = xmax / (2.0 * f64::from(integration_grid_size));
         for i in 0..integration_grid_size - 2 {
-            let ir = i as f64;
+            let ir = f64::from(i);
             let x0 = 2.0 * ir * h;
             let x1 = (2.0 * ir + 1.0) * h;
             let x2 = (2.0 * ir + 2.0) * h;
@@ -573,7 +583,7 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(CVector, CVect
     for n in 0..nmx - 1 {
         let en = nmx - 1 - n;
         let enr = (nmx - 1 - n) as f64;
-        d[nmx - 1 - n] = (enr / y) - (1.0 / (d[en] + enr / y))
+        d[nmx - 1 - n] = (enr / y) - (1.0 / (d[en] + enr / y));
     }
 
     let mut psi_0 = x.cos();
@@ -612,7 +622,7 @@ fn lorenz_mie(x: f64, refrel: Complex64, nstop: usize) -> Result<(CVector, CVect
 fn renormalize(fracc: &FractalConfig, d: &CMatrix, dang: f64, nmax: usize) -> (CVector, CVector) {
     let amu = (0..fracc.nang)
         .map(|j| j as f64 * dang)
-        .map(|theta| theta.cos())
+        .map(f64::cos)
         .collect::<RVector>();
 
     let mut pi = RVector::zeros(fracc.nang);

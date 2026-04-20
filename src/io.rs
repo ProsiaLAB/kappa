@@ -12,6 +12,19 @@ use crate::opac::{Component, Particle, SizeDistribution};
 use crate::opac::{KappaConfig, KappaMethod};
 use crate::utils::get_sizedis_moments;
 
+/// Reads a `.lnk` file and extracts the size distribution information to create a `Component` struct.
+///
+/// # Errors
+/// - `FileNotFound`: The specified file does not exist or cannot be opened.
+/// - `InvalidFormat`: The file format is invalid, such as missing header, malformed data
+///   lines, or mismatched number of data lines compared to the specified size in the header.
+///
+/// # Panics
+/// - If the file cannot be opened or read.
+/// - If the header is missing or malformed.
+/// - If the data lines are missing or malformed.
+/// - If the number of data lines does not match the specified size in the header.
+/// - If the size distribution values are not positive (to accommodate log-log interpolation).
 pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     let file = std::fs::File::open(file)?;
     let reader = std::io::BufReader::new(file);
@@ -115,6 +128,17 @@ pub fn read_lnk_file(file: &str, rho_in: Option<f64>) -> Result<Component> {
     Ok(component)
 }
 
+/// Read the size distribution from a file and compute the fractal cross section.
+///
+/// # Panics
+/// - If the file cannot be opened or read.
+/// - If the header is missing or malformed.
+/// - If the data lines are missing or malformed.
+/// - If the number of data lines does not match the specified size in the header.
+/// - If the size distribution values are not positive (to accommodate log-log interpolation).
+///
+/// # Errors
+/// - If the file format is invalid, such as missing header, malformed data lines, or mismatched number of data lines compared to the specified size in the header.
 pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
     let file = std::fs::File::open(file)?;
     let reader = std::io::BufReader::new(file);
@@ -171,6 +195,17 @@ pub fn read_sizedis_file(file: &str) -> Result<(usize, [f64; 3])> {
     Ok((na, sdmns))
 }
 
+/// Read the wavelength grid from a file and return the number of wavelengths and the wavelength array.
+///
+/// # Panics
+/// - If the file cannot be opened or read.
+/// - If the header is missing or malformed.
+/// - If the data lines are missing or malformed.
+/// - If the number of data lines does not match the specified size in the header.
+/// - If the wavelength values are not positive (to accommodate log-log interpolation).
+///
+/// # Errors
+/// - If the file format is invalid, such as missing header, malformed data lines, or mismatched number of data lines compared to the specified size in the header.
 pub fn read_wavelength_grid(file: &str) -> Result<(usize, RVector)> {
     let file = std::fs::File::open(file)?;
     let reader = std::io::BufReader::new(file);
@@ -194,6 +229,13 @@ pub fn read_wavelength_grid(file: &str) -> Result<(usize, RVector)> {
     Ok((nlam, lam))
 }
 
+/// Write the size distribution to a file in the specified format.
+///
+/// # Panics
+/// - If the file cannot be created or written to.
+/// - If the size distribution values are not positive (to accommodate log-log interpolation).
+/// # Errors
+/// - If the file format is invalid, such as missing header or malformed data lines.
 pub fn write_sizedis_file(
     kpc: &KappaConfig,
     ns: usize,
@@ -201,7 +243,7 @@ pub fn write_sizedis_file(
     nr: &mut RVector,
     tot: f64,
 ) -> Result<()> {
-    let sdoutfile = kpc.outdir.to_owned() + "/kappa_sd.dat";
+    let sdoutfile = kpc.outdir.clone() + "/kappa_sd.dat";
     let file = File::create(sdoutfile).expect("Failed to open file");
     let mut writer = BufWriter::new(file);
 
@@ -234,7 +276,7 @@ pub fn write_sizedis_file(
         writer,
         "# No normalization is necessary, it is done automatically."
     )?;
-    writeln!(writer, "{}", ns)?;
+    writeln!(writer, "{ns}")?;
 
     for i in 0..ns {
         nr[i] /= tot;
@@ -243,8 +285,15 @@ pub fn write_sizedis_file(
     Ok(())
 }
 
+/// Write the wavelength grid to a file in the specified format.
+///
+/// # Panics
+/// - If the file cannot be created or written to.
+/// - If the wavelength values are not positive (to accommodate log-log interpolation).
+/// # Errors
+/// - If the file format is invalid, such as missing header or malformed data lines.
 pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
-    let lamoutfile = kpc.outdir.to_owned() + "/kappa_lam.dat";
+    let lamoutfile = kpc.outdir.clone() + "/kappa_lam.dat";
     let file = File::create(lamoutfile).expect("Failed to open file");
     let mut writer = BufWriter::new(file);
 
@@ -261,6 +310,13 @@ pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
     Ok(())
 }
 
+/// Write the computed opacities to a file in the specified format.
+///
+/// # Panics
+/// - If the file cannot be created or written to.
+/// - If the size distribution values are not positive (to accommodate log-log interpolation).
+/// # Errors
+/// - If the file format is invalid, such as missing header or malformed data lines.
 pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
     let (ext, _ml) = if kpc.for_radmc {
         unimplemented!()
@@ -268,7 +324,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
         ("dat", "F11 F12 F22 F33 F34 F44")
     };
 
-    let opacity_filename = format!("kappa_opacity.{}", ext);
+    let opacity_filename = format!("kappa_opacity.{ext}");
 
     let file_opacity = create_output_file(kpc, &opacity_filename)?;
     let mut writer = BufWriter::new(file_opacity);
@@ -278,8 +334,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
     let ameans = get_sizedis_moments(kpc);
     writeln!(
         writer,
-        "{}============================================================================",
-        cc
+        "{cc}============================================================================"
     )?;
     let a_vals = match kpc.sizedis {
         SizeDistribution::File => kpc.ameans_file,
@@ -306,7 +361,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
         KappaMethod::CDE => {
             writeln!(writer, "{} Method:   {:?}", cc, kpc.method)?;
         }
-        _ => {
+        KappaMethod::DHS => {
             writeln!(
                 writer,
                 "{} Method:   {:?}  fmax={:7.3}",
@@ -314,7 +369,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
             )?;
         }
     }
-    writeln!(writer, "{} Parameters:", cc)?;
+    writeln!(writer, "{cc} Parameters:")?;
     match kpc.sizedis {
         SizeDistribution::File => {
             // writeln!(
@@ -335,7 +390,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
                 cc, kpc.amin, kpc.amax, kpc.na, kpc.sizedis, kpc.amean, kpc.asigma
             )?;
         }
-        _ => {
+        SizeDistribution::Apow => {
             writeln!(
                 writer,
                 "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}     apow={:10.2}",
@@ -354,12 +409,11 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
         cc, kpc.pcore, kpc.pmantle, kpc.fmax, kpc.chop_angle
     )?;
 
-    writeln!(writer, "{} Composition:", cc)?;
-    writeln!(writer, "{}  Where   mfrac  rho   Material", cc)?;
+    writeln!(writer, "{cc} Composition:")?;
+    writeln!(writer, "{cc}  Where   mfrac  rho   Material")?;
     writeln!(
         writer,
-        "{}  -----   -----  ----  -----------------------------------------------------",
-        cc
+        "{cc}  -----   -----  ----  -----------------------------------------------------"
     )?;
 
     let total_mfrac: f64 = kpc.materials.iter().map(|m| m.mfrac).sum();
@@ -378,8 +432,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
     if kpc.rho_av > 0.0 {
         writeln!(
             writer,
-            "{}  - - -   - - -  -  -  - - - - - - - - - - - - - - - - - - - - - - - - - - -",
-            cc
+            "{cc}  - - -   - - -  -  -  - - - - - - - - - - - - - - - - - - - - - - - - - - -",
         )?;
         let label = if (kpc.pcore + kpc.pmantle) > 0.0 {
             "materials and vacuum"
@@ -400,14 +453,12 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
 
     writeln!(
         writer,
-        "{}----------------------------------------------------------------------------",
-        cc
+        "{cc}----------------------------------------------------------------------------"
     )?;
     // writeln!(writer, "{} Command: {}", cc, kpc.)?;
     writeln!(
         writer,
-        "{}============================================================================",
-        cc
+        "{cc}============================================================================"
     )?;
     // end of header
 
@@ -417,7 +468,7 @@ pub fn write_opacities(kpc: &KappaConfig, p: &Particle) -> Result<()> {
     } else {
         "# Standard output file, no scattering matrix"
     };
-    writeln!(writer, "{}", header_line)?;
+    writeln!(writer, "{header_line}")?;
     writeln!(writer, "#    iformat")?;
     writeln!(writer, "#    nlambda")?;
     writeln!(
