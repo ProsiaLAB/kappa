@@ -70,8 +70,6 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         MaterialKind::Core,
                     ) {
                         Ok(material) => {
-                            kpc.nmat += 1;
-                            kpc.ncore += 1;
                             kpc.materials.push(material);
                         }
                         Err(KappaError::ZeroMassFraction) => {
@@ -96,8 +94,6 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                         MaterialKind::Mantle,
                     ) {
                         Ok(material) => {
-                            kpc.nmat += 1;
-                            kpc.nmant += 1;
                             kpc.materials.push(material);
                         }
                         Err(KappaError::ZeroMassFraction) => {
@@ -266,12 +262,16 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     .ok_or_else(|| anyhow!("Missing argument: --porosity"))?
                     .parse::<f64>()
                     .map_err(|_| anyhow!("Invalid value type for argument: --porosity"))?;
-                kpc.pmantle = match args.next() {
-                    Some(arg) => arg.parse::<f64>().map_err(|_| {
-                        anyhow!("Invalid value type for argument for mantle porosity")
-                    })?,
-                    None => kpc.pcore, // Default is to use the same porosity
-                };
+                if let Some(next_arg) = args.peek() {
+                    if let Ok(pmantle_val) = next_arg.parse::<f64>() {
+                        kpc.pmantle = pmantle_val;
+                        args.next();
+                    } else {
+                        kpc.pmantle = kpc.pcore;
+                    }
+                } else {
+                    kpc.pmantle = kpc.pcore;
+                }
             }
             "--dhs" | "--fmax" | "--mie" => {
                 kpc.method = KappaMethod::DHS;

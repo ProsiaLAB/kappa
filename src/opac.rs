@@ -98,9 +98,6 @@ pub struct KappaConfig {
     pub chop_angle: f64,
     pub pcore: f64,
     pub pmantle: f64,
-    pub nmat: usize,
-    pub ncore: usize,
-    pub nmant: usize,
     pub rho_core: f64,
     pub rho_mantle: f64,
     pub rho_av: f64,
@@ -152,9 +149,6 @@ impl Default for KappaConfig {
             chop_angle: 0.0,
             pcore: 0.0,
             pmantle: 0.0,
-            nmat: 0,
-            ncore: 0,
-            nmant: 0,
             rho_core: 0.0,
             rho_mantle: 0.0,
             rho_av: 0.0,
@@ -186,6 +180,24 @@ impl Default for KappaConfig {
     }
 }
 
+impl KappaConfig {
+    #[must_use]
+    pub fn ncore(&self) -> usize {
+        self.materials
+            .iter()
+            .filter(|m| matches!(m.kind, MaterialKind::Core))
+            .count()
+    }
+
+    #[must_use]
+    pub fn nmant(&self) -> usize {
+        self.materials
+            .iter()
+            .filter(|m| matches!(m.kind, MaterialKind::Mantle))
+            .count()
+    }
+}
+
 pub trait SpecialConfigs {
     fn diana() -> Self;
     fn dsharp() -> Self;
@@ -195,8 +207,6 @@ pub trait SpecialConfigs {
 impl SpecialConfigs for KappaConfig {
     fn diana() -> Self {
         let mut kpc = KappaConfig {
-            nmat: 2,
-            ncore: 2,
             pcore: 0.25,
             ..Default::default()
         };
@@ -217,8 +227,6 @@ impl SpecialConfigs for KappaConfig {
 
     fn dsharp_no_ice() -> Self {
         let mut kpc = KappaConfig {
-            nmat: 3,
-            ncore: 3,
             ..Default::default()
         };
         kpc.materials.push(Material {
@@ -244,8 +252,6 @@ impl SpecialConfigs for KappaConfig {
 
     fn dsharp() -> Self {
         let mut kpc = KappaConfig::dsharp_no_ice();
-        kpc.nmat += 1;
-        kpc.ncore += 1;
         kpc.materials.push(Material {
             key: "h2o-w".into(),
             kind: MaterialKind::Core,
@@ -512,7 +518,7 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     }
 
     // Calculate average density of the whole grain
-    if kpc.nmant == 0 {
+    if kpc.nmant() == 0 {
         kpc.rho_av = kpc.rho_core;
     } else {
         kpc.rho_av =
@@ -571,10 +577,10 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
 /// Pre-process the inputs collected from the command-line
 fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
     // Materials
-    if kpc.nmat >= 20 {
+    if kpc.materials.len() >= 20 {
         return Err(anyhow!("TooManyMaterials"));
     }
-    if kpc.nmat == kpc.nmant && kpc.nmant > 0 {
+    if kpc.materials.len() == kpc.nmant() && kpc.nmant() > 0 {
         return Err(anyhow!("NoCoreMaterial"));
     }
 
@@ -670,8 +676,6 @@ fn prepare_inputs(kpc: &mut KappaConfig) -> Result<()> {
         _ => Ordering::Equal,
     });
 
-    kpc.nmat = kpc.ncore + kpc.nmant;
-
     // Make logarithmic wavelength grid
     match kpc.wavelength_kind {
         WavelengthKind::Other => {
@@ -759,27 +763,27 @@ fn compute_kappa(
     }
 
     // Copy the refractory index data for all materials into local arrays
-    let mut e1 = RMatrix::zeros((kpc.nlam, kpc.nmat));
-    let mut e2 = RMatrix::zeros((kpc.nlam, kpc.nmat));
-    for im in 0..kpc.nmat {
+    let mut e1 = RMatrix::zeros((kpc.nlam, kpc.materials.len()));
+    let mut e2 = RMatrix::zeros((kpc.nlam, kpc.materials.len()));
+    for im in 0..kpc.materials.len() {
         e1.slice_mut(s![.., im]).assign(&kpc.materials[im].re);
         e2.slice_mut(s![.., im]).assign(&kpc.materials[im].im);
     }
 
     let mut e1_blend = RVector::zeros(kpc.nlam);
     let mut e2_blend = RVector::zeros(kpc.nlam);
-    let mut e_in = CVector::zeros(kpc.ncore);
+    let mut e_in = CVector::zeros(kpc.ncore());
 
     // Mixing, for all wavelengths
     for il in 0..kpc.nlam {
         // Core
-        if kpc.nmat == 1 && kpc.pcore == 0.0 {
+        if kpc.materials.len() == 1 && kpc.pcore == 0.0 {
             // Solid core, single material, nothing to blend for the core
-            e1_blend[il] = e1[[0, il]];
-            e2_blend[il] = e2[[0, il]];
+            e1_blend[il] = e1[[il, 0]];
+            e2_blend[il] = e2[[il, 0]];
         } else {
             // Blend the core materials
-            for im in 0..kpc.ncore {
+            for im in 0..kpc.ncore() {
                 e_in[im] = Complex::new(e1[[il, im]], e2[[il, im]]);
             }
             let e_out = bruggeman_blend(
@@ -793,19 +797,19 @@ fn compute_kappa(
             e1_blend[il] = e_out.re;
             e2_blend[il] = e_out.im;
         }
-
+        // dbg!(&e1_blend[il], &e2_blend[il]);
         // Mantle
-        if kpc.nmant > 0 {
+        if kpc.nmant() > 0 {
             // We do have a mantle to add
-            if (kpc.nmant == 1) && (kpc.pmantle == 0.0) {
+            if (kpc.nmant() == 1) && (kpc.pmantle == 0.0) {
                 // No Blending needed inside the mantle - just copy e1 and e2
                 // Since it is only one material, we know it is index nm
-                e1_blend[il] = e1[[kpc.nmat, il]];
-                e2_blend[il] = e2[[kpc.nmat, il]];
+                e1_blend[il] = e1[[kpc.materials.len(), il]];
+                e2_blend[il] = e2[[kpc.materials.len(), il]];
             } else {
                 // Blend the mantle materials
-                for im in 0..kpc.nmant {
-                    e_in[im] = Complex::new(e1[[il, im + kpc.ncore]], e2[[il, im + kpc.ncore]]);
+                for im in 0..kpc.nmant() {
+                    e_in[im] = Complex::new(e1[[il, im + kpc.ncore()]], e2[[il, im + kpc.ncore()]]);
                 }
                 let e_out = bruggeman_blend(
                     &kpc.materials
@@ -818,6 +822,7 @@ fn compute_kappa(
                 e1mantle[il] = e_out.re;
                 e1mantle[il] = e_out.im;
             }
+            // dbg!(&e1_blend[il], &e2_blend[il]);
             let (e1mg, e2mg) = maxwell_garnet_blend(
                 Complex::new(e1_blend[il], e2_blend[il]), // Core
                 Complex::new(e1mantle[il], e2mantle[il]), // Mantle
@@ -827,6 +832,8 @@ fn compute_kappa(
             e2_blend[il] = e2mg;
         }
     }
+    // dbg!(&e1_blend, &e2_blend);
+    // exit(1);
 
     if kpc.blend_only {
         // Write .lnk file
