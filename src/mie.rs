@@ -13,6 +13,7 @@ use anyhow::anyhow;
 use extensions::types::{CVector, RMatrix, RVector};
 use num_complex::{Complex, Complex64, ComplexFloat};
 
+#[derive(Debug)]
 pub struct MieConfig {
     pub nangle: usize,
     pub delta: f64,
@@ -24,6 +25,7 @@ pub struct MieConfig {
     pub rad: f64,
 }
 
+#[derive(Debug)]
 pub struct MieResult {
     pub u: RVector,
     pub wth: RVector,
@@ -84,7 +86,7 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
         f_34: RVector::zeros(mie_cfg.nangle),
     };
 
-    let mut fac_90 = 0.0;
+    let mut fac_90 = 1.0;
     let ci = Complex::new(0.0, 1.0);
 
     let symmetric = test_symmetry(mie_cfg.thmin, mie_cfg.thmax, mie_cfg.step);
@@ -102,7 +104,7 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
 
     let sw = nwithr * w;
     let x = rtox * r;
-    let nmax = (x + 4.05 * x.powf(1.0 / 3.0) + 2.0) as usize;
+    let nmax = (x + 4.05 * x.powf(1.0 / 3.0) + 20.0) as usize;
     let nfi = nmax + 60;
     let zabs = x * m.abs();
     let nd = (zabs + 4.05 * zabs.powf(1.0 / 3.0) + 70.0) as usize;
@@ -116,11 +118,11 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
     let (an, bn) = anbn(m, x, &fi, &chi, &d, nmax);
 
     if nmax > nfac {
-        for n in nfac + 1..nmax {
-            let nf = n as f64;
+        for n in nfac..nmax {
+            let nf = n as f64 + 1.0;
             facf[n] = (2.0 * nf + 1.0) / (nf * (nf + 1.0));
             facb[n] = facf[n];
-            if n % 2 == 1 {
+            if n % 2 != 1 {
                 facb[n] = -facb[n];
             }
         }
@@ -133,16 +135,18 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
 
     for n in 0..nmax {
         let nf = n as f64;
-        aux = (2.0 * nf + 1.0) * (an[n].norm() + bn[n].norm()).abs();
+        let afac = an[n] * an[n].conj();
+        let bfac = bn[n] * bn[n].conj();
+        aux = (2.0 * (nf + 1.0) + 1.0) * (afac + bfac).abs();
         c_sca_sum += aux;
-        c_ext_sum += (2.0 * nf + 1.0) * (an[n] + bn[n]).re;
+        c_ext_sum += (2.0 * (nf + 1.0) + 1.0) * (an[n] + bn[n]).re;
         if aux < mie_cfg.delta {
             nstop = n;
             break;
         }
     }
 
-    let nfou = nstop;
+    let nfou = nstop + 1;
 
     if nfou > nmax {
         eprintln!("WARNING: `mie` sum not converged for scattering cross-section");
@@ -173,7 +177,8 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
     }
 
     mie_result.numpar += sw;
-    mie_result.g += sw * r.powi(3);
+    mie_result.g += sw * r.powi(2);
+    mie_result.reff += sw * r.powi(3);
 
     let mut nhalf: usize = 0;
     if symmetric {
@@ -266,10 +271,10 @@ fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult>
     mie_result.xeff = rtox * mie_result.reff;
 
     for i in 0..mie_cfg.nangle {
-        mie_result.f_11[i] = mie_result.f_0[[0, mie_cfg.nangle - 1]];
-        mie_result.f_12[i] = mie_result.f_0[[1, mie_cfg.nangle - 1]];
-        mie_result.f_33[i] = mie_result.f_0[[2, mie_cfg.nangle - 1]];
-        mie_result.f_34[i] = mie_result.f_0[[3, mie_cfg.nangle - 1]];
+        mie_result.f_11[i] = mie_result.f_0[[0, mie_cfg.nangle - i - 1]];
+        mie_result.f_12[i] = mie_result.f_0[[1, mie_cfg.nangle - i - 1]];
+        mie_result.f_33[i] = mie_result.f_0[[2, mie_cfg.nangle - i - 1]];
+        mie_result.f_34[i] = mie_result.f_0[[3, mie_cfg.nangle - i - 1]];
     }
 
     Ok(mie_result)
@@ -303,31 +308,31 @@ fn fichid(
 
     for n in (0..nchi).rev() {
         let nf = n as f64;
-        psi[n] = 1.0 / (2.0 * nf + 1.0) / x - psi[n + 1];
+        psi[n] = 1.0 / ((2.0 * nf + 1.0) / x - psi[n + 1]);
     }
 
-    for n in (0..nd).rev() {
+    for n in (0..nd - 1).rev() {
         let nf = n as f64;
-        let zn_1 = (nf + 1.0) * perz;
-        d[n] = zn_1 - 1.0 / (d[n] + zn_1);
+        let zn_1 = (nf + 2.0) * perz;
+        d[n] = zn_1 - 1.0 / (d[n + 1] + zn_1);
     }
 
     psi[0] = sinx;
     let psi_1 = psi[0] * perx - cosx;
     if psi_1.abs() > 1e-4 {
         psi[1] = psi_1;
-        for n in 2..nmax {
+        for n in 2..=nmax {
             psi[n] *= psi[n - 1];
         }
     } else {
-        for n in 1..nmax {
+        for n in 1..=nmax {
             psi[n] *= psi[n - 1];
         }
     }
 
     chi[0] = cosx;
     chi[1] = chi[0] * perx + sinx;
-    for n in 1..nmax - 1 {
+    for n in 1..nmax {
         let nf = n as f64;
         chi[n + 1] = (2.0 * nf + 1.0) * chi[n] * perx - chi[n - 1];
     }
@@ -352,9 +357,9 @@ fn anbn(
 
     for n in 0..nmax {
         let nf = n as f64;
-        let zn = Complex::new(psi[n], chi[n]);
+        let zn = Complex::new(psi[n + 1], chi[n + 1]);
         let znm_1 = Complex::new(psi[n], chi[n]);
-        let xn = nf * perx;
+        let xn = (nf + 1.0) * perx;
         let save_a = d[n] * perm + xn;
         an[n] = (save_a * psi[n + 1] - psi[n]) / (save_a * zn - znm_1);
         let save_b = d[n] * m + xn;
@@ -375,11 +380,11 @@ fn pitau(u: f64, nmax: usize) -> (RVector, RVector) {
     tau[0] = u;
     tau[1] = 2.0 * delta - 1.0;
 
-    for n in 2..(nmax - 1) {
+    for n in 1..(nmax - 1) {
         let nf = n as f64;
-        pi[n + 1] = (nf + 1.0) / (nf) * delta + u * pi[n];
+        pi[n + 1] = (nf + 2.0) / (nf + 1.0) * delta + u * pi[n];
         delta = u * pi[n + 1] - pi[n];
-        tau[n + 1] = (nf + 1.0) * delta - pi[n];
+        tau[n + 1] = (nf + 2.0) * delta - pi[n];
     }
 
     (pi, tau)

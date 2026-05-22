@@ -1336,13 +1336,13 @@ pub fn regrid_lnk_data(
     let mut e2: RVector = Array1::zeros(n);
     let mut i = 0;
 
-    while x0 >= lam[i] {
+    while i < n && x0 >= lam[i] {
         e1[i] = y01;
         e2[i] = y02;
         i += 1;
         if i >= n {
             // All requested lambda are before first data point
-            break;
+            return (e1, e2);
         }
     }
     // Main interpolation loop
@@ -1351,7 +1351,7 @@ pub fn regrid_lnk_data(
         let y11 = n0[i0];
         let y12 = k0[i0];
 
-        while lam[i] <= x1 && lam[i] > x0 {
+        while i < n && lam[i] <= x1 && lam[i] > x0 {
             // log-log interpolation between points
             let lgy11 = y11.log10();
             let lgy12 = y12.log10();
@@ -1366,7 +1366,7 @@ pub fn regrid_lnk_data(
 
             i += 1;
             if i >= n {
-                break;
+                return (e1, e2);
             }
         }
 

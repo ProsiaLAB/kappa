@@ -26,6 +26,7 @@ use crate::dhs::toon_ackerman_1981;
 use crate::fractal::FractalConfig;
 use crate::fractal::mean_scattering;
 use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
+use crate::io::read_lnk_file;
 use crate::io::{write_opacities, write_sizedis_file, write_wavelength_grid};
 use crate::mie::MieConfig;
 use crate::mie::de_rooij_1984;
@@ -101,6 +102,7 @@ pub struct KappaConfig {
     pub rho_core: f64,
     pub rho_mantle: f64,
     pub rho_av: f64,
+    pub total_mfrac: f64,
     pub tot_mfrac_core: f64,
     pub tot_vfrac_core: f64,
     pub tot_mfrac_mantle: f64,
@@ -152,6 +154,7 @@ impl Default for KappaConfig {
             rho_core: 0.0,
             rho_mantle: 0.0,
             rho_av: 0.0,
+            total_mfrac: 0.0,
             tot_mfrac_core: 0.0,
             tot_vfrac_core: 0.0,
             tot_mfrac_mantle: 0.0,
@@ -262,6 +265,7 @@ impl SpecialConfigs for KappaConfig {
     }
 }
 
+#[derive(Debug)]
 struct KappaState<'a> {
     ns: usize,
     nf: usize,
@@ -453,7 +457,16 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     for material in &mut kpc.materials {
         match material.cmd {
             RefractiveIndexKind::CmdLine => {}
-            RefractiveIndexKind::File | RefractiveIndexKind::Other => {
+            RefractiveIndexKind::File => {
+                let component = read_lnk_file(&material.key, None)?;
+                let l0_slice: &[f64] = &component.l0.to_vec();
+                let n0_slice: &[f64] = &component.n0.to_vec();
+                let k0_slice: &[f64] = &component.k0.to_vec();
+                (material.re, material.im) =
+                    regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
+                material.rho = component.rho;
+            }
+            RefractiveIndexKind::Other => {
                 let component = get_lnk_data(&material.key);
                 (material.re, material.im) =
                     regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
@@ -463,20 +476,20 @@ pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
     }
 
     // Normalize the mass fractions
-    (kpc.tot_mfrac_core, kpc.tot_mfrac_mantle) =
+    (kpc.total_mfrac, kpc.tot_mfrac_core, kpc.tot_mfrac_mantle) =
         kpc.materials
             .iter()
-            .fold((0.0, 0.0), |(tot_core, tot_mantle), m| match m.kind {
-                MaterialKind::Core => (tot_core + m.mfrac, tot_mantle),
-                MaterialKind::Mantle => (tot_core, tot_mantle + m.mfrac),
+            .fold((0.0, 0.0, 0.0), |(tot, tot_core, tot_mantle), m| {
+                match m.kind {
+                    MaterialKind::Core => (tot + m.mfrac, tot_core + m.mfrac, tot_mantle),
+                    MaterialKind::Mantle => (tot + m.mfrac, tot_core, tot_mantle + m.mfrac),
+                }
             });
-    kpc.materials.iter_mut().for_each(|m| match m.kind {
-        MaterialKind::Core => {
-            m.mfrac /= kpc.tot_mfrac_core;
-        }
-        MaterialKind::Mantle => {
-            m.mfrac /= kpc.tot_mfrac_mantle;
-        }
+
+    kpc.tot_mfrac_core /= kpc.total_mfrac;
+    kpc.tot_mfrac_mantle /= kpc.total_mfrac;
+    kpc.materials.iter_mut().for_each(|m| {
+        m.mfrac /= kpc.total_mfrac;
     });
     kpc.materials.iter_mut().for_each(|m| {
         m.vfrac = m.mfrac / m.rho;
@@ -712,7 +725,7 @@ fn compute_kappa(
     let mut nr = RVector::zeros(ns);
 
     let mut e1mantle = RVector::zeros(kpc.nlam);
-    let e2mantle = RVector::zeros(kpc.nlam);
+    let mut e2mantle = RVector::zeros(kpc.nlam);
 
     let aminlog = amin.log10();
     let amaxlog = amax.log10();
@@ -804,8 +817,8 @@ fn compute_kappa(
             if (kpc.nmant() == 1) && (kpc.pmantle == 0.0) {
                 // No Blending needed inside the mantle - just copy e1 and e2
                 // Since it is only one material, we know it is index nm
-                e1_blend[il] = e1[[kpc.materials.len(), il]];
-                e2_blend[il] = e2[[kpc.materials.len(), il]];
+                e1mantle[il] = e1[[il, kpc.materials.len() - 1]];
+                e2mantle[il] = e2[[il, kpc.materials.len() - 1]];
             } else {
                 // Blend the mantle materials
                 for im in 0..kpc.nmant() {
@@ -820,9 +833,8 @@ fn compute_kappa(
                     &e_in.to_vec(),
                 )?;
                 e1mantle[il] = e_out.re;
-                e1mantle[il] = e_out.im;
+                e2mantle[il] = e_out.im;
             }
-            // dbg!(&e1_blend[il], &e2_blend[il]);
             let (e1mg, e2mg) = maxwell_garnet_blend(
                 Complex::new(e1_blend[il], e2_blend[il]), // Core
                 Complex::new(e1mantle[il], e2mantle[il]), // Mantle
@@ -1024,7 +1036,11 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
             KappaMethod::DHS => {
                 let m_in = Complex::new(1.0, 0.0);
                 for ifn in 0..kps.nf {
-                    let mut rad: f64;
+                    let mut rad: f64 = r1;
+                    let mut spheres = false;
+                    let mut too_large = false;
+                    let mut scat_mie: f64 = 0.0;
+                    let mut ext_mie: f64 = 0.0;
                     if kps.f[ifn] == 0.0 {
                         spheres = true;
                     } else if r1 * wvno > kpc.xlim {
@@ -1044,13 +1060,10 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                             numang: kpc.nang / 2,
                             max_angle: kpc.nang,
                         };
-                        let (scat_mie, mut ext_mie) = match toon_ackerman_1981(&dhs_cfg) {
+
+                        match toon_ackerman_1981(&dhs_cfg) {
                             Ok(dhs_result) => {
-                                if spheres {
-                                    rad = r1;
-                                } else if too_large {
-                                    rad = r1 / (1.0 - kps.f[kps.ifmn]).powf(1.0 / 3.0);
-                                }
+                                // DHS succeeded — no rad reassignment here, that was a bug
                                 let ext_mie_factor = dhs_result.q_ext * PI * rad.powi(2);
                                 let scat_mie_factor = dhs_result.q_sca * PI * rad.powi(2);
                                 let factor = 2.0 * PI / scat_mie_factor / wvno.powi(2);
@@ -1061,86 +1074,101 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                                         (dhs_result.m1[[j, 0]] - dhs_result.m0[[j, 0]]) * factor;
                                     mie_f22[j] =
                                         (dhs_result.m1[[j, 0]] + dhs_result.m0[[j, 0]]) * factor;
-                                    mie_f33[j] = (dhs_result.s10[[j, 0]]) * factor;
-                                    mie_f34[j] = (-dhs_result.d10[[j, 0]]) * factor;
-                                    mie_f44[j] = (dhs_result.s10[[j, 0]]) * factor;
-                                    // Here we use the assumption that the grid is regular.  An adapted
-                                    // grid is not possible if it is not symmetric around pi/2.
+                                    mie_f33[j] = dhs_result.s10[[j, 0]] * factor;
+                                    mie_f34[j] = -dhs_result.d10[[j, 0]] * factor;
+                                    mie_f44[j] = dhs_result.s10[[j, 0]] * factor;
                                     mie_f11[kpc.nang - j - 1] =
                                         (dhs_result.m1[[j, 1]] + dhs_result.m0[[j, 1]]) * factor;
                                     mie_f12[kpc.nang - j - 1] =
                                         (dhs_result.m1[[j, 1]] - dhs_result.m0[[j, 1]]) * factor;
                                     mie_f22[kpc.nang - j - 1] =
                                         (dhs_result.m1[[j, 1]] + dhs_result.m0[[j, 1]]) * factor;
-                                    mie_f33[kpc.nang - j - 1] = (dhs_result.s10[[j, 1]]) * factor;
-                                    mie_f34[kpc.nang - j - 1] = (-dhs_result.d10[[j, 1]]) * factor;
-                                    mie_f44[kpc.nang - j - 1] = (dhs_result.s10[[j, 1]]) * factor;
+                                    mie_f33[kpc.nang - j - 1] = dhs_result.s10[[j, 1]] * factor;
+                                    mie_f34[kpc.nang - j - 1] = -dhs_result.d10[[j, 1]] * factor;
+                                    mie_f44[kpc.nang - j - 1] = dhs_result.s10[[j, 1]] * factor;
                                 }
-                                // exit(0);
-                                (scat_mie_factor, ext_mie_factor)
+                                scat_mie = scat_mie_factor;
+                                ext_mie = ext_mie_factor;
                             }
                             Err(e) => {
                                 println!("DHS error: {e:?}");
+                                // err==1: use compact sphere rad=r1
                                 rad = r1;
-                                let rmie = rad;
-                                let lmie = kpc.lam[ilam];
-                                let e1_mie = kps.e1_blend[ilam];
-                                let e2_mie = kps.e2_blend[ilam];
-
-                                let thmin = 180.0 * (1.0 - 0.5) / nangf;
-                                let thmax = 180.0 * (nangf - 0.5) / nangf;
-                                let radius = if rmie / lmie < 5000.0 {
-                                    rmie
-                                } else {
-                                    rmie / 5000.0
-                                };
-                                let miec = MieConfig {
-                                    nangle: kpc.nang,
-                                    delta: 1e-8,
-                                    thmin,
-                                    thmax,
-                                    step: (thmax - thmin) / (nangf - 1.0),
-                                    lam: lmie,
-                                    cmm: Complex::new(e1_mie, e2_mie),
-                                    rad: radius,
-                                };
-                                let mie_result = de_rooij_1984(&miec)?;
-                                let ext_mie = mie_result.c_ext;
-                                let scat_mie = mie_result.c_sca;
-                                (scat_mie, ext_mie)
+                                spheres = true; // reuse the Mie path below
                             }
-                        };
-
-                        let mut tot = 0.0;
-                        let mut tot2 = 0.0;
-                        for j in 0..kpc.nang {
-                            let jf = j as f64;
-                            tot += mie_f11[j] * (PI * (jf + 0.5) / nangf).sin();
-                            tot2 += (PI * (jf + 0.5) / nangf).sin();
                         }
-                        mie_f11[0] += (tot2 - tot) / (PI * 0.5 / nangf).sin();
-                        if mie_f11[0] < 0.0 {
-                            mie_f11[0] = 0.0;
-                        }
-                        for j in 0..kpc.nang {
-                            f11[j] += kps.wf[ifn] * kps.nr[is] * mie_f11[j] * scat_mie;
-                            f12[j] += kps.wf[ifn] * kps.nr[is] * mie_f12[j] * scat_mie;
-                            f22[j] += kps.wf[ifn] * kps.nr[is] * mie_f22[j] * scat_mie;
-                            f33[j] += kps.wf[ifn] * kps.nr[is] * mie_f33[j] * scat_mie;
-                            f34[j] += kps.wf[ifn] * kps.nr[is] * mie_f34[j] * scat_mie;
-                            f44[j] += kps.wf[ifn] * kps.nr[is] * mie_f44[j] * scat_mie;
-                        }
-                        let mut camie = ext_mie - scat_mie;
-                        if camie < ext_mie * qabsdqext_min {
-                            camie *= 1e-4;
-                            ext_mie = camie + scat_mie;
-                        }
-                        cext += kps.wf[ifn] * kps.nr[is] * ext_mie;
-                        csca += kps.wf[ifn] * kps.nr[is] * scat_mie;
-                        cabs += kps.wf[ifn] * kps.nr[is] * camie;
-                        mass += kps.wf[ifn] * kps.nr[is] * kpc.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
-                        vol += kps.wf[ifn] * kps.nr[is] * 4.0 * PI * r1.powi(3) / 3.0;
                     }
+
+                    // Mie fallback for: spheres, too_large, or DHS error (spheres flag set on err)
+                    if spheres || too_large {
+                        if too_large {
+                            rad = r1 / (1.0 - kps.f[kps.ifmn]).powf(1.0 / 3.0);
+                        } else {
+                            rad = r1;
+                        }
+                        let lmie = kpc.lam[ilam];
+                        let e1_mie = kps.e1_blend[ilam];
+                        let e2_mie = kps.e2_blend[ilam];
+                        let thmin = 180.0 * 0.5 / nangf;
+                        let thmax = 180.0 * (nangf - 0.5) / nangf;
+                        let radius = if rad / lmie < 5000.0 {
+                            rad
+                        } else {
+                            rad / 5000.0
+                        };
+                        let miec = MieConfig {
+                            nangle: kpc.nang,
+                            delta: 1e-8,
+                            thmin,
+                            thmax,
+                            step: (thmax - thmin) / (nangf - 1.0),
+                            lam: lmie,
+                            cmm: Complex::new(e1_mie, e2_mie),
+                            rad: radius,
+                        };
+                        let mie_result = de_rooij_1984(&miec)?;
+                        scat_mie = mie_result.c_sca;
+                        ext_mie = mie_result.c_ext;
+                        // populate matrix from mie_result (adjust field names as needed)
+                        for j in 0..kpc.nang {
+                            mie_f11[j] = mie_result.f_11[j];
+                            mie_f12[j] = mie_result.f_12[j];
+                            mie_f22[j] = mie_result.f_11[j];
+                            mie_f33[j] = mie_result.f_33[j];
+                            mie_f34[j] = mie_result.f_34[j];
+                            mie_f44[j] = mie_result.f_33[j];
+                        }
+                    }
+
+                    let mut tot = 0.0;
+                    let mut tot2 = 0.0;
+                    for j in 0..kpc.nang {
+                        let jf = j as f64;
+                        tot += mie_f11[j] * (PI * (jf + 0.5) / nangf).sin();
+                        tot2 += (PI * (jf + 0.5) / nangf).sin();
+                    }
+                    mie_f11[0] += (tot2 - tot) / (PI * 0.5 / nangf).sin();
+                    if mie_f11[0] < 0.0 {
+                        mie_f11[0] = 0.0;
+                    }
+                    for j in 0..kpc.nang {
+                        f11[j] += kps.wf[ifn] * kps.nr[is] * mie_f11[j] * scat_mie;
+                        f12[j] += kps.wf[ifn] * kps.nr[is] * mie_f12[j] * scat_mie;
+                        f22[j] += kps.wf[ifn] * kps.nr[is] * mie_f22[j] * scat_mie;
+                        f33[j] += kps.wf[ifn] * kps.nr[is] * mie_f33[j] * scat_mie;
+                        f34[j] += kps.wf[ifn] * kps.nr[is] * mie_f34[j] * scat_mie;
+                        f44[j] += kps.wf[ifn] * kps.nr[is] * mie_f44[j] * scat_mie;
+                    }
+                    let mut camie = ext_mie - scat_mie;
+                    if camie < ext_mie * qabsdqext_min {
+                        camie = ext_mie * 1e-4;
+                        ext_mie = camie + scat_mie;
+                    }
+                    cext += kps.wf[ifn] * kps.nr[is] * ext_mie;
+                    csca += kps.wf[ifn] * kps.nr[is] * scat_mie;
+                    cabs += kps.wf[ifn] * kps.nr[is] * camie;
+                    mass += kps.wf[ifn] * kps.nr[is] * kpc.rho_av * 4.0 * PI * r1.powi(3) / 3.0;
+                    vol += kps.wf[ifn] * kps.nr[is] * 4.0 * PI * r1.powi(3) / 3.0;
                 }
             }
             KappaMethod::MMF => {
