@@ -624,42 +624,19 @@ fn process_material<I>(
 where
     I: Iterator<Item = String>,
 {
-    let mut material = Material::default();
+    let mut material = Material {
+        kind: material_type,
+        ..Default::default()
+    };
+
     if MATERIAL_KEYS.contains(&material_arg) {
         material.key = material_arg.to_string();
-        material.kind = material_type;
-        // let component = get_lnk_data(&material.key);
-        // (material.re, material.im) =
-        //     regrid_lnk_data(component.l0, component.n0, component.k0, &kpc.lam, true);
-        // See if there is a next argument
-        // If there is, it should be a mass fraction
-        if let Some(next_arg) = args.peek() {
-            // If it is a number, it is a mass fraction
-            if let Ok(mfrac) = next_arg.parse::<f64>() {
-                material.mfrac = if mfrac == 0.0 {
-                    return Err(KappaError::ZeroMassFraction);
-                } else {
-                    mfrac
-                };
-                args.next();
-                Ok(material)
-            } else {
-                // Next argument is not a number, so it is a material type
-                material.mfrac = 1.0; // Default is to use 100% of the mass
-                Ok(material)
-            }
-        } else {
-            // This material has a default mass fraction of 100%
-            material.mfrac = 1.0;
-            // Move on to the next material
-            Ok(material)
-        }
     } else if Path::new(material_arg)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("lnk"))
     {
         // Positional argument is a file path
-        // Placeholder for now
+        material.key = material_arg.to_string();
         let rho_in = Option::<f64>::None;
         let component = read_lnk_file(material_arg, rho_in)?;
         let l0_slice: &[f64] = &component.l0.to_vec();
@@ -668,7 +645,6 @@ where
         (material.re, material.im) = regrid_lnk_data(l0_slice, n0_slice, k0_slice, &kpc.lam, true);
         material.rho = component.rho;
         material.cmd = RefractiveIndexKind::File;
-        Ok(material)
     } else if material_arg.contains(':') {
         // This is n:k:rho format
         material.cmd = RefractiveIndexKind::CmdLine;
@@ -687,16 +663,32 @@ where
                 eprintln!("Density must be positive");
                 return Err(anyhow!("Density must be positive").into());
             }
-            material.kind = material_type;
             material.re = material.n * RVector::ones(kpc.nlam);
             material.im = material.k * RVector::ones(kpc.nlam);
-            Ok(material)
         } else {
-            Err(anyhow!("Invalid material format").into())
+            return Err(anyhow!("Invalid material format").into());
         }
     } else {
-        Err(anyhow!("Invalid material key").into())
+        return Err(anyhow!("Invalid material key").into());
     }
+
+    // Uniformly check and parse the mass fraction for all material formats
+    if let Some(next_arg) = args.peek() {
+        if let Ok(mfrac) = next_arg.parse::<f64>() {
+            material.mfrac = if mfrac == 0.0 {
+                return Err(KappaError::ZeroMassFraction);
+            } else {
+                mfrac
+            };
+            args.next(); // Consume the mass fraction argument
+        } else {
+            material.mfrac = 1.0;
+        }
+    } else {
+        material.mfrac = 1.0;
+    }
+
+    Ok(material)
 }
 
 fn print_short_help() {
