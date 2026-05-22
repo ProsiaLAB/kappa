@@ -1030,13 +1030,11 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
     let mut mie_f44 = RVector::zeros(kpc.nang);
     for is in 0..kps.ns {
         let r1 = kps.r[is];
-        let mut spheres = false;
-        let mut too_large = false;
         match kpc.method {
             KappaMethod::DHS => {
                 let m_in = Complex::new(1.0, 0.0);
                 for ifn in 0..kps.nf {
-                    let mut rad: f64 = r1;
+                    let mut rad: f64;
                     let mut spheres = false;
                     let mut too_large = false;
                     let mut scat_mie: f64 = 0.0;
@@ -1063,7 +1061,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
 
                         match toon_ackerman_1981(&dhs_cfg) {
                             Ok(dhs_result) => {
-                                // DHS succeeded — no rad reassignment here, that was a bug
+                                // DHS succeeded
                                 let ext_mie_factor = dhs_result.q_ext * PI * rad.powi(2);
                                 let scat_mie_factor = dhs_result.q_sca * PI * rad.powi(2);
                                 let factor = 2.0 * PI / scat_mie_factor / wvno.powi(2);
@@ -1093,7 +1091,7 @@ fn over_wavelengths(ilam: usize, kps: &KappaState, kpc: &KappaConfig) -> Result<
                             Err(e) => {
                                 println!("DHS error: {e:?}");
                                 // err==1: use compact sphere rad=r1
-                                rad = r1;
+                                // rad = r1;
                                 spheres = true; // reuse the Mie path below
                             }
                         }
