@@ -2,18 +2,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Read the data (optool)
-optool_data = np.loadtxt(
-    "/Users/kmaitreys/Documents/software/optool/dustkappa.dat", skiprows=24
-)
+with open("/Users/kmaitreys/Software/optool/dustkappa.dat") as f:
+    lines = [line for line in f if not line.startswith("#")]
+
+# skip first 2 non-comment lines
+optool_data = np.loadtxt(lines[2:])
 optool_lam = optool_data[:, 0]
 optool_kabs = optool_data[:, 1]
 optool_ksca = optool_data[:, 2]
 optool_g = optool_data[:, 3]
 
 # Read the data (kappa)
-kappa_data = np.loadtxt(
-    "/Users/kmaitreys/Documents/ProsiaLAB/kappa/output/kappa_opacity.dat", skiprows=23
-)
+with open("/Users/kmaitreys/Projects/ProsiaLAB/kappa/output/kappa_opacity.dat") as f:
+    lines = [line for line in f if not line.startswith("#")]
+
+# skip first 2 non-comment lines
+kappa_data = np.loadtxt(lines[2:])
 kappa_lam = kappa_data[:, 0]
 kappa_kabs = kappa_data[:, 1]
 kappa_ksca = kappa_data[:, 2]
