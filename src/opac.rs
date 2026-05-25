@@ -65,7 +65,7 @@ impl Default for Material {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, Clone))]
 #[derive(Debug, PartialEq)]
 pub enum MaterialKind {
     Core,
@@ -319,6 +319,7 @@ impl SizeDistribution {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, Clone))]
 #[derive(Debug)]
 pub enum KappaMethod {
     DHS,
