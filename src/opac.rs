@@ -65,6 +65,7 @@ impl Default for Material {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
 pub enum MaterialKind {
     Core,
