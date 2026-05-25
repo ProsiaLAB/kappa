@@ -11,9 +11,9 @@ use std::f64::consts::PI;
 
 use anyhow::anyhow;
 use anyhow::{Context, Result};
-use extensions::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
 use ndarray::s;
 use num_complex::{Complex, Complex64};
+use prosia_extensions::types::{CMatrix, CTensor, CVector, RMatrix, RVector};
 
 use crate::geofractal::get_geometric_cross_section_tazaki;
 use crate::geofractal::{AFactor, IntegrationMethod};

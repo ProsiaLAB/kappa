@@ -13,9 +13,9 @@ use std::f64::consts::PI;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use extensions::types::{CMatrix, CVector, RMatrix, RVector};
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
+use prosia_extensions::types::{CMatrix, CVector, RMatrix, RVector};
 
 #[derive(Debug)]
 pub struct DHSConfig<'a> {

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 
 use crate::opac::{Component, Particle, SizeDistribution};
 use crate::opac::{KappaConfig, KappaMethod};

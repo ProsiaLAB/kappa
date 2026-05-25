@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use extensions::types::RVector;
+use prosia_extensions::types::RVector;
 
 use crate::fractal::FractalCutoff;
 use crate::utils::gamma::{gamma, gamma_ur};

@@ -13,11 +13,11 @@ use std::sync::atomic::Ordering as AtomicOrdering;
 
 use anyhow::Result;
 use anyhow::anyhow;
-use extensions::types::{BVector, CVector, RMatrix, RVector};
 use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::s;
 use num_complex::ComplexFloat;
 use num_complex::{Complex, Complex64};
+use prosia_extensions::types::{BVector, CVector, RMatrix, RVector};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::components::get_lnk_data;
