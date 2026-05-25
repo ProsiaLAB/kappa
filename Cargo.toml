@@ -12,6 +12,11 @@ ndarray = "0.17.2"
 num-complex = "0.4.6"
 rayon = "1.10.0"
 prosia-extensions = { version = "*", features = ["complex"] }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
 
 [profile.release]
 lto = true        # Link-time optimization
