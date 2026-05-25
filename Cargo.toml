@@ -8,12 +8,10 @@ anyhow = "1.0.95"
 approx = "0.5.1"
 colored = "3.0.0"
 indicatif = "0.17.11"
-ndarray = "0.16.1"
+ndarray = "0.17.2"
 num-complex = "0.4.6"
 rayon = "1.10.0"
-extensions = { git = "https://github.com/ProsiaLAB/extensions", features = [
-    "complex",
-] }
+prosia-extensions = { version = "*", features = ["complex"] }
 
 [profile.release]
 lto = true        # Link-time optimization
