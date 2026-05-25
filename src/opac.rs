@@ -280,6 +280,7 @@ struct KappaState<'a> {
     mu: &'a RVector,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, Clone))]
 #[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
     Apow,
