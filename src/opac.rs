@@ -502,6 +502,71 @@ impl KappaConfig {
         Ok(())
     }
 
+    /// Run the simulation.
+    ///
+    /// # Panics
+    /// - If the number of materials exceeds 20.
+    /// - If the porosity values are not in the range [0, 1).
+    /// - If the grain size distribution parameters are invalid.
+    /// - If the wavelength grid parameters are invalid.
+    /// - If the DHS `fmax` parameter is not in the range [0, 1).
+    /// # Errors
+    /// - `TooManyMaterials`: The number of materials exceeds 20.
+    /// - `InvalidPorosity`: The porosity values are not in the range [0, 1).
+    /// - `InvalidSizeInput`: The grain size distribution parameters are invalid.
+    /// - `InvalidWavelengthInput`: The wavelength grid parameters are invalid.
+    /// - `SamplingRequired`: More than one wavelength is required when `lmin` and `lmax` are different.
+    pub fn run(&self) -> Result<(), KappaError> {
+        // Loop for splitting the output into files by grain size
+        if self.split {
+            let mut nsub = self.nsubgrains;
+            if nsub.is_multiple_of(2) {
+                nsub += 1;
+            }
+            let afact = (self.amax / self.amin).powf(1.0 / self.na as f64);
+            let afsub = afact.powf(1.0 / (nsub - 1) as f64);
+
+            let bar = Arc::new(ProgressBar::new(self.nlam as u64));
+
+            bar.set_style(
+                ProgressStyle::default_bar()
+                    .template(
+                        "{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+                    )
+                    .unwrap()
+                    .progress_chars("█▓▒░ "),
+            );
+
+            (0..self.na).into_par_iter().try_for_each(|ia| {
+                let iaf = ia as f64;
+                let asplit = self.amin * afact.powf(iaf + 0.5);
+                let nsubf = nsub as f64;
+                let aminsplit = asplit * afsub.powf(-nsubf / 2.0);
+                let amaxsplit = asplit * afsub.powf(nsubf / 2.0);
+                let _ = self.compute_kappa(ia, aminsplit, amaxsplit)?;
+                bar.inc(1); // Increment the progress bar inside the parallel loop
+                Ok::<(), KappaError>(())
+            })?;
+            bar.finish_with_message("Processing complete!");
+            exit(0);
+        } else {
+            let p = self.compute_kappa(0, self.amin, self.amax)?;
+            if !p.is_ok {
+                if self.mmf_ss {
+                    eprintln!("WARNING: opacities OK, but some F_nn,g_asym may not be accurate");
+                } else {
+                    eprintln!("WARNING: opacities OK, but some F_nn,g_asym are set to zero");
+                }
+            }
+
+            // TODO: FITS writer will be implemented later
+
+            write_opacities(self, &p)?;
+        }
+
+        Ok(())
+    }
+
     /// Calculate the opacities for a grain-size value.
     fn compute_kappa(&self, ia: usize, amin: f64, amax: f64) -> Result<Particle, KappaError> {
         let ns = self.na;
@@ -1353,69 +1418,6 @@ impl From<&crate::components::StaticComponent> for Component {
             k0: RVector::from(sc.k0.to_vec()),
         }
     }
-}
-
-/// Run the simulation.
-///
-/// # Panics
-/// - If the number of materials exceeds 20.
-/// - If the porosity values are not in the range [0, 1).
-/// - If the grain size distribution parameters are invalid.
-/// - If the wavelength grid parameters are invalid.
-/// - If the DHS `fmax` parameter is not in the range [0, 1).
-/// # Errors
-/// - `TooManyMaterials`: The number of materials exceeds 20.
-/// - `InvalidPorosity`: The porosity values are not in the range [0, 1).
-/// - `InvalidSizeInput`: The grain size distribution parameters are invalid.
-/// - `InvalidWavelengthInput`: The wavelength grid parameters are invalid.
-/// - `SamplingRequired`: More than one wavelength is required when `lmin` and `lmax` are different.
-pub fn run(kpc: &KappaConfig) -> Result<(), KappaError> {
-    // Loop for splitting the output into files by grain size
-    if kpc.split {
-        let mut nsub = kpc.nsubgrains;
-        if nsub.is_multiple_of(2) {
-            nsub += 1;
-        }
-        let afact = (kpc.amax / kpc.amin).powf(1.0 / kpc.na as f64);
-        let afsub = afact.powf(1.0 / (nsub - 1) as f64);
-
-        let bar = Arc::new(ProgressBar::new(kpc.nlam as u64));
-
-        bar.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-                .unwrap()
-                .progress_chars("█▓▒░ "),
-        );
-
-        (0..kpc.na).into_par_iter().try_for_each(|ia| {
-            let iaf = ia as f64;
-            let asplit = kpc.amin * afact.powf(iaf + 0.5);
-            let nsubf = nsub as f64;
-            let aminsplit = asplit * afsub.powf(-nsubf / 2.0);
-            let amaxsplit = asplit * afsub.powf(nsubf / 2.0);
-            let _ = kpc.compute_kappa(ia, aminsplit, amaxsplit)?;
-            bar.inc(1); // Increment the progress bar inside the parallel loop
-            Ok::<(), KappaError>(())
-        })?;
-        bar.finish_with_message("Processing complete!");
-        exit(0);
-    } else {
-        let p = kpc.compute_kappa(0, kpc.amin, kpc.amax)?;
-        if !p.is_ok {
-            if kpc.mmf_ss {
-                eprintln!("WARNING: opacities OK, but some F_nn,g_asym may not be accurate");
-            } else {
-                eprintln!("WARNING: opacities OK, but some F_nn,g_asym are set to zero");
-            }
-        }
-
-        // TODO: FITS writer will be implemented later
-
-        write_opacities(kpc, &p)?;
-    }
-
-    Ok(())
 }
 
 fn bruggeman_blend(abun: &[f64], e_in: &[Complex64]) -> Result<Complex64> {
