@@ -971,7 +971,7 @@ impl KappaConfig {
                                     ext_mie = ext_mie_factor;
                                 }
                                 Err(e) => {
-                                    println!("DHS error: {e:?}");
+                                    eprintln!("Falling back to Mie because of {e:?}");
                                     // err==1: use compact sphere rad=r1
                                     // rad = r1;
                                     spheres = true; // reuse the Mie path below
