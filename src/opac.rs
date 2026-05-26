@@ -568,7 +568,15 @@ impl KappaConfig {
     }
 
     /// Calculate the opacities for a grain-size value.
-    fn compute_kappa(&self, ia: usize, amin: f64, amax: f64) -> Result<Particle, KappaError> {
+    ///
+    /// # Errors
+    /// Returns a [`KappaError`] if there is an issue with parsing the arguments,
+    /// such as missing required arguments, invalid argument formats, or unknown options.
+    ///
+    /// # Panics
+    /// May panic if the number of materials exceeds 20, the porosity values are not in the
+    /// appropriate range, or the grain size distribution parameters are invalid.
+    pub fn compute_kappa(&self, ia: usize, amin: f64, amax: f64) -> Result<Particle, KappaError> {
         let ns = self.na;
         let (nf, ifmn) = if self.fmax == 0.0 { (1, 1) } else { (20, 12) };
 
