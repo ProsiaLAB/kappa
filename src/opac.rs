@@ -723,7 +723,6 @@ impl KappaConfig {
                 e1_blend[il] = e_out.re;
                 e2_blend[il] = e_out.im;
             }
-            // dbg!(&e1_blend[il], &e2_blend[il]);
             // Mantle
             if self.nmant() > 0 {
                 // We do have a mantle to add
@@ -759,8 +758,6 @@ impl KappaConfig {
                 e2_blend[il] = e2mg;
             }
         }
-        // dbg!(&e1_blend, &e2_blend);
-        // exit(1);
 
         if self.blend_only {
             // Write .lnk file
@@ -971,7 +968,7 @@ impl KappaConfig {
                                     ext_mie = ext_mie_factor;
                                 }
                                 Err(e) => {
-                                    eprintln!("Falling back to Mie because of {e:?}");
+                                    // eprintln!("Falling back to Mie because of {e:?}");
                                     // err==1: use compact sphere rad=r1
                                     // rad = r1;
                                     spheres = true; // reuse the Mie path below

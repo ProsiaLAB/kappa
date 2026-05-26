@@ -304,7 +304,7 @@ fn fichid(
 
     let mut psi = RVector::zeros(nchi + 1);
     let mut chi = RVector::zeros(nmax + 2);
-    let mut d = CVector::zeros(nd);
+    let mut d = CVector::zeros(nd.max(nmax));
 
     for n in (0..nchi).rev() {
         let nf = n as f64;
