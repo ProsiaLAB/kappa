@@ -285,31 +285,6 @@ pub fn write_sizedis_file(
     Ok(())
 }
 
-/// Write the wavelength grid to a file in the specified format.
-///
-/// # Panics
-/// - If the file cannot be created or written to.
-/// - If the wavelength values are not positive (to accommodate log-log interpolation).
-/// # Errors
-/// - If the file format is invalid, such as missing header or malformed data lines.
-pub fn write_wavelength_grid(kpc: &KappaConfig) -> Result<()> {
-    let lamoutfile = kpc.outdir.clone() + "/kappa_lam.dat";
-    let file = File::create(lamoutfile).expect("Failed to open file");
-    let mut writer = BufWriter::new(file);
-
-    writeln!(
-        writer,
-        "# Wavelength grid written by kappa, can be read back in with -l kappa_lam.dat"
-    )?;
-    writeln!(writer, "# First line: number of wavelengths")?;
-    writeln!(writer, "# Then one lambda per line, in micrometer")?;
-    writeln!(writer, "{}", kpc.nlam)?;
-    for i in 0..kpc.nlam {
-        writeln!(writer, "{:18.5e}", kpc.lam[i])?;
-    }
-    Ok(())
-}
-
 /// Write the computed opacities to a file in the specified format.
 ///
 /// # Panics
