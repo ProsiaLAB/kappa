@@ -967,7 +967,7 @@ impl KappaConfig {
                                     scat_mie = scat_mie_factor;
                                     ext_mie = ext_mie_factor;
                                 }
-                                Err(e) => {
+                                Err(_) => {
                                     // eprintln!("Falling back to Mie because of {e:?}");
                                     // err==1: use compact sphere rad=r1
                                     // rad = r1;
