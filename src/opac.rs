@@ -5,10 +5,12 @@
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::f64::consts::PI;
+use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 use std::mem::swap;
+use std::path::Path;
 use std::process::exit;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -30,7 +32,6 @@ use crate::fractal::FractalConfig;
 use crate::fractal::mean_scattering;
 use crate::fractal::{FractalCutoff, FractalGeometry, FractalSolver};
 use crate::io::read_lnk_file;
-use crate::io::{write_opacities, write_sizedis_file};
 use crate::mie::MieConfig;
 use crate::mie::de_rooij_1984;
 use crate::utils::legendre::gauss_legendre;
@@ -477,6 +478,58 @@ impl KappaConfig {
         }
     }
 
+    /// Compute the moments of the size distribution
+    ///
+    /// The results are returned in `ameans`, an array of length 3:
+    /// $$
+    ///                [\langle a \rangle,\quad \langle a^2 \rangle^{1/2},\quad \langle a^3 \rangle^{1/3}]
+    /// $$
+    /// If both mn and sig are nonzero and the product is positive, we use
+    /// the log-normal size distribution.  If not, we use the powerlaw.
+    #[must_use]
+    pub fn get_sizedis_moments(&self) -> [f64; 3] {
+        let ns = 1000;
+
+        let aminlog = self.amin.log10();
+        let amaxlog = self.amax.log10();
+        let pow = -self.apow;
+
+        if ((self.amax - self.amin) / self.amin).abs() < 1e-6 {
+            [self.amin, self.amin, self.amin]
+        } else {
+            let mut tot = [0.0; 3];
+            let mut totn = 0.0;
+            let mut ameans = [0.0; 3];
+            for is in 0..ns {
+                let isf = f64::from(is);
+                let nsf = f64::from(ns);
+                let r = 10.0f64.powf(aminlog + (amaxlog - aminlog) * isf / nsf);
+                let nr = if (self.amean * self.asigma).abs() > 0.0 {
+                    // normal or log-normal size distribution
+                    let expo = if self.asigma > 0.0 {
+                        0.5 * ((r - self.amean) / self.asigma).powi(2)
+                    } else {
+                        0.5 * ((r / self.amean).ln() / self.asigma).powi(2)
+                    };
+                    if expo > 99.0 { 0.0 } else { -expo.exp() }
+                } else {
+                    r.powf(pow + 1.0)
+                };
+                totn += nr;
+                tot[0] += nr * r;
+                tot[1] += nr * r.powi(2);
+                tot[2] += nr * r.powi(3);
+            }
+            if totn == 0.0 {
+                totn = 1.0;
+            }
+            ameans[0] = tot[0] / totn;
+            ameans[1] = (tot[1] / totn).sqrt();
+            ameans[2] = (tot[2] / totn).powf(1.0 / 3.0);
+            ameans
+        }
+    }
+
     /// Write the wavelength grid to a file in the specified format.
     ///
     /// # Panics
@@ -561,7 +614,7 @@ impl KappaConfig {
 
             // TODO: FITS writer will be implemented later
 
-            write_opacities(self, &p)?;
+            self.write_opacities("kappa_opacity.dat", &p)?;
         }
 
         Ok(())
@@ -631,7 +684,7 @@ impl KappaConfig {
         }
 
         if self.write_grid && ia == 0 {
-            write_sizedis_file(self, ns, &r, &mut nr, tot)?;
+            self.write_sizedis_file(ns, &r, &mut nr, tot)?;
         }
 
         // Copy the refractory index data for all materials into local arrays
@@ -1210,6 +1263,263 @@ impl KappaConfig {
         };
 
         Ok(lamr)
+    }
+
+    fn create_output_file(&self, filename: &str) -> Result<File> {
+        // Create directory if it doesn't exist
+        fs::create_dir_all(&self.outdir)?;
+
+        // Construct full file path
+        let filepath = format!("{}/{}", self.outdir, filename);
+
+        // Remove existing file if it exists
+        if Path::new(&filepath).exists() {
+            fs::remove_file(&filepath)?;
+        }
+
+        // Create and return the new file handle
+        File::create(&filepath).map_err(|_| anyhow!("Failed to create file!"))
+    }
+
+    /// Write the computed opacities to a file in the specified format.
+    ///
+    /// # Panics
+    /// - If the file cannot be created or written to.
+    /// - If the size distribution values are not positive (to accommodate log-log interpolation).
+    /// # Errors
+    /// - If the file format is invalid, such as missing header or malformed data lines.
+    pub fn write_opacities(&self, fname: &str, p: &Particle) -> Result<()> {
+        let (ext, _ml) = if self.for_radmc {
+            unimplemented!()
+        } else {
+            ("dat", "F11 F12 F22 F33 F34 F44")
+        };
+
+        let opacity_filename = format!("{fname}.{ext}");
+
+        let file_opacity = self.create_output_file(&opacity_filename)?;
+        let mut writer = BufWriter::new(file_opacity);
+
+        // Write header
+        let cc = "#";
+        let ameans = self.get_sizedis_moments();
+        writeln!(
+            writer,
+            "{cc}============================================================================"
+        )?;
+        let a_vals = match self.sizedis {
+            SizeDistribution::File => self.ameans_file,
+            _ => ameans,
+        };
+        writeln!(
+            writer,
+            "{} Opacities computed by kappa        <a^n>= {:11.4e} {:11.4e} {:11.4e}",
+            cc, a_vals[0], a_vals[1], a_vals[2]
+        )?;
+        match self.method {
+            KappaMethod::MMF => {
+                let s_struct = if self.mmf_struct > 1.0 {
+                    "(fractal dimension)"
+                } else {
+                    "(filling factor)"
+                };
+                writeln!(
+                    writer,
+                    "{} Method:   {:?}  a0={:7.3}  Struct={:7.3}{}",
+                    cc, self.method, self.mmf_a0, self.mmf_struct, s_struct
+                )?;
+            }
+            KappaMethod::CDE => {
+                writeln!(writer, "{} Method:   {:?}", cc, self.method)?;
+            }
+            KappaMethod::DHS => {
+                writeln!(
+                    writer,
+                    "{} Method:   {:?}  fmax={:7.3}",
+                    cc, self.method, self.fmax
+                )?;
+            }
+        }
+        writeln!(writer, "{cc} Parameters:")?;
+        match self.sizedis {
+            SizeDistribution::File => {
+                // writeln!(
+                //     writer,
+                //     "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}    file={}",
+                //     cc,
+                //     kpc.amin,
+                //     kpc.amax,
+                //     kpc.na,
+                //     kpc.
+                // )?;
+                todo!()
+            }
+            SizeDistribution::LogNormal | SizeDistribution::Normal => {
+                writeln!(
+                    writer,
+                    "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}    {:?}={:.4}:{:.4}",
+                    cc, self.amin, self.amax, self.na, self.sizedis, self.amean, self.asigma
+                )?;
+            }
+            SizeDistribution::Apow => {
+                writeln!(
+                    writer,
+                    "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}     apow={:10.2}",
+                    cc, self.amin, self.amax, self.na, self.apow
+                )?;
+            }
+        }
+        writeln!(
+            writer,
+            "{}   lmin [um]={:11.3} lmax [um]={:11.3}  nlam={:5}     nang={:6}",
+            cc, self.lmin, self.lmax, self.nlam, self.nang
+        )?;
+        writeln!(
+            writer,
+            "{}   porosity ={:11.3} p_mantle ={:11.3}  fmax={:9.2} chop=  {:4.1}",
+            cc, self.pcore, self.pmantle, self.fmax, self.chop_angle
+        )?;
+
+        writeln!(writer, "{cc} Composition:")?;
+        writeln!(writer, "{cc}  Where   mfrac  rho   Material")?;
+        writeln!(
+            writer,
+            "{cc}  -----   -----  ----  -----------------------------------------------------"
+        )?;
+
+        let total_mfrac: f64 = self.materials.iter().map(|m| m.mfrac).sum();
+        for mat in &self.materials {
+            writeln!(
+                writer,
+                "{}  {:?} {:7.3} {:6.2}  {}",
+                cc,
+                mat.kind,
+                mat.mfrac / total_mfrac,
+                mat.rho,
+                mat.key,
+            )?;
+        }
+
+        if self.rho_av > 0.0 {
+            writeln!(
+                writer,
+                "{cc}  - - -   - - -  -  -  - - - - - - - - - - - - - - - - - - - - - - - - - - -",
+            )?;
+            let label = if (self.pcore + self.pmantle) > 0.0 {
+                "materials and vacuum"
+            } else {
+                "materials"
+            };
+            writeln!(
+                writer,
+                "{}  {:<6} {:7.3} {:6.2}  mixture of {:3} {}",
+                cc,
+                "grain",
+                1.0,
+                self.rho_av,
+                self.materials.len(),
+                label
+            )?;
+        }
+
+        writeln!(
+            writer,
+            "{cc}----------------------------------------------------------------------------"
+        )?;
+        // writeln!(writer, "{} Command: {}", cc, kpc.)?;
+        writeln!(
+            writer,
+            "{cc}============================================================================"
+        )?;
+        // end of header
+
+        // write the output
+        let header_line = if self.for_radmc {
+            "# Output file formatted for RADMC-3D, dustkappa, no scattering matrix"
+        } else {
+            "# Standard output file, no scattering matrix"
+        };
+        writeln!(writer, "{header_line}")?;
+        writeln!(writer, "#    iformat")?;
+        writeln!(writer, "#    nlambda")?;
+        writeln!(
+            writer,
+            "#    lambda[um]  kabs [cm^2/g]  ksca [cm^2/g]    g_asymmetry"
+        )?;
+        writeln!(
+            writer,
+            "#============================================================================"
+        )?;
+        writeln!(writer, "{}", 3)?; // iformat
+        writeln!(writer, "{}", self.nlam)?; // nlambda
+
+        for i in 0..self.nlam {
+            writeln!(
+                writer,
+                "{:15.6e} {:15.6e} {:15.6e} {:15.6e}",
+                self.lam[i], p.k_abs[i], p.k_sca[i], p.g[i]
+            )?;
+        }
+
+        writer.flush()?;
+
+        Ok(())
+    }
+
+    /// Write the size distribution to a file in the specified format.
+    ///
+    /// # Panics
+    /// - If the file cannot be created or written to.
+    /// - If the size distribution values are not positive (to accommodate log-log interpolation).
+    /// # Errors
+    /// - If the file format is invalid, such as missing header or malformed data lines.
+    pub fn write_sizedis_file(
+        &self,
+        ns: usize,
+        r: &RVector,
+        nr: &mut RVector,
+        tot: f64,
+    ) -> Result<()> {
+        let sdoutfile = self.outdir.clone() + "/kappa_sd.dat";
+        let file = File::create(sdoutfile).expect("Failed to open file");
+        let mut writer = BufWriter::new(file);
+
+        writeln!(
+            writer,
+            "# Size distribution written by kappa, can be read in with -a kappa_sd.dat"
+        )?;
+        if self.split {
+            writeln!(
+                writer,
+                "# This is only the first subparticle because of the -d switch"
+            )?;
+        }
+        writeln!(writer, "# First line: Number of grain size bins NA")?;
+        writeln!(writer, "# Then NA lines with:  agrain[um]  n(a)")?;
+        writeln!(writer, "#   n(a) is the number of grains in the bin.")?;
+        writeln!(
+            writer,
+            "#   In a linear grid      (da   =const), this would be n(a) = f(a)*da"
+        )?;
+        writeln!(
+            writer,
+            "#   In a logarithmic grid (dloga=const), this would be n(a) = f(a)*a*dloga."
+        )?;
+        writeln!(
+            writer,
+            "#   In an arbitrary grid,  just give the number of grains in the bin."
+        )?;
+        writeln!(
+            writer,
+            "# No normalization is necessary, it is done automatically."
+        )?;
+        writeln!(writer, "{ns}")?;
+
+        for i in 0..ns {
+            nr[i] /= tot;
+            writeln!(writer, "{:18.5e} {:18.5e}", r[i], nr[i])?;
+        }
+        Ok(())
     }
 }
 
