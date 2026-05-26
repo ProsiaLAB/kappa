@@ -6,7 +6,9 @@ use kappa::opac::run;
 
 fn main() -> Result<(), KappaError> {
     let mut kpc = cli::launch()?;
-    run(&mut kpc)?;
+    kpc.prepare_inputs()?;
+    kpc.initialize()?;
+    run(&kpc)?;
 
     Ok(())
 }

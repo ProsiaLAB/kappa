@@ -1369,10 +1369,7 @@ impl From<&crate::components::StaticComponent> for Component {
 /// - `InvalidSizeInput`: The grain size distribution parameters are invalid.
 /// - `InvalidWavelengthInput`: The wavelength grid parameters are invalid.
 /// - `SamplingRequired`: More than one wavelength is required when `lmin` and `lmax` are different.
-pub fn run(kpc: &mut KappaConfig) -> Result<(), KappaError> {
-    kpc.prepare_inputs()?;
-    kpc.initialize()?;
-
+pub fn run(kpc: &KappaConfig) -> Result<(), KappaError> {
     // Loop for splitting the output into files by grain size
     if kpc.split {
         let mut nsub = kpc.nsubgrains;
