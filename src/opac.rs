@@ -614,7 +614,7 @@ impl KappaConfig {
 
             // TODO: FITS writer will be implemented later
 
-            self.write_opacities("kappa_opacity.dat", &p)?;
+            self.write_opacities("kappa_opacity", &p)?;
         }
 
         Ok(())
