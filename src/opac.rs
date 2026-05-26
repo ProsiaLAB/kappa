@@ -145,7 +145,7 @@ impl Default for KappaConfig {
             asigma: 0.0,
             na: 0,
             ameans_file: [0.0; 3],
-            sizedis: SizeDistribution::Apow,
+            sizedis: SizeDistribution::PowerLaw,
             wavelength_kind: WavelengthKind::Other,
             lmin: 0.05,
             lmax: 1e4,
@@ -297,7 +297,7 @@ impl KappaConfig {
             eprintln!("WARNING: Turning off `-s` for `-blend_only`");
             self.split = false;
         }
-        if self.split && self.sizedis != SizeDistribution::Apow {
+        if self.split && self.sizedis != SizeDistribution::PowerLaw {
             return Err(anyhow!(
                 "`split` is only supported for powerlaw size distribution"
             ));
@@ -429,7 +429,7 @@ impl KappaConfig {
 
     fn validate_size_distribution(&self) -> Result<(), KappaError> {
         match self.sizedis {
-            SizeDistribution::Apow if self.apow < 0.0 => Err(anyhow!("UnexpectedApow").into()),
+            SizeDistribution::PowerLaw if self.apow < 0.0 => Err(anyhow!("UnexpectedApow").into()),
             SizeDistribution::Normal => {
                 if self.amean <= 0.0 {
                     return Err(
@@ -670,7 +670,7 @@ impl KappaConfig {
                     SizeDistribution::File => {
                         todo!() // TODO: Move this out of else block
                     }
-                    SizeDistribution::Apow => r_val.powf(pow + 1.0),
+                    SizeDistribution::PowerLaw => r_val.powf(pow + 1.0),
                 };
                 // With the option `-d`m each computation is only a piece of the size grid
                 if *r_val < amin || *r_val > amax {
@@ -1361,7 +1361,7 @@ impl KappaConfig {
                     cc, self.amin, self.amax, self.na, self.sizedis, self.amean, self.asigma
                 )?;
             }
-            SizeDistribution::Apow => {
+            SizeDistribution::PowerLaw => {
                 writeln!(
                     writer,
                     "{}   amin [um]={:11.3} amax [um]={:11.3}  na  ={:5}     apow={:10.2}",
@@ -1604,7 +1604,7 @@ struct KappaState<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, Clone))]
 #[derive(PartialEq, Debug)]
 pub enum SizeDistribution {
-    Apow,
+    PowerLaw,
     File,
     Normal,
     LogNormal,

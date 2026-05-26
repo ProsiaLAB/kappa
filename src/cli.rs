@@ -135,7 +135,7 @@ pub fn launch() -> Result<KappaConfig, KappaError> {
                     if let Some(na) = na {
                         kpc.na = na;
                     }
-                    kpc.sizedis = SizeDistribution::Apow;
+                    kpc.sizedis = SizeDistribution::PowerLaw;
                 }
                 SizeArg::LogNormal {
                     amin,
