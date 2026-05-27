@@ -486,7 +486,7 @@ pub mod bessel {
         }
 
         if fracc.geometry != FractalGeometry::Tazaki && error > 1.0e-3 {
-            bail!("Error in int_sph_bessel: error = {}", error);
+            bail!("Error in int_sph_bessel: error = {error}");
         }
 
         Ok(sp)

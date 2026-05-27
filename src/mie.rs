@@ -5,6 +5,7 @@
 //!
 //! # References
 //! - De Rooij, W. A., & Van der Stap, C. C. (1984).
+#![allow(clippy::inline_always)]
 
 use std::f64::consts::PI;
 
@@ -63,6 +64,7 @@ pub fn de_rooij_1984(mie_cfg: &MieConfig) -> Result<MieResult> {
 }
 
 #[allow(clippy::similar_names)]
+#[inline(always)]
 fn get_scattering_matrix(mie_cfg: &MieConfig, m: Complex64) -> Result<MieResult> {
     const RAD_FAC: f64 = PI / 180.0;
 
@@ -288,6 +290,7 @@ fn test_symmetry(thmin: f64, thmax: f64, step: f64) -> bool {
 }
 
 #[allow(clippy::similar_names)]
+#[inline(always)]
 fn fichid(
     m: Complex64,
     x: f64,
@@ -341,6 +344,7 @@ fn fichid(
 }
 
 #[allow(clippy::similar_names)]
+#[inline(always)]
 fn anbn(
     m: Complex64,
     x: f64,
@@ -369,6 +373,7 @@ fn anbn(
     (an, bn)
 }
 
+#[inline(always)]
 fn pitau(u: f64, nmax: usize) -> (RVector, RVector) {
     let mut pi = RVector::zeros(nmax);
     let mut tau = RVector::zeros(nmax);
